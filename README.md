@@ -11,7 +11,7 @@ One singular node that does the whole prompt-enhancement job:
 - **Prompt input**: free-form text box — loose natural language, random ideas, keyword piles, detailed descriptions; the model always expands to a proper prompt for the target mode/model.
 - **Modes**: `text_only`, `image`, `image2`, `image3`, `video`.
 - **Engines**: `auto` (detect from the selected model), `text_encoder` (native ComfyUI CLIP / safetensors route), `gguf` (llama.cpp GGUF route).
-- **Models**: `auto`, researched heretic HF VL models (4B / 9B / 27B) and GGUF variants — options marked `[AVAILABLE]` are already downloaded locally; `custom_repo_id` / `local_model_path` / `scanned_model` allow any other model.
+- **Models**: one picker — researched heretic HF VL models (4B / 9B / 27B) and GGUF variants first (marked `[AVAILABLE]` when downloaded), then every model detected in the ComfyUI model dirs, then `auto`; `custom_repo_id` / `local_model_path` allow anything else.
 - **Quantization**: `auto`, `fp16`, `q8`, `q4` (live bitsandbytes quantization before generation; ignored for GGUF).
 - **Preset**: `auto` or any of the bundled presets (Krea 2 T2I, Krea 2 Identity Edit, MOSS Image T2I/I2I, Qwen Image T2I, generic styles…).
 - **Custom system prompt**: override field + save toggle → persisted to user dir.

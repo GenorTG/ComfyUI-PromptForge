@@ -51,55 +51,78 @@ GGUF_MODELS = PROMPTFORGE_MODELS.get("gguf_models") or []
 LOCAL_SCAN_DIRS = PROMPTFORGE_MODELS.get("local_scan_dirs") or []
 
 def _scan_local_text_models():
-    """Scan ComfyUI model directories for local text/LLM/GGUF models."""
-    found = []
-    base = None
+    """Scan ComfyUI text-model directories for local LLM / text encoder models.
+
+    Multi-part checkpoints collapse to their containing HF directory and mmproj
+    vision sidecars are skipped, so the picker shows one entry per model.
+    """
+    roots = []
     if folder_paths is not None:
-        base = Path(getattr(folder_paths, "models_dir", "") or "")
-    candidates = []
-    if base is not None and str(base) and str(base) != ".":
-        for d in LOCAL_SCAN_DIRS:
-            candidates.append(base / d)
-    candidates.append(Path("/models"))
-    candidates.append(Path("/home/genortg/ComfyUI/Comfy/models"))
-    candidates.append(Path("/home/genortg/1TB-SAMSUNG/Comfy/ComfyUI/models"))
-    seen = set()
-    for c in candidates:
-        if c in seen:
-            continue
-        seen.add(c)
-        if not c.is_dir():
-            continue
-        for p in sorted(c.rglob("*")):
-            if p.is_file() and p.suffix.lower() in (".safetensors", ".gguf", ".bin"):
-                found.append(
-                    {
-                        "path": str(p),
-                        "name": p.name,
-                        "kind": p.suffix.lower().lstrip("."),
-                        "size_mb": round(p.stat().st_size / (1024 * 1024), 1) if p.stat().st_size < 10 ** 10 else -1,
-                    }
-                )
+        models_dir = getattr(folder_paths, "models_dir", "") or ""
+        if models_dir:
+            roots.append(Path(models_dir))
+    roots.append(Path("/home/genortg/ComfyUI/Comfy/models"))
+    roots.append(Path("/home/genortg/1TB-SAMSUNG/Comfy/ComfyUI/models"))
+
+    found = []
+    seen_paths = set()
+    for root in roots:
+        for sub in LOCAL_SCAN_DIRS:
+            c = root / sub
+            if not c.is_dir():
+                continue
+            for p in sorted(c.rglob("*")):
+                if not p.is_file() or p.suffix.lower() not in (".safetensors", ".gguf", ".bin"):
+                    continue
+                name = p.name.lower()
+                if p.suffix.lower() == ".gguf" and "mmproj" in name:
+                    continue
+                if p.suffix.lower() in (".safetensors", ".bin") and (p.parent / "config.json").is_file():
+                    model_path = p.parent
+                else:
+                    model_path = p
+                key = str(model_path)
+                if key in seen_paths:
+                    continue
+                seen_paths.add(key)
+                found.append({"path": key, "name": model_path.name, "kind": "gguf" if p.suffix.lower() == ".gguf" else "safetensors"})
     return found
 
 
 LOCAL_TEXT_MODELS = _scan_local_text_models()
 
 HERETIC_MODEL_ENTRIES = [
-    {"option": "Qwen3.5-9B Defiant Fable Heretic (HF) [9B]", "kind": "hf", "key": "heretic_qwen35_9b", "params_b": 9, "avail_match": "Defiant"},
-    {"option": "Qwen3.5-4B Deckard Heretic Thinking (HF) [4B, text-only]", "kind": "hf", "key": "heretic_qwen35_4b_thinking", "params_b": 4, "avail_match": "Deckard"},
-    {"option": "Qwen3.6-27B Fable Fusion Heretic (HF) [27B]", "kind": "hf", "key": "heretic_qwen36_27b", "params_b": 27, "avail_match": "Fable"},
-    {"option": "Qwen3.5-9B Defiant Fable GGUF (llama.cpp) [9B]", "kind": "gguf", "key": "gguf_qwen35_9b_fable", "params_b": 9, "avail_match": "Defiant"},
-    {"option": "Qwen3.6-27B Fable Fusion GGUF (llama.cpp) [27B]", "kind": "gguf", "key": "gguf_qwen36_27b_fusion", "params_b": 27, "avail_match": "Fable"},
-    {"option": "Qwen3.5-4B Claude OS Heretic GGUF (llama.cpp) [4B]", "kind": "gguf", "key": "gguf_qwen35_4b_claude", "params_b": 4, "avail_match": "Claude"},
+    {"option": "Qwen3.5-9B Defiant Fable Heretic (HF) [9B]", "kind": "hf", "key": "heretic_qwen35_9b", "params_b": 9, "avail_match": ["Defiant"]},
+    {"option": "Qwen3.5-4B Deckard Heretic Thinking (HF) [4B, text-only]", "kind": "hf", "key": "heretic_qwen35_4b_thinking", "params_b": 4, "avail_match": ["Deckard"]},
+    {"option": "Qwen3.6-27B Fable Fusion Heretic (HF) [27B]", "kind": "hf", "key": "heretic_qwen36_27b", "params_b": 27, "avail_match": ["27B", "Fable"]},
+    {"option": "Qwen3.5-9B Defiant Fable GGUF (llama.cpp) [9B]", "kind": "gguf", "key": "gguf_qwen35_9b_fable", "params_b": 9, "avail_match": ["Defiant"]},
+    {"option": "Qwen3.6-27B Fable Fusion GGUF (llama.cpp) [27B]", "kind": "gguf", "key": "gguf_qwen36_27b_fusion", "params_b": 27, "avail_match": ["27B", "Fable"]},
+    {"option": "Qwen3.5-4B Claude OS Heretic GGUF (llama.cpp) [4B]", "kind": "gguf", "key": "gguf_qwen35_4b_claude", "params_b": 4, "avail_match": ["Claude"]},
 ]
 
 
+def _entry_local_path(entry):
+    matches = entry.get("avail_match") or []
+    if isinstance(matches, str):
+        matches = [matches]
+    matches = [m.lower() for m in matches if m]
+    if not matches:
+        return ""
+    for m in LOCAL_TEXT_MODELS:
+        name = (m.get("name") or "").lower()
+        if not all(token in name for token in matches):
+            continue
+        path = m.get("path") or ""
+        if entry.get("kind") == "hf" and path.lower().endswith(".gguf"):
+            continue
+        if entry.get("kind") == "gguf" and not path.lower().endswith(".gguf"):
+            continue
+        return path
+    return ""
+
+
 def _entry_local(entry):
-    match = (entry.get("avail_match") or "").lower()
-    if not match:
-        return False
-    return any(match in (m.get("name") or "").lower() for m in LOCAL_TEXT_MODELS)
+    return bool(_entry_local_path(entry))
 
 
 def _entry_label(entry):
@@ -109,7 +132,11 @@ def _entry_label(entry):
     return label
 
 
-MODEL_OPTIONS = [_entry_label(e) for e in HERETIC_MODEL_ENTRIES] + ["auto"]
+MODEL_OPTIONS = (
+    [_entry_label(e) for e in HERETIC_MODEL_ENTRIES]
+    + [e["path"] for e in LOCAL_TEXT_MODELS if e.get("path")]
+    + ["auto"]
+)
 
 PRESET_OPTIONS = ["auto"] + sorted(
     k for k, v in PROMPTFORGE_PRESETS.items()
@@ -128,7 +155,8 @@ def _resolve_model_entry(option):
     """
     if not option or option == "auto":
         ent = HERETIC_MODELS[0] if HERETIC_MODELS else {}
-        return {"kind": "hf", "key": (ent or {}).get("key") or "heretic_qwen35_9b", "params_b": (ent or {}).get("params_b") or 9, "repo_id": (ent or {}).get("repo_id")}
+        first = HERETIC_MODEL_ENTRIES[0] if HERETIC_MODEL_ENTRIES else {}
+        return {"kind": "hf", "key": (ent or {}).get("key") or "heretic_qwen35_9b", "params_b": (ent or {}).get("params_b") or 9, "repo_id": (ent or {}).get("repo_id"), "local_path": _entry_local_path(first) if first else ""}
     label = str(option)
     if label.startswith("[AVAILABLE] "):
         label = label[len("[AVAILABLE] "):]
@@ -136,17 +164,25 @@ def _resolve_model_entry(option):
         if e["option"] == label:
             if e["kind"] == "hf":
                 ent = next((m for m in HERETIC_MODELS if m.get("key") == e["key"]), {})
-                return {"kind": "hf", "key": e["key"], "params_b": e["params_b"], "repo_id": ent.get("repo_id")}
+                return {"kind": "hf", "key": e["key"], "params_b": e["params_b"], "repo_id": ent.get("repo_id"), "local_path": _entry_local_path(e)}
             ent = next((g for g in GGUF_MODELS if g.get("key") == e["key"]), {})
             return {"kind": "gguf", "key": e["key"], "params_b": e["params_b"], "entry": ent}
     return None
 
 
-def _model_kind(model_name, local_model_path, scanned_model):
+def _local_model_option(option):
+    """Return the path when the picker option is a scanned local model file."""
+    if not option:
+        return ""
+    opt = str(option)
+    if opt == "auto":
+        return ""
+    return opt if any(opt == e.get("path") for e in LOCAL_TEXT_MODELS) else ""
+
+
+def _model_kind(model_name, local_model_path):
     """Return 'gguf' or 'text_encoder' for the effective model."""
-    src = (local_model_path or "").strip()
-    if not src:
-        src = scanned_model if scanned_model and scanned_model != "auto" else ""
+    src = (local_model_path or "").strip() or _local_model_option(model_name)
     if src:
         return "gguf" if str(src).lower().endswith(".gguf") else "text_encoder"
     entry = _resolve_model_entry(model_name if model_name and model_name != "auto" else "auto")
@@ -155,10 +191,10 @@ def _model_kind(model_name, local_model_path, scanned_model):
     return entry.get("kind") or "text_encoder"
 
 
-def _effective_engine(engine, model_name, local_model_path, scanned_model):
+def _effective_engine(engine, model_name, local_model_path):
     if engine and engine != "auto":
         return engine
-    return _model_kind(model_name, local_model_path, scanned_model)
+    return _model_kind(model_name, local_model_path)
 
 
 def _user_dir():
@@ -178,13 +214,12 @@ class PROMPTFORGE_PromptEnhancer:
 
     @classmethod
     def INPUT_TYPES(cls):
-        scanned_options = ["auto"] + [e.get("path") for e in LOCAL_TEXT_MODELS if e.get("path")]
         return {
             "required": {
                 "prompt_text": ("STRING", {"default": "", "multiline": True, "tooltip": "Raw user request / media-derived text to enhance. Can be loose natural language, random idea, detailed description, keyword pile, anything."}),
                 "mode": (MODE_OPTIONS, {"default": "text_only", "tooltip": "What the prompt is for: text_only (T2I / text-to-video), image (image-to-image / reference), image2 (second reference / edit), image3 (third reference), video (video frame analysis)."}),
                 "engine": (ENGINE_OPTIONS, {"default": "auto", "tooltip": "Model engine: auto (detect from the selected model), text_encoder (native ComfyUI CLIP / safetensors), gguf (llama.cpp)."}),
-                "model_name": (MODEL_OPTIONS, {"default": MODEL_OPTIONS[0], "tooltip": "Model: one of the researched heretic HF / GGUF models (top options), or auto. Options marked [AVAILABLE] are already downloaded locally. custom_repo_id / local_model_path / scanned_model allow any other model."}),
+                "model_name": (MODEL_OPTIONS, {"default": MODEL_OPTIONS[0], "tooltip": "Model: researched heretic HF / GGUF models first (marked [AVAILABLE] when downloaded), then every model detected in the ComfyUI model dirs, then auto. custom_repo_id / local_model_path allow models outside this list."}),
                 "quantization": (QUANT_OPTIONS, {"default": "auto", "tooltip": "Text encoder precision for safetensors models: auto (fp16), fp16 (native fp16), q8 / q4 (live bitsandbytes quantization before generation). Ignored for GGUF models."}),
                 "enhancement_preset": (PRESET_OPTIONS, {"default": "auto", "tooltip": "Preset system prompt: auto, or one of the PromptForge presets (Krea 2 T2I, MOSS Image T2I, Qwen Image T2I, generic styles...)."}),
                 "seed": ("INT", {"default": 1, "min": 1, "max": 2 ** 32 - 1, "tooltip": "Sampling seed for the Qwen-style generation. 1 = deterministic-ish / keep last logic."}),
@@ -207,7 +242,6 @@ class PROMPTFORGE_PromptEnhancer:
                 "clip": ("CLIP", {"tooltip": "Native ComfyUI text encoder (CLIP) to use for generation. When connected, the node generates from this encoder instead of loading its own model."}),
                 "custom_repo_id": ("STRING", {"default": "", "tooltip": "Optional custom HuggingFace repo id for text_encoder engine (e.g. 'foo/bar'). Overrides model_name when set."}),
                 "local_model_path": ("STRING", {"default": "", "multiline": True, "tooltip": "Optional local model path (safetensors dir/file or GGUF file) - overrides model selection. Use for full safetensors models or custom local GGUF files."}),
-                "scanned_model": (scanned_options, {"default": "auto", "tooltip": "Model picked from local scan of ComfyUI text/LLM/GGUF dirs. 'auto' = catalog default."}),
             },
         }
 
@@ -240,7 +274,6 @@ class PROMPTFORGE_PromptEnhancer:
         clip=None,
         custom_repo_id="",
         local_model_path="",
-        scanned_model="auto",
     ):
         if save_system_prompt:
             custom = (system_prompt_override or "").strip()
@@ -260,7 +293,7 @@ class PROMPTFORGE_PromptEnhancer:
         enhanced = self._generate(
             full_prompt=full_prompt,
             mode=mode,
-            engine=_effective_engine(engine, model_name, local_model_path, scanned_model),
+            engine=_effective_engine(engine, model_name, local_model_path),
             model_name=model_name,
             quantization=quantization,
             max_tokens=max_tokens,
@@ -278,7 +311,6 @@ class PROMPTFORGE_PromptEnhancer:
             clip=clip,
             custom_repo_id=custom_repo_id,
             local_model_path=local_model_path,
-            scanned_model=scanned_model,
             keep_model_loaded=keep_model_loaded,
         )
         return (enhanced,)
@@ -334,14 +366,14 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Generation dispatch
     # ------------------------------------------------------------------ #
-    def _generate(self, full_prompt, mode, engine, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, scanned_model, keep_model_loaded):
+    def _generate(self, full_prompt, mode, engine, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, keep_model_loaded):
         if engine == "gguf":
             return self._generate_gguf(
                 full_prompt=full_prompt, model_name=model_name, quantization=quantization,
                 max_tokens=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k,
                 num_beams=num_beams, repetition_penalty=repetition_penalty,
                 custom_repo_id=custom_repo_id, local_model_path=local_model_path,
-                scanned_model=scanned_model, keep_model_loaded=keep_model_loaded,
+                keep_model_loaded=keep_model_loaded,
             )
         return self._generate_text_encoder(
             full_prompt=full_prompt, mode=mode, model_name=model_name, quantization=quantization,
@@ -349,16 +381,16 @@ class PROMPTFORGE_PromptEnhancer:
             num_beams=num_beams, repetition_penalty=repetition_penalty,
             image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
             seed=seed, clip=clip, custom_repo_id=custom_repo_id, local_model_path=local_model_path,
-            scanned_model=scanned_model, keep_model_loaded=keep_model_loaded,
+            keep_model_loaded=keep_model_loaded,
         )
 
     # ------------------------------------------------------------------ #
     # GGUF / llama.cpp engine
     # ------------------------------------------------------------------ #
-    def _generate_gguf(self, full_prompt, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, custom_repo_id, local_model_path, scanned_model, keep_model_loaded):
+    def _generate_gguf(self, full_prompt, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, custom_repo_id, local_model_path, keep_model_loaded):
         gguf_path = None
         entry = None
-        eff_local = (local_model_path or "").strip() or (scanned_model if scanned_model and scanned_model != "auto" else "")
+        eff_local = (local_model_path or "").strip() or _local_model_option(model_name)
         if eff_local and str(eff_local).lower().endswith(".gguf"):
             gguf_path = Path(str(eff_local))
         if gguf_path is None:
@@ -408,7 +440,7 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Text encoder engines (native ComfyUI CLIP route / bitsandbytes route)
     # ------------------------------------------------------------------ #
-    def _generate_text_encoder(self, full_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, scanned_model, keep_model_loaded):
+    def _generate_text_encoder(self, full_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, keep_model_loaded):
         if clip is not None:
             enhanced = self._generate_with_clip(
                 full_prompt=full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
@@ -418,27 +450,34 @@ class PROMPTFORGE_PromptEnhancer:
             self._release(keep_model_loaded=keep_model_loaded)
             return enhanced
 
-        eff_local = (local_model_path or "").strip() or (scanned_model if scanned_model and scanned_model != "auto" else "")
+        eff_local = (local_model_path or "").strip() or _local_model_option(model_name)
         src = eff_local or ""
         params_b = None
         resolved = _resolve_model_entry(model_name) if (model_name and model_name != "auto") else _resolve_model_entry("auto")
         if not src and resolved is not None:
             if resolved.get("kind") == "hf":
-                src = resolved.get("repo_id") or ""
+                src = resolved.get("local_path") or resolved.get("repo_id") or ""
                 params_b = resolved.get("params_b")
             elif resolved.get("kind") == "gguf":
-                src = (HERETIC_MODELS[0] or {}).get("repo_id") or ""
-                params_b = (HERETIC_MODELS[0] or {}).get("params_b") or 9
+                first = HERETIC_MODELS[0] if HERETIC_MODELS else {}
+                src = (first or {}).get("repo_id") or ""
+                params_b = (first or {}).get("params_b") or 9
         if not src and custom_repo_id:
             src = custom_repo_id
+        if not src:
+            raise ValueError("[PromptForge] No text encoder selected.")
 
         quant = quantization or "auto"
-        if str(src).lower().startswith(("http://", "https://", "hf.co/")):
+        src_path = Path(src)
+        if not src_path.exists():
             from huggingface_hub import snapshot_download
             src = snapshot_download(repo_id=src, local_dir=None)
+            src_path = Path(src)
 
-        if quant in ("q8", "q4"):
-            quant_cfg = BitsAndBytesConfig(load_in_8bit=(quant == "q8"), load_in_4bit=(quant == "q4"))
+        if src_path.is_dir() or quant in ("q8", "q4"):
+            if quant in ("q8", "q4") and not src_path.is_dir():
+                raise ValueError("[PromptForge] q8/q4 quantization needs an HF model directory; use auto/fp16 for single-file ComfyUI text encoders.")
+            quant_cfg = BitsAndBytesConfig(load_in_8bit=(quant == "q8"), load_in_4bit=(quant == "q4")) if quant in ("q8", "q4") else None
             if mode in ("image", "image2", "image3", "video"):
                 model = AutoVision.from_pretrained(src, quantization_config=quant_cfg, torch_dtype=torch.float16, device_map="auto")
             else:

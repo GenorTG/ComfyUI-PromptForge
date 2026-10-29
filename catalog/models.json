@@ -87,7 +87,6 @@
   "local_scan_dirs": [
     "text_encoders",
     "clip",
-    "clip_vision",
     "llm",
     "LLM",
     "Llama",
