@@ -296,6 +296,95 @@ def _effective_engine(engine, model_name, local_model_path):
     return _model_kind(model_name, local_model_path)
 
 
+def _gguf_avail_tokens(entry):
+    key = (entry or {}).get("key")
+    for item in HERETIC_MODEL_ENTRIES:
+        if item.get("key") == key:
+            return [t.lower() for t in (item.get("avail_match") or [])]
+    return []
+
+
+def _scanned_ggufs():
+    return [m["path"] for m in LOCAL_TEXT_MODELS if (m.get("path") or "").lower().endswith(".gguf")]
+
+
+def _find_gguf(entry, quantization):
+    """Find an existing GGUF for a catalog entry: catalog dir, exact scan match, then family match."""
+    qf = (entry or {}).get("quant_files") or {}
+    if not qf:
+        return None
+    requested = quantization if quantization in qf else ("8bit" if quantization in (None, "auto", "fp16") else "4bit")
+    ordered = [qf.get(requested)]
+    for key in ("8bit", "4bit", "fp16"):
+        if qf.get(key) and qf[key] not in ordered:
+            ordered.append(qf[key])
+    ordered = [name for name in ordered if name]
+
+    base_dir = Path(entry.get("base_dir") or "LLM/GGUF")
+    if folder_paths is not None:
+        models_dir = getattr(folder_paths, "models_dir", "") or ""
+        if models_dir:
+            base_dir = Path(models_dir) / base_dir
+    for name in ordered:
+        candidate = base_dir / name
+        if candidate.is_file():
+            return candidate
+
+    scanned = _scanned_ggufs()
+    for name in ordered:
+        for path in scanned:
+            if Path(path).name == name:
+                return Path(path)
+
+    tokens = _gguf_avail_tokens(entry)
+    if tokens:
+        matches = [p for p in scanned if all(t in Path(p).name.lower() for t in tokens)]
+        if matches:
+            return Path(matches[0])
+    return None
+
+
+def _find_mmproj(gguf_path, entry):
+    names = []
+    if (entry or {}).get("mmproj_file"):
+        names.append(entry["mmproj_file"])
+    dirs = [gguf_path.parent]
+    for path in _scanned_ggufs():
+        parent = Path(path).parent
+        if parent not in dirs:
+            dirs.append(parent)
+    for directory in dirs:
+        for name in names:
+            candidate = directory / name
+            if candidate.is_file():
+                return candidate
+        for candidate in sorted(directory.glob("mmproj*.gguf")):
+            return candidate
+    return None
+
+
+def _resolve_mmproj(gguf_path, entry, override=""):
+    """Pick the mmproj for a vision GGUF: override, matching catalog file, HF download, then any local."""
+    if override:
+        path = Path(override)
+        if not path.is_file():
+            raise ValueError(f"[PromptForge] mmproj_path does not exist: {path}")
+        return path
+    name = (entry or {}).get("mmproj_file")
+    if name:
+        candidate = gguf_path.parent / name
+        if candidate.is_file():
+            return candidate
+    repo_id = (entry or {}).get("repo_id")
+    if repo_id and name:
+        try:
+            from huggingface_hub import hf_hub_download
+            return Path(hf_hub_download(repo_id=repo_id, filename=name))
+        except Exception as exc:
+            raise ValueError(f"[PromptForge] Could not download mmproj '{name}' from {repo_id}: {exc}") from exc
+    return _find_mmproj(gguf_path, entry)
+
+
 def _user_dir():
     try:
         if folder_paths is not None:
@@ -317,6 +406,7 @@ class PROMPTFORGE_PromptEnhancer:
             "required": {
                 "prompt_text": ("STRING", {"default": "", "multiline": True, "tooltip": "Raw user request / media-derived text to enhance. Can be loose natural language, random idea, detailed description, keyword pile, anything."}),
                 "mode": (MODE_OPTIONS, {"default": "text_only", "tooltip": "What the prompt is for: text_only (T2I / text-to-video), image (uses every connected reference from image / image2 / image3), video (sampled frames from video)."}),
+                "video_seconds": ("INT", {"default": 5, "min": 1, "max": 60, "tooltip": "Target video duration in seconds. Substituted into prompts that use {video_seconds} (MiniMax H3 presets) and added as duration context for video/minimax prompts."}),
                 "engine": (ENGINE_OPTIONS, {"default": "auto", "tooltip": "Model engine: auto (detect from the selected model), text_encoder (native ComfyUI CLIP / safetensors), gguf (llama.cpp)."}),
                 "model_name": (MODEL_OPTIONS, {"default": MODEL_OPTIONS[0], "tooltip": "Model: researched heretic HF / GGUF models first (marked [AVAILABLE] when downloaded), then every model detected in the ComfyUI model dirs, then auto. custom_repo_id / local_model_path allow models outside this list."}),
                 "quantization": (QUANT_OPTIONS, {"default": "auto", "tooltip": "Text encoder precision for safetensors models: auto (fp16), fp16 (native fp16), q8 / q4 (live bitsandbytes quantization before generation). Ignored for GGUF models."}),
@@ -344,6 +434,7 @@ class PROMPTFORGE_PromptEnhancer:
                 "clip": ("CLIP", {"tooltip": "Native ComfyUI text encoder (CLIP) to use for generation. When connected, the node generates from this encoder instead of loading its own model."}),
                 "custom_repo_id": ("STRING", {"default": "", "tooltip": "Optional custom HuggingFace repo id for text_encoder engine (e.g. 'foo/bar'). Overrides model_name when set."}),
                 "local_model_path": ("STRING", {"default": "", "multiline": True, "tooltip": "Optional local model path (safetensors dir/file or GGUF file) - overrides model selection. Use for full safetensors models or custom local GGUF files."}),
+                "mmproj_path": ("STRING", {"default": "", "tooltip": "Optional path to the vision mmproj (.gguf) for GGUF image/video mode. Auto-detected next to the model or downloaded from the catalog repo when missing."}),
             },
         }
 
@@ -354,6 +445,7 @@ class PROMPTFORGE_PromptEnhancer:
         self,
         prompt_text,
         mode,
+        video_seconds,
         engine,
         model_name,
         quantization,
@@ -379,6 +471,7 @@ class PROMPTFORGE_PromptEnhancer:
         clip=None,
         custom_repo_id="",
         local_model_path="",
+        mmproj_path="",
     ):
         override_text = (system_prompt_override or "").strip()
         if save_system_prompt and override_text:
@@ -391,10 +484,16 @@ class PROMPTFORGE_PromptEnhancer:
             sys_text = entry.get("text") or entry.get("system_prompt") or (PROMPTFORGE_PRESETS.get(DEFAULT_PRESET) or {}).get("text") or ""
 
         user_text = (prompt_text or "").strip()
+        duration_text = f"{float(video_seconds):.2f}"
+        duration_line = ""
+        if sys_text and "{video_seconds}" in sys_text:
+            sys_text = sys_text.replace("{video_seconds}", duration_text)
+        elif mode == "video" or "minimax" in (enhancement_preset or "").lower():
+            duration_line = f"Target video duration: {duration_text} seconds."
         guard = OUTPUT_GUARD
         if disable_thinking:
             guard += " Do not output chain-of-thought or reasoning; start with the final prompt."
-        parts = [p for p in (user_text, sys_text, guard) if p and p.strip()]
+        parts = [p for p in (user_text, duration_line, sys_text, guard) if p and p.strip()]
         full_prompt = "\n\n".join(parts)
 
         enhanced = self._generate(
@@ -418,6 +517,7 @@ class PROMPTFORGE_PromptEnhancer:
             clip=clip,
             custom_repo_id=custom_repo_id,
             local_model_path=local_model_path,
+            mmproj_path=mmproj_path,
             disable_thinking=disable_thinking,
             use_default_sampling=use_default_sampling,
             keep_model_loaded=keep_model_loaded,
@@ -476,13 +576,14 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Generation dispatch
     # ------------------------------------------------------------------ #
-    def _generate(self, full_prompt, mode, engine, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, disable_thinking, use_default_sampling, keep_model_loaded):
+    def _generate(self, full_prompt, mode, engine, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, keep_model_loaded):
         if engine == "gguf":
             return self._generate_gguf(
-                full_prompt=full_prompt, model_name=model_name, quantization=quantization,
+                full_prompt=full_prompt, mode=mode, model_name=model_name, quantization=quantization,
                 max_tokens=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k,
                 num_beams=num_beams, repetition_penalty=repetition_penalty, seed=seed,
-                custom_repo_id=custom_repo_id, local_model_path=local_model_path,
+                image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
+                custom_repo_id=custom_repo_id, local_model_path=local_model_path, mmproj_path=mmproj_path,
                 disable_thinking=disable_thinking, use_default_sampling=use_default_sampling,
                 keep_model_loaded=keep_model_loaded,
             )
@@ -499,9 +600,9 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # GGUF / llama.cpp engine
     # ------------------------------------------------------------------ #
-    def _generate_gguf(self, full_prompt, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, custom_repo_id, local_model_path, disable_thinking, use_default_sampling, keep_model_loaded):
-        gguf_path = None
+    def _generate_gguf(self, full_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, image, image2, image3, video, frame_count, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, keep_model_loaded):
         entry = None
+        gguf_path = None
         eff_local = (local_model_path or "").strip() or _local_model_option(model_name)
         if eff_local and str(eff_local).lower().endswith(".gguf"):
             gguf_path = Path(str(eff_local))
@@ -514,33 +615,39 @@ class PROMPTFORGE_PromptEnhancer:
             if entry is None and GGUF_MODELS:
                 entry = GGUF_MODELS[0]
             if entry is not None:
-                base_dir = Path(entry.get("base_dir") or "LLM/GGUF")
-                try:
-                    if folder_paths is not None:
-                        _md = getattr(folder_paths, "models_dir", "") or ""
-                        if str(_md) and str(_md) != ".":
-                            base_dir = Path(_md) / base_dir
-                except Exception:
-                    pass
-                qf = entry.get("quant_files") or {}
-                if qf:
-                    quant_key = quantization if quantization in qf else ("8bit" if quantization in (None, "auto", "fp16") else "4bit")
-                    gguf_path = base_dir / qf.get(quant_key, next(iter(qf.values())))
+                gguf_path = _find_gguf(entry, quantization)
         if gguf_path is None:
-            raise ValueError("[PromptForge] No GGUF model selected / available.")
+            raise ValueError("[PromptForge] No GGUF model selected / available. Put the .gguf in a scanned models dir (text_encoders / LLM / gguf) or set local_model_path.")
+
+        images = self._mode_images(mode, image, image2, image3, video, frame_count) if mode in ("image", "video") else []
+        mmproj = _resolve_mmproj(gguf_path, entry, mmproj_path) if images else None
+        if images and mmproj is None:
+            raise ValueError("[PromptForge] Vision GGUF needs an mmproj file next to the model (e.g. mmproj-F16.gguf). Put one in the same folder, set mmproj_path, or switch mode to text_only.")
 
         from llama_cpp import Llama
         defaults = (entry or {}).get("defaults") or {}
-        llm = Llama(
-            model_path=str(gguf_path),
-            n_ctx=int(defaults.get("context_length") or 65536),
-            n_gpu_layers=int(defaults.get("gpu_layers") if defaults.get("gpu_layers") is not None else -1),
-        )
+        llama_kwargs = {
+            "model_path": str(gguf_path),
+            "n_ctx": min(int(defaults.get("context_length") or 16384), 16384),
+            "n_gpu_layers": int(defaults.get("gpu_layers") if defaults.get("gpu_layers") is not None else -1),
+        }
+        if images:
+            try:
+                from llama_cpp.llama_chat_format import Qwen35ChatHandler, Qwen3VLChatHandler
+            except ImportError as exc:
+                raise ValueError("[PromptForge] Vision GGUF requires llama-cpp-python with multimodal chat handlers (Qwen3VLChatHandler / Qwen35ChatHandler). Upgrade llama-cpp-python.") from exc
+            model_name_lower = f"{gguf_path.name} {(entry or {}).get('name', '')}".lower()
+            handler = Qwen35ChatHandler if ("qwen3.5" in model_name_lower or "qwen3.6" in model_name_lower or "qwen35" in model_name_lower) else Qwen3VLChatHandler
+            llama_kwargs["chat_handler"] = handler(clip_model_path=str(mmproj), verbose=False)
+        llm = Llama(**llama_kwargs)
+
         if use_default_sampling:
             temperature, top_p, top_k, repetition_penalty = _apply_sampling_defaults(
                 _generation_defaults_from_gguf(llm), temperature, top_p, top_k, repetition_penalty
             )
-        messages = [{"role": "user", "content": [{"type": "text", "text": full_prompt}]}]
+        content = [{"type": "text", "text": full_prompt}]
+        content.extend({"type": "image_url", "image_url": {"url": self._pil_data_url(p)}} for p in images)
+        messages = [{"role": "user", "content": content}]
         completion_kwargs = {
             "messages": messages,
             "max_tokens": max_tokens,
@@ -553,9 +660,16 @@ class PROMPTFORGE_PromptEnhancer:
             completion_kwargs["top_k"] = top_k
         if disable_thinking and "reasoning_budget" in inspect.signature(llm.create_chat_completion).parameters:
             completion_kwargs["reasoning_budget"] = 0
-        out = llm.create_chat_completion(**completion_kwargs)
-        enhanced = out.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-        self._release(keep_model_loaded=keep_model_loaded, llm=llm)
+        try:
+            out = llm.create_chat_completion(**completion_kwargs)
+            enhanced = out.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+        except ValueError as exc:
+            if images and "mmproj" in str(exc).lower():
+                expected = (entry or {}).get("mmproj_file") or "mmproj-*.gguf"
+                raise ValueError(f"[PromptForge] Vision GGUF could not load mmproj '{mmproj}'. It must match the text model {gguf_path.name}. Download {expected} next to the model or set mmproj_path.") from exc
+            raise
+        finally:
+            self._release(keep_model_loaded=keep_model_loaded, llm=llm)
         return enhanced
 
     # ------------------------------------------------------------------ #
@@ -737,6 +851,13 @@ class PROMPTFORGE_PromptEnhancer:
         if im.mode != "RGB":
             im = im.convert("RGB")
         return im
+
+    def _pil_data_url(self, image):
+        import base64
+        import io
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
 
     def _frames_from_input(self, video, frame_count):
         from PIL import Image
