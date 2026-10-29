@@ -3,8 +3,8 @@
 Single ComfyUI node that combines:
   - a large preset catalog (Krea 2, MOSS Image, Qwen Image, generic styles)
   - a custom system-prompt override field + save mechanism
-  - full model-loading options: HF text-encoder engines (safetensors / full precision),
-    GGUF engines (llama.cpp), quantization (auto/fp16/8bit/4bit), local model scanning
+  - full model-loading options: HF text-encoder engines (safetensors / full precision,
+    fp16/fp32/8-bit/4-bit via bitsandbytes), GGUF engines (llama.cpp), local model scanning
   - heretic VL model catalog (HF, free, VL-capable, text-only capable for T2I)
   - hardcore sampling options (seed, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty)
   - recommended option sets (auto / fast_4b / balanced_9b / max_27b)
@@ -114,7 +114,7 @@ def _scan_local_text_models():
                         "path": str(p),
                         "name": p.name,
                         "kind": p.suffix.lower().lstrip("."),
-                        "size_mb": round(p.stat().st_size / (1024 * 1024), 1) if p.stat().st_size < 10**10 else -1,
+                        "size_mb": round(p.stat().st_size / (1024 * 1024), 1) if p.stat().st_size < 10 ** 10 else -1,
                     }
                 )
     return found
@@ -140,13 +140,14 @@ class PROMPTFORGE_PromptEnhancer:
 
     @classmethod
     def INPUT_TYPES(cls):
+        scanned_options = ["auto"] + [e.get("path") for e in LOCAL_TEXT_MODELS if e.get("path")]
         return {
             "required": {
                 "prompt_text": ("STRING", {"default": "", "multiline": True, "tooltip": "Raw user request / media-derived text to enhance. Can be loose natural language, random idea, detailed description, keyword pile, anything."}),
-                "mode": (["text_only", "image", "image2", "video"], {"default": "text_only", "tooltip": "What the prompt is for: text_only (T2I / text-to-video), image (image-to-image / reference), image2 (second reference / edit), video (video frame analysis)."}),
+                "mode": (["text_only", "image", "image2", "image3", "video"], {"default": "text_only", "tooltip": "What the prompt is for: text_only (T2I / text-to-video), image (image-to-image / reference), image2 (second reference / edit), image3 (third reference), video (video frame analysis)."}),
                 "engine": (["auto", "text_encoder", "gguf"], {"default": "auto", "tooltip": "Model engine: auto (pick recommended), text_encoder (native ComfyUI HF safetensors route), gguf (llama.cpp GGUF route)."}),
-                "model_name": (TEXT_MODEL_OPTIONS, {"default": "auto", "tooltip": "Model: auto-detect, heretic HF VL models, or GGUF heretic models. Optional custom_repo_id allows any HF repo id."}),
-                "quantization": (["auto", "fp16", "8bit", "4bit"], {"default": "auto", "tooltip": "Quantization for text_encoder models: auto, full fp16, 8-bit, 4-bit. GGUF: fp16->Q8_0, 8bit->Q8_0, 4bit->Q4_K_M."}),
+                "model_name": (TEXT_MODEL_OPTIONS, {"default": "auto", "tooltip": "Model: auto-detect, heretic HF VL models, or GGUF heretic models. Optional custom_repo_id allows any HF repo id. Optional local_model_path / scanned_model allow any local model."}),
+                "quantization": (["auto", "fp16", "fp32", "8bit", "4bit"], {"default": "auto", "tooltip": "Quantization for text_encoder models: auto, full fp16, full fp32, 8-bit, 4-bit. GGUF: fp16->Q8_0, fp32->Q8_0, 8bit->Q8_0, 4bit->Q4_K_M."}),
                 "enhancement_preset": (PRESET_OPTIONS, {"default": "auto", "tooltip": "Preset system prompt: auto, or one of the PromptForge presets (Krea 2 T2I, MOSS Image T2I, Qwen Image T2I, generic styles...)."}),
                 "seed": ("INT", {"default": 1, "min": 1, "max": 2 ** 32 - 1, "tooltip": "Sampling seed for the Qwen-style generation. 1 = deterministic-ish / keep last logic."}),
                 "max_tokens": ("INT", {"default": 8192, "min": 32, "max": 16384, "tooltip": "Max new tokens for the enhanced prompt."}),
@@ -161,12 +162,15 @@ class PROMPTFORGE_PromptEnhancer:
                 "save_system_prompt": ("BOOLEAN", {"default": False, "tooltip": "When true, the system_prompt_override is saved into the user's PromptForge custom system-prompt store."}),
             },
             "optional": {
-                "image": ("IMAGE", {"tooltip": "Reference image for image / image2 / video modes. For video modes this is frames; use frame_count."}),
+                "image": ("IMAGE", {"tooltip": "First reference image (or first video-frame context)."}),
                 "image2": ("IMAGE", {"tooltip": "Second reference image / edit source."}),
+                "image3": ("IMAGE", {"tooltip": "Third reference image / edit source."}),
                 "video": ("IMAGE", {"tooltip": "Video frames input. Use frame_count to control how many frames are sampled."}),
                 "frame_count": ("INT", {"default": 16, "min": 1, "max": 64, "tooltip": "Frames sampled from video input."}),
                 "custom_repo_id": ("STRING", {"default": "", "tooltip": "Optional custom HuggingFace repo id for text_encoder engine (e.g. 'foo/bar'). Overrides model_name when set."}),
                 "recommended_set": (RECOMMENDED_SETS, {"default": "auto", "tooltip": "Recommended preset option set: auto, fast_4b, balanced_9b, max_27b. Fills engine/model/quant/preset automatically."}),
+                "local_model_path": ("STRING", {"default": "", "multiline": True, "tooltip": "Optional local model path (safetensors dir/file or GGUF file) - overrides model selection. Use for full safetensors models or custom local GGUF files."}),
+                "scanned_model": (scanned_options, {"default": "auto", "tooltip": "Model picked from local scan of ComfyUI text/LLM/GGUF dirs. 'auto' = catalog default."}),
             },
         }
 
@@ -194,10 +198,13 @@ class PROMPTFORGE_PromptEnhancer:
         save_system_prompt,
         image=None,
         image2=None,
+        image3=None,
         video=None,
         frame_count=16,
         custom_repo_id="",
         recommended_set="auto",
+        local_model_path="",
+        scanned_model="auto",
     ):
         if recommended_set and recommended_set != "auto":
             override_map = RECOMMENDED_SET_MAP.get(recommended_set)
@@ -222,6 +229,14 @@ class PROMPTFORGE_PromptEnhancer:
         parts = [p for p in (user_text, sys_text, OUTPUT_GUARD) if p and p.strip()]
         full_prompt = "\n\n".join(parts)
 
+        # Local model override: scanned_model / local_model_path win over catalog selection.
+        eff_local = (local_model_path or "").strip() or (scanned_model if (scanned_model and scanned_model != "auto") else "")
+        if eff_local:
+            if str(eff_local).lower().endswith(".gguf"):
+                engine = "gguf"
+            else:
+                engine = "text_encoder"
+
         enhanced = self._generate(
             full_prompt=full_prompt,
             mode=mode,
@@ -236,10 +251,13 @@ class PROMPTFORGE_PromptEnhancer:
             repetition_penalty=repetition_penalty,
             image=image,
             image2=image2,
+            image3=image3,
             video=video,
             frame_count=frame_count,
             device=device,
             custom_repo_id=custom_repo_id,
+            local_model_path=eff_local,
+            scanned_model=scanned_model,
         )
         return (enhanced,)
 
@@ -275,85 +293,75 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Generation dispatch
     # ------------------------------------------------------------------ #
-    def _generate(self, full_prompt, mode, engine, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, video, frame_count, device, custom_repo_id):
+    def _generate(self, full_prompt, mode, engine, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, device, custom_repo_id, local_model_path, scanned_model):
         if engine == "gguf":
             return self._generate_gguf(
                 full_prompt=full_prompt, model_name=model_name, quantization=quantization,
                 max_tokens=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k,
                 num_beams=num_beams, repetition_penalty=repetition_penalty,
-                image=image, image2=image2, video=video, frame_count=frame_count,
-                device=device, custom_repo_id=custom_repo_id,
+                image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
+                device=device, custom_repo_id=custom_repo_id, local_model_path=local_model_path, scanned_model=scanned_model,
             )
         return self._generate_hf(
             full_prompt=full_prompt, mode=mode, model_name=model_name, quantization=quantization,
             max_tokens=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k,
             num_beams=num_beams, repetition_penalty=repetition_penalty,
-            image=image, image2=image2, video=video, frame_count=frame_count,
-            device=device, custom_repo_id=custom_repo_id,
+            image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
+            device=device, custom_repo_id=custom_repo_id, local_model_path=local_model_path, scanned_model=scanned_model,
         )
 
     # ------------------------------------------------------------------ #
     # HF / safetensors text-encoder engine
     # ------------------------------------------------------------------ #
-    def _generate_hf(self, full_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, video, frame_count, device, custom_repo_id):
-        repo_id = None
+    def _generate_hf(self, full_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, device, custom_repo_id, local_model_path, scanned_model):
+        src = local_model_path if local_model_path else None
         params_b = None
-        if model_name and model_name != "auto":
-            for m in HERETIC_MODELS:
-                if m.get("key") == model_name:
+        if not src:
+            repo_id = None
+            if model_name and model_name != "auto":
+                for m in HERETIC_MODELS:
+                    if m.get("key") == model_name:
+                        repo_id = m.get("repo_id")
+                        params_b = m.get("params_b")
+                        break
+            if not repo_id:
+                for m in HERETIC_MODELS:
                     repo_id = m.get("repo_id")
                     params_b = m.get("params_b")
                     break
-            if not repo_id:
-                s = str(model_name)
-                if s.startswith("http://") or s.startswith("https://") or s.startswith("hf.co/"):
-                    repo_id = s
-            if not repo_id and custom_repo_id:
-                repo_id = custom_repo_id
-        if not repo_id:
-            for m in HERETIC_MODELS:
-                repo_id = m.get("repo_id")
-                params_b = m.get("params_b")
-                break
+            src = repo_id
 
-        needs_image = mode in ("image", "image2", "video")
-        dtype = torch.float16 if (quantization in (None, "auto", "fp16")) and torch.cuda.is_available() else torch.float32
+        needs_image = mode in ("image", "image2", "image3", "video")
+        dtype = torch.float16 if (quantization in (None, "auto", "fp16") and torch.cuda.is_available()) else torch.float32
         quant_cfg = None
         if quantization == "8bit" or quantization == "4bit":
             quant_cfg = BitsAndBytesConfig(load_in_8bit=(quantization == "8bit"), load_in_4bit=(quantization == "4bit"))
 
         if needs_image:
-            model = AutoVision.from_pretrained(repo_id, quantization_config=quant_cfg, torch_dtype=dtype, device_map="auto")
+            model = AutoVision.from_pretrained(src, quantization_config=quant_cfg, torch_dtype=dtype, device_map="auto")
         else:
             from transformers import AutoModelForCausalLM
-            model = AutoModelForCausalLM.from_pretrained(repo_id, quantization_config=quant_cfg, torch_dtype=dtype, device_map="auto")
+            model = AutoModelForCausalLM.from_pretrained(src, quantization_config=quant_cfg, torch_dtype=dtype, device_map="auto")
 
-        processor = AutoProcessor.from_pretrained(repo_id)
-        tokenizer = AutoTokenizer.from_pretrained(repo_id)
+        processor = AutoProcessor.from_pretrained(src)
+        tokenizer = AutoTokenizer.from_pretrained(src)
 
         conversation = [{"role": "user", "content": []}]
-        images = []
-        if mode in ("image", "video"):
-            pil = self._pil_from_input(image)
-            if pil is not None:
-                conversation[0]["content"].append({"type": "image", "image": pil})
-                images.append(pil)
+        refs = []
+        if mode == "video":
+            refs = self._frames_from_input(video, frame_count)
+        elif mode == "image":
+            refs = [self._pil_from_input(image)]
         elif mode == "image2":
-            pil = self._pil_from_input(image2)
-            if pil is not None:
-                conversation[0]["content"].append({"type": "image", "image": pil})
-                images.append(pil)
-
-        num_images = len(images)
-        if video is not None and mode == "video":
-            frames = self._frames_from_input(video, frame_count)
-            for fr in frames:
-                conversation[0]["content"].append({"type": "image", "image": fr})
-                images.append(fr)
-
+            refs = [self._pil_from_input(image2)]
+        elif mode == "image3":
+            refs = [self._pil_from_input(image3)]
+        for r in refs:
+            if r is not None:
+                conversation[0]["content"].append({"type": "image", "image": r})
         conversation[0]["content"].append({"type": "text", "text": full_prompt})
         chat = processor.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
-        processed = processor(text=chat, images=images or None, return_tensors="pt")
+        processed = processor(text=chat, images=[r for r in refs if r is not None] or None, return_tensors="pt")
         model_device = next(model.parameters()).device
         model_inputs = {k: (v.to(model_device, non_blocking=True) if torch.is_tensor(v) else v) for k, v in processed.items()}
         stop_tokens = [tokenizer.eos_token_id]
@@ -378,31 +386,34 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # GGUF / llama.cpp engine
     # ------------------------------------------------------------------ #
-    def _generate_gguf(self, full_prompt, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, video, frame_count, device, custom_repo_id):
+    def _generate_gguf(self, full_prompt, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, device, custom_repo_id, local_model_path, scanned_model):
+        gguf_path = None
         entry = None
-        for g in GGUF_MODELS:
-            if g.get("key") == model_name:
-                entry = g
-                break
-        if entry is None:
-            entry = GGUF_MODELS[0] if GGUF_MODELS else None
-        if entry is None:
+        if local_model_path and str(local_model_path).lower().endswith(".gguf"):
+            gguf_path = Path(str(local_model_path))
+        if gguf_path is None:
+            for g in GGUF_MODELS:
+                if g.get("key") == model_name:
+                    entry = g
+                    break
+            if entry is None:
+                entry = GGUF_MODELS[0] if GGUF_MODELS else None
+            if entry is not None:
+                base_dir = Path(entry.get("base_dir") or "LLM/GGUF")
+                try:
+                    import folder_paths as _fp
+                    _md = getattr(_fp, "models_dir", "") or ""
+                    base_dir = (Path(_md) if str(_md) and str(_md) != "." else Path("/home/genortg/ComfyUI/Comfy/models")) / base_dir
+                except Exception:
+                    pass
+                qf = entry.get("quant_files") or {}
+                quant_key = quantization if quantization in qf else ("8bit" if quantization in (None, "auto", "fp16", "fp32") else "4bit")
+                gguf_path = base_dir / (qf.get(quant_key) or next(iter(qf.values())))
+        if gguf_path is None:
             raise ValueError("[PromptForge] No GGUF model selected / available.")
 
-        base_dir = Path(entry.get("base_dir") or "LLM/GGUF")
-        try:
-            import folder_paths as _fp
-            _md = getattr(_fp, "models_dir", "") or ""
-            base_dir = (Path(_md) if str(_md) and str(_md) != "." else Path("/home/genortg/ComfyUI/Comfy/models")) / base_dir
-        except Exception:
-            pass
-        qf = entry.get("quant_files") or {}
-        quant_key = quantization if quantization in qf else ("8bit" if quantization in (None, "auto", "fp16") else "4bit")
-        gguf_file = qf.get(quant_key) or next(iter(qf.values()))
-        gguf_path = base_dir / gguf_file
-
         from llama_cpp import Llama
-        defaults = entry.get("defaults") or {}
+        defaults = (entry or {}).get("defaults") or {}
         llm = Llama(
             model_path=str(gguf_path),
             n_ctx=int(defaults.get("context_length") or 65536),
@@ -450,7 +461,6 @@ class PROMPTFORGE_PromptEnhancer:
         if isinstance(video, list) and all(isinstance(f, Image.Image) for f in video):
             frames = list(video)
         elif hasattr(video, "mean"):
-            # tensor-like: sample along first dim
             try:
                 shape = list(video.shape)
                 n = shape[0] if len(shape) > 0 else len(video)
