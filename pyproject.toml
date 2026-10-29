@@ -1,6 +1,6 @@
 [project]
 name = "ComfyUI-PromptForge"
-description = "Unified, fully-loaded ComfyUI prompt enhancement node: heretic VL model catalog (HF + GGUF), rich preset catalog, custom system-prompt overrides, hardcore sampling options, recommended option sets, local model scanning."
+description = "Unified, fully-loaded ComfyUI prompt enhancement node: heretic VL model catalog (HF + GGUF), rich preset catalog, custom system-prompt overrides, hardcore sampling options, native ComfyUI CLIP engine, local model scanning."
 version = "1.0.0"
 license = { file = "LICENSE" }
 dependencies = [

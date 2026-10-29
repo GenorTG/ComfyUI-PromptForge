@@ -9,14 +9,21 @@ Unified, fully-loaded ComfyUI prompt enhancement node.
 One singular node that does the whole prompt-enhancement job:
 
 - **Prompt input**: free-form text box — loose natural language, random ideas, keyword piles, detailed descriptions; the model always expands to a proper prompt for the target mode/model.
-- **Modes**: `text_only`, `image`, `image2`, `video`.
-- **Engines**: `text_encoder` (native ComfyUI HF safetensors route via transformers, full precision / 8-bit / 4-bit via bitsandbytes) and `gguf` (llama.cpp GGUF route).
-- **Models**: `auto` (recommended heretic HF VL model), heretic HF catalog, heretic GGUF catalog, or `custom_repo_id` for any HF repo.
-- **Quantization**: `auto`, `fp16`, `8bit`, `4bit` (GGUF maps fp16/8bit → Q8_0, 4bit → Q4_K_M).
+- **Modes**: `text_only`, `image`, `image2`, `image3`, `video`.
+- **Engines**: `auto` (detect from the selected model), `text_encoder` (native ComfyUI CLIP / safetensors route), `gguf` (llama.cpp GGUF route).
+- **Models**: `auto`, researched heretic HF VL models (4B / 9B / 27B) and GGUF variants — options marked `[AVAILABLE]` are already downloaded locally; `custom_repo_id` / `local_model_path` / `scanned_model` allow any other model.
+- **Quantization**: `auto`, `fp16`, `q8`, `q4` (live bitsandbytes quantization before generation; ignored for GGUF).
 - **Preset**: `auto` or any of the bundled presets (Krea 2 T2I, Krea 2 Identity Edit, MOSS Image T2I/I2I, Qwen Image T2I, generic styles…).
 - **Custom system prompt**: override field + save toggle → persisted to user dir.
-- **Sampling**: seed, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, keep_model_loaded, device.
-- **Recommended sets**: `auto`, `fast_4b`, `balanced_9b`, `max_27b`.
+- **Sampling**: seed, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, keep_model_loaded.
+
+## Memory
+
+After the enhanced prompt has been generated the text encoder / LLM is unloaded
+(`comfy.model_management` free/cleanup helpers) so it does not hog VRAM/RAM for
+other tasks. Set `keep_model_loaded` to true to keep it resident. A native ComfyUI
+`CLIP` socket (`clip`) can be connected to generate from an already-loaded encoder
+instead of loading its own model.
 
 ## Presets
 
