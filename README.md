@@ -26,6 +26,10 @@ One singular node that does the whole prompt-enhancement job:
 - `ENHANCED_PROMPT` — the final prompt text only.
 - `THINKING` — reasoning that was removed from the output, empty when the model produced none.
 
+## Workflow values and schema stability
+
+ComfyUI execution prompts are keyed by **input name**, so queued/API workflows are safe. Saved UI workflows historically stored widget values as a positional array (`widgets_values`); changing input order could shift values between fields. This pack keeps input order append-only. For full protection, enable **Settings → Workflow → Named values restore** (`Comfy.Workflow.NamedValuesRestore`), which makes ComfyUI restore values by name (`widgets_values_named`) instead of position.
+
 ## Privacy
 
 The node never prints or stores prompts, responses, enhanced prompts, thinking, or token text. The only runtime console line is `[PromptForge] request received.`; llama.cpp verbose output is disabled. The optional `save_system_prompt` toggle is the only persistence path and stores just the system-prompt text you explicitly choose to save.
