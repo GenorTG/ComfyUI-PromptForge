@@ -331,7 +331,8 @@ class PROMPTFORGE_PromptEnhancer:
                 "use_default_sampling": ("BOOLEAN", {"default": False, "tooltip": "Use sampling defaults found in the model files (generation_config.json / GGUF metadata) for temperature, top_p, top_k and repetition_penalty. Falls back to the node values when the model has none."}),
                 "disable_thinking": ("BOOLEAN", {"default": True, "tooltip": "Disable model reasoning/thinking before the answer (native template flag where supported). Thinking is always stripped from ENHANCED_PROMPT and exposed on the THINKING output instead."}),
                 "keep_model_loaded": ("BOOLEAN", {"default": False, "tooltip": "Unload the text encoder / LLM after the prompt has been generated. Turn on to keep it resident."}),
-                "system_prompt_override": ("STRING", {"default": "", "multiline": True, "tooltip": "Custom system prompt override. Leave empty to use the selected preset. Toggle save_system_prompt to write it to your saved custom templates."}),
+                "use_system_prompt_override": ("BOOLEAN", {"default": True, "tooltip": "Use the system_prompt_override text when it is non-empty. Turn off to keep the text in the field but run with the selected preset instead."}),
+                "system_prompt_override": ("STRING", {"default": "", "multiline": True, "tooltip": "Custom system prompt override. Leave empty to use the selected preset. Toggle use_system_prompt_override to switch it on/off without clearing the text."}),
                 "save_system_prompt": ("BOOLEAN", {"default": False, "tooltip": "When true, the system_prompt_override is saved into the user's PromptForge custom system-prompt store."}),
             },
             "optional": {
@@ -367,6 +368,7 @@ class PROMPTFORGE_PromptEnhancer:
         disable_thinking,
         use_default_sampling,
         keep_model_loaded,
+        use_system_prompt_override,
         system_prompt_override,
         save_system_prompt,
         image=None,
@@ -378,12 +380,11 @@ class PROMPTFORGE_PromptEnhancer:
         custom_repo_id="",
         local_model_path="",
     ):
-        if save_system_prompt:
-            custom = (system_prompt_override or "").strip()
-            if custom:
-                self._save_custom_system_prompt(custom)
+        override_text = (system_prompt_override or "").strip()
+        if save_system_prompt and override_text:
+            self._save_custom_system_prompt(override_text)
 
-        sys_text = (system_prompt_override or "").strip()
+        sys_text = override_text if (use_system_prompt_override and override_text) else ""
         if not sys_text:
             key = enhancement_preset if enhancement_preset and enhancement_preset in PROMPTFORGE_PRESETS else DEFAULT_PRESET
             entry = PROMPTFORGE_PRESETS.get(key) or {}
