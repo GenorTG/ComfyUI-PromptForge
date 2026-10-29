@@ -62,7 +62,7 @@ def _scan_local_text_models():
             candidates.append(base / d)
     candidates.append(Path("/models"))
     candidates.append(Path("/home/genortg/ComfyUI/Comfy/models"))
-    candidates.append(Path("/home/genortg/1TB-SAMSUNG/Comfy/Comfy/models"))
+    candidates.append(Path("/home/genortg/1TB-SAMSUNG/Comfy/ComfyUI/models"))
     seen = set()
     for c in candidates:
         if c in seen:
@@ -340,8 +340,8 @@ class PROMPTFORGE_PromptEnhancer:
                 full_prompt=full_prompt, model_name=model_name, quantization=quantization,
                 max_tokens=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k,
                 num_beams=num_beams, repetition_penalty=repetition_penalty,
-                image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
-                custom_repo_id=custom_repo_id, local_model_path=local_model_path, scanned_model=scanned_model,
+                custom_repo_id=custom_repo_id, local_model_path=local_model_path,
+                scanned_model=scanned_model, keep_model_loaded=keep_model_loaded,
             )
         return self._generate_text_encoder(
             full_prompt=full_prompt, mode=mode, model_name=model_name, quantization=quantization,
@@ -355,11 +355,12 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # GGUF / llama.cpp engine
     # ------------------------------------------------------------------ #
-    def _generate_gguf(self, full_prompt, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, custom_repo_id, local_model_path, scanned_model):
+    def _generate_gguf(self, full_prompt, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, custom_repo_id, local_model_path, scanned_model, keep_model_loaded):
         gguf_path = None
         entry = None
-        if local_model_path and str(local_model_path).lower().endswith(".gguf"):
-            gguf_path = Path(str(local_model_path))
+        eff_local = (local_model_path or "").strip() or (scanned_model if scanned_model and scanned_model != "auto" else "")
+        if eff_local and str(eff_local).lower().endswith(".gguf"):
+            gguf_path = Path(str(eff_local))
         if gguf_path is None:
             resolved = _resolve_model_entry(model_name) if (model_name and model_name != "auto") else _resolve_model_entry("auto")
             if resolved is not None and resolved.get("kind") == "gguf":
@@ -378,9 +379,10 @@ class PROMPTFORGE_PromptEnhancer:
                 except Exception:
                     pass
                 qf = entry.get("quant_files") or {}
-                quant_key = quantization if quantization in qf else ("8bit" if quantization in (None, "auto", "fp16") else "4bit")
-                gguf_path = base_dir / (qf.get(quant_key) or next(iter(qf.values())) if qf else None)
-        if gguf_path is None or str(gguf_path) == "None":
+                if qf:
+                    quant_key = quantization if quantization in qf else ("8bit" if quantization in (None, "auto", "fp16") else "4bit")
+                    gguf_path = base_dir / qf.get(quant_key, next(iter(qf.values())))
+        if gguf_path is None:
             raise ValueError("[PromptForge] No GGUF model selected / available.")
 
         from llama_cpp import Llama
@@ -400,7 +402,7 @@ class PROMPTFORGE_PromptEnhancer:
             repetition_penalty=repetition_penalty,
         )
         enhanced = out.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-        self._release(keep_model_loaded=False, llm=llm)
+        self._release(keep_model_loaded=keep_model_loaded, llm=llm)
         return enhanced
 
     # ------------------------------------------------------------------ #
@@ -410,15 +412,15 @@ class PROMPTFORGE_PromptEnhancer:
         if clip is not None:
             enhanced = self._generate_with_clip(
                 full_prompt=full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
-                top_p=top_p, top_k=top_k, num_beams=num_beams, repetition_penalty=repetition_penalty,
+                top_p=top_p, top_k=top_k, repetition_penalty=repetition_penalty,
                 seed=seed, image=image, image2=image2, image3=image3, video=video, frame_count=frame_count, clip=clip,
             )
             self._release(keep_model_loaded=keep_model_loaded)
             return enhanced
 
-        src = local_model_path or ""
+        eff_local = (local_model_path or "").strip() or (scanned_model if scanned_model and scanned_model != "auto" else "")
+        src = eff_local or ""
         params_b = None
-        repo_id = None
         resolved = _resolve_model_entry(model_name) if (model_name and model_name != "auto") else _resolve_model_entry("auto")
         if not src and resolved is not None:
             if resolved.get("kind") == "hf":
@@ -478,7 +480,7 @@ class PROMPTFORGE_PromptEnhancer:
         clip_obj = comfy.sd.load_clip(ckpt_paths=[src], clip_type=comfy.sd.CLIPType.STABLE_DIFFUSION, model_options={"dtype": torch.float16})
         enhanced = self._generate_with_clip(
             full_prompt=full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
-            top_p=top_p, top_k=top_k, num_beams=num_beams, repetition_penalty=repetition_penalty,
+            top_p=top_p, top_k=top_k, repetition_penalty=repetition_penalty,
             seed=seed, image=image, image2=image2, image3=image3, video=video, frame_count=frame_count, clip=clip_obj,
         )
         self._release(keep_model_loaded=keep_model_loaded)
@@ -487,7 +489,7 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Native ComfyUI CLIP generation (connected clip or locally loaded clip)
     # ------------------------------------------------------------------ #
-    def _generate_with_clip(self, full_prompt, mode, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, image, image2, image3, video, frame_count, clip):
+    def _generate_with_clip(self, full_prompt, mode, max_tokens, temperature, top_p, top_k, repetition_penalty, seed, image, image2, image3, video, frame_count, clip):
         images = self._mode_images(mode, image, image2, image3, video, frame_count)
         tokens = clip.tokenize(full_prompt, images=images) if images else clip.tokenize(full_prompt)
         generated = clip.generate(
