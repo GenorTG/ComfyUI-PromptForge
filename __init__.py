@@ -324,7 +324,7 @@ class PROMPTFORGE_PromptEnhancer:
                 "seed": ("INT", {"default": 1, "min": 1, "max": 2 ** 32 - 1, "tooltip": "Sampling seed for the Qwen-style generation. 1 = deterministic-ish / keep last logic."}),
                 "max_tokens": ("INT", {"default": 8192, "min": 32, "max": 16384, "tooltip": "Max new tokens for the enhanced prompt."}),
                 "temperature": ("FLOAT", {"default": 0.7, "min": 0.1, "max": 1.0, "step": 0.01, "tooltip": "Sampling temperature."}),
-                "top_p": ("FLOAT", {"default": 0.9, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "Nucleus sampling cutoff."}),
+                "top_p": ("FLOAT", {"default": 0.9, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "Nucleus sampling cutoff. ComfyUI's CLIP sampler may fall back to top_p=1.0 automatically if torch raises an overlap error."}),
                 "top_k": ("INT", {"default": 0, "min": 0, "max": 100, "tooltip": "Top-K (Qwen3.5 heretic recommended: 20). 0 = model default."}),
                 "num_beams": ("INT", {"default": 1, "min": 1, "max": 8, "tooltip": "Beam search width. 1 = fast sampling; >1 trades speed for stability."}),
                 "repetition_penalty": ("FLOAT", {"default": 1.1, "min": 0.5, "max": 2.0, "step": 0.01, "tooltip": "Repetition penalty."}),
@@ -662,18 +662,29 @@ class PROMPTFORGE_PromptEnhancer:
         if disable_thinking:
             tokenize_kwargs["thinking"] = False
         tokens = clip.tokenize(full_prompt, **tokenize_kwargs)
-        generated = clip.generate(
-            tokens,
-            do_sample=True,
-            max_length=max_tokens,
-            temperature=temperature,
-            top_k=top_k,
-            top_p=top_p,
-            min_p=0.0,
-            repetition_penalty=repetition_penalty,
-            seed=seed,
-            presence_penalty=0.0,
-        )
+
+        def run(top_p_value):
+            return clip.generate(
+                tokens,
+                do_sample=True,
+                max_length=max_tokens,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p_value,
+                min_p=0.0,
+                repetition_penalty=repetition_penalty,
+                seed=seed,
+                presence_penalty=0.0,
+            )
+
+        try:
+            generated = run(top_p)
+        except RuntimeError as exc:
+            if top_p < 1.0 and "single memory location" in str(exc):
+                print("[PromptForge] ComfyUI's CLIP sampler hit a torch overlap error on top_p; retrying with top_p=1.0 (temperature, top_k, repetition and seed still apply).")
+                generated = run(1.0)
+            else:
+                raise
         return clip.decode(generated, skip_special_tokens=True)
 
     # ------------------------------------------------------------------ #
