@@ -927,5 +927,3 @@ class PROMPTFORGE_PromptEnhancer:
 NODE_CLASS_MAPPINGS = {
     "PROMPTFORGE_PromptEnhancer": PROMPTFORGE_PromptEnhancer,
 }
-
-WEB_DIRECTORY = "./web"

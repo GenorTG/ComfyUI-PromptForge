@@ -11,7 +11,7 @@ One singular node that does the whole prompt-enhancement job:
 - **Prompt input**: free-form text box — loose natural language, random ideas, keyword piles, detailed descriptions; the model always expands to a proper prompt for the target mode/model.
 - **Modes**: `text_only`, `image` (uses every connected reference from `image` / `image2` / `image3`), `video` (frames sampled from `video` via `frame_count`).
 - **Video duration**: `video_seconds` sets the exact clip length. MiniMax H3 presets use it for shot budget, timestamps, and the frame-alignment line (`{video_seconds}`).
-- **Source**: explicit choice — `safetensors` (HF dir / single-file text encoder, loaded by the node), `GGUF` (llama.cpp), or `connected clip` (uses the CLIP input; no model loaded). The UI hides model fields that do not apply to the selected source.
+- **Source**: explicit choice — `safetensors` (HF dir / single-file text encoder, loaded by the node), `GGUF` (llama.cpp), or `connected clip` (uses the CLIP input; no model loaded). All fields stay visible; only the ones for the selected source are used.
 - **Models**: separate pickers per source — `safetensors_model` lists HF / safetensors models only, `gguf_model` lists GGUF models only (both marked `[AVAILABLE]` when downloaded). `custom_repo_id` / `local_model_path` / `mmproj_path` cover anything outside the lists.
 - **Vision safety**: image/video mode never silently falls back to text-only. A connected text encoder without vision support, a text-only safetensors model, or a GGUF without a matching mmproj raises a clear error.
 - **Quantization**: `auto`, `fp16`, `q8`, `q4` (live bitsandbytes quantization before generation; ignored for GGUF).
