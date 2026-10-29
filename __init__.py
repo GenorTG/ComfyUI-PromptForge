@@ -54,9 +54,32 @@ HERETIC_MODELS = PROMPTFORGE_MODELS.get("heretic_hf_models") or []
 GGUF_MODELS = PROMPTFORGE_MODELS.get("gguf_models") or []
 LOCAL_SCAN_DIRS = PROMPTFORGE_MODELS.get("local_scan_dirs") or []
 
-TEXT_MODEL_OPTIONS = ["auto"] + [m.get("key") for m in HERETIC_MODELS if m.get("key")] + [
-    g.get("key") for g in GGUF_MODELS if g.get("key")
+# Friendly, user-facing model options: (option_label, kind, catalog_key, params_b)
+HERETIC_MODEL_ENTRIES = [
+    {"option": "Qwen3.5-9B Defiant Fable Heretic (HF) [9B]", "kind": "hf", "key": "heretic_qwen35_9b", "params_b": 9},
+    {"option": "Qwen3.5-4B Deckard Heretic Thinking (HF) [4B, text-only]", "kind": "hf", "key": "heretic_qwen35_4b_thinking", "params_b": 4},
+    {"option": "Qwen3.6-27B Fable Fusion Heretic (HF) [27B]", "kind": "hf", "key": "heretic_qwen36_27b", "params_b": 27},
+    {"option": "Qwen3.5-9B Defiant Fable GGUF (llama.cpp) [9B]", "kind": "gguf", "key": "gguf_qwen35_9b_fable", "params_b": 9},
+    {"option": "Qwen3.6-27B Fable Fusion GGUF (llama.cpp) [27B]", "kind": "gguf", "key": "gguf_qwen36_27b_fusion", "params_b": 27},
+    {"option": "Qwen3.5-4B Claude OS Heretic GGUF (llama.cpp) [4B]", "kind": "gguf", "key": "gguf_qwen35_4b_claude", "params_b": 4},
 ]
+
+TEXT_MODEL_OPTIONS = ["auto"] + [e["option"] for e in HERETIC_MODEL_ENTRIES]
+
+
+def _resolve_model_entry(option):
+    """Map a friendly model option -> runtime descriptor."""
+    if not option or option == "auto":
+        ent = HERETIC_MODELS[0] if HERETIC_MODELS else {}
+        return {"kind": "hf", "key": (ent or {}).get("key") or "heretic_qwen35_9b", "params_b": (ent or {}).get("params_b") or 9, "repo_id": (ent or {}).get("repo_id")}
+    for e in HERETIC_MODEL_ENTRIES:
+        if e["option"] == option:
+            if e["kind"] == "hf":
+                ent = next((m for m in HERETIC_MODELS if m.get("key") == e["key"]), {})
+                return {"kind": "hf", "key": e["key"], "params_b": e["params_b"], "repo_id": ent.get("repo_id")}
+            ent = next((g for g in GGUF_MODELS if g.get("key") == e["key"]), {})
+            return {"kind": "gguf", "key": e["key"], "params_b": e["params_b"], "entry": ent}
+    return None
 
 PRESET_OPTIONS = ["auto"] + sorted(
     k for k, v in PROMPTFORGE_PRESETS.items()
@@ -146,7 +169,7 @@ class PROMPTFORGE_PromptEnhancer:
                 "prompt_text": ("STRING", {"default": "", "multiline": True, "tooltip": "Raw user request / media-derived text to enhance. Can be loose natural language, random idea, detailed description, keyword pile, anything."}),
                 "mode": (["text_only", "image", "image2", "image3", "video"], {"default": "text_only", "tooltip": "What the prompt is for: text_only (T2I / text-to-video), image (image-to-image / reference), image2 (second reference / edit), image3 (third reference), video (video frame analysis)."}),
                 "engine": (["auto", "text_encoder", "gguf"], {"default": "auto", "tooltip": "Model engine: auto (pick recommended), text_encoder (native ComfyUI HF safetensors route), gguf (llama.cpp GGUF route)."}),
-                "model_name": (TEXT_MODEL_OPTIONS, {"default": "auto", "tooltip": "Model: auto-detect, heretic HF VL models, or GGUF heretic models. Optional custom_repo_id allows any HF repo id. Optional local_model_path / scanned_model allow any local model."}),
+                "model_name": (TEXT_MODEL_OPTIONS, {"default": "auto", "tooltip": "Model: auto (recommended), or a pre-configured heretic HF / GGUF model to download and use. Optional custom_repo_id / local_model_path / scanned_model allow any other model."}),
                 "quantization": (["auto", "fp16", "fp32", "8bit", "4bit"], {"default": "auto", "tooltip": "Quantization for text_encoder models: auto, full fp16, full fp32, 8-bit, 4-bit. GGUF: fp16->Q8_0, fp32->Q8_0, 8bit->Q8_0, 4bit->Q4_K_M."}),
                 "enhancement_preset": (PRESET_OPTIONS, {"default": "auto", "tooltip": "Preset system prompt: auto, or one of the PromptForge presets (Krea 2 T2I, MOSS Image T2I, Qwen Image T2I, generic styles...)."}),
                 "seed": ("INT", {"default": 1, "min": 1, "max": 2 ** 32 - 1, "tooltip": "Sampling seed for the Qwen-style generation. 1 = deterministic-ish / keep last logic."}),
@@ -316,26 +339,32 @@ class PROMPTFORGE_PromptEnhancer:
     def _generate_hf(self, full_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, device, custom_repo_id, local_model_path, scanned_model):
         src = local_model_path if local_model_path else None
         params_b = None
+        repo_id = None
         if not src:
-            repo_id = None
-            if model_name and model_name != "auto":
-                for m in HERETIC_MODELS:
-                    if m.get("key") == model_name:
-                        repo_id = m.get("repo_id")
-                        params_b = m.get("params_b")
-                        break
-            if not repo_id:
-                for m in HERETIC_MODELS:
-                    repo_id = m.get("repo_id")
-                    params_b = m.get("params_b")
-                    break
-            src = repo_id
+            resolved = _resolve_model_entry(model_name)
+            if resolved and resolved.get("kind") == "hf":
+                src = resolved.get("repo_id")
+                params_b = resolved.get("params_b")
+            elif resolved and resolved.get("kind") == "gguf":
+                # HF engine asked for a GGUF-kind entry: fall back to the default HF entry.
+                ent = HERETIC_MODELS[0] if HERETIC_MODELS else {}
+                src = ent.get("repo_id")
+                params_b = ent.get("params_b")
+        if not src and custom_repo_id:
+            src = custom_repo_id
 
         needs_image = mode in ("image", "image2", "image3", "video")
         dtype = torch.float16 if (quantization in (None, "auto", "fp16") and torch.cuda.is_available()) else torch.float32
         quant_cfg = None
         if quantization == "8bit" or quantization == "4bit":
             quant_cfg = BitsAndBytesConfig(load_in_8bit=(quantization == "8bit"), load_in_4bit=(quantization == "4bit"))
+
+        if src and src.startswith(("http://", "https://", "hf.co/")):
+            from huggingface_hub import snapshot_download
+            try:
+                src = snapshot_download(repo_id=src, local_dir=None)
+            except Exception as e:
+                print(f"[PromptForge] HF snapshot_download failed for {src}: {e}")
 
         if needs_image:
             model = AutoVision.from_pretrained(src, quantization_config=quant_cfg, torch_dtype=dtype, device_map="auto")
@@ -411,6 +440,11 @@ class PROMPTFORGE_PromptEnhancer:
                 gguf_path = base_dir / (qf.get(quant_key) or next(iter(qf.values())))
         if gguf_path is None:
             raise ValueError("[PromptForge] No GGUF model selected / available.")
+
+        resolved = _resolve_model_entry(model_name)
+        entry = resolved.get("entry") if resolved and resolved.get("kind") == "gguf" else (entry if entry is not None else None)
+        if entry is None and resolved and resolved.get("kind") == "gguf":
+            entry = resolved.get("entry")
 
         from llama_cpp import Llama
         defaults = (entry or {}).get("defaults") or {}
