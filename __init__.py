@@ -52,9 +52,15 @@ THINK_TAGS = (
     ("<thinking>", "</thinking>"),
 )
 
+SAMPLING_KEYS = ("temperature", "top_p", "top_k", "repetition_penalty")
+
 
 def _split_thinking(text):
-    """Remove reasoning blocks from model output and return (answer, thinking)."""
+    """Remove reasoning blocks from model output and return (answer, thinking).
+
+    The opening think tag can come from the prompt template rather than the
+    generated text, so a stray closing tag also splits reasoning from answer.
+    """
     answer = text or ""
     thoughts = []
     for open_tag, close_tag in THINK_TAGS:
@@ -64,18 +70,78 @@ def _split_thinking(text):
             if inner:
                 thoughts.append(inner)
         answer = re.sub(pattern, "", answer)
-    best_idx = -1
-    best_tag = ""
-    for open_tag, _ in THINK_TAGS:
-        idx = answer.rfind(open_tag)
-        if idx > best_idx:
-            best_idx, best_tag = idx, open_tag
-    if best_idx != -1:
-        tail = answer[best_idx + len(best_tag):].strip()
-        if tail:
-            thoughts.append(tail)
-        answer = answer[:best_idx]
+
+    lowered = answer.lower()
+    split_idx = -1
+    split_len = 0
+    for _, close_tag in THINK_TAGS:
+        idx = lowered.rfind(close_tag.lower())
+        if idx > split_idx:
+            split_idx, split_len = idx, len(close_tag)
+    if split_idx != -1:
+        head = answer[:split_idx].strip()
+        if head:
+            thoughts.append(head)
+        answer = answer[split_idx + split_len:]
+    else:
+        open_idx = -1
+        open_len = 0
+        for open_tag, _ in THINK_TAGS:
+            idx = lowered.rfind(open_tag.lower())
+            if idx > open_idx:
+                open_idx, open_len = idx, len(open_tag)
+        if open_idx != -1:
+            tail = answer[open_idx + open_len:].strip()
+            if tail:
+                thoughts.append(tail)
+            answer = answer[:open_idx]
     return answer.strip(), "\n\n".join(thoughts).strip()
+
+
+def _generation_defaults_from_files(src):
+    """Read sampling defaults that actually exist in a model's generation_config.json."""
+    if not src:
+        return {}
+    path = Path(src)
+    if path.is_dir():
+        config_path = path / "generation_config.json"
+    elif path.suffix.lower() in (".safetensors", ".bin", ".gguf"):
+        config_path = path.parent / "generation_config.json"
+    else:
+        return {}
+    if not config_path.is_file():
+        return {}
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {key: config[key] for key in SAMPLING_KEYS if isinstance(config.get(key), (int, float)) and not isinstance(config.get(key), bool)}
+
+
+def _generation_defaults_from_gguf(llm):
+    """Read llama.cpp metadata sampling defaults when the GGUF carries them."""
+    metadata = getattr(llm, "metadata", None) or {}
+    defaults = {}
+    for meta_key, key in (
+        ("general.sampling.temperature", "temperature"),
+        ("general.sampling.top_p", "top_p"),
+        ("general.sampling.top_k", "top_k"),
+        ("general.sampling.repetition_penalty", "repetition_penalty"),
+        ("general.sampling.repeat_penalty", "repetition_penalty"),
+    ):
+        value = metadata.get(meta_key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            defaults[key] = value
+    return defaults
+
+
+def _apply_sampling_defaults(defaults, temperature, top_p, top_k, repetition_penalty):
+    return (
+        defaults.get("temperature", temperature),
+        defaults.get("top_p", top_p),
+        defaults.get("top_k", top_k),
+        defaults.get("repetition_penalty", repetition_penalty),
+    )
 
 DEFAULT_PRESET = "Enhance"
 
@@ -257,11 +323,12 @@ class PROMPTFORGE_PromptEnhancer:
                 "enhancement_preset": (PRESET_OPTIONS, {"default": "auto", "tooltip": "Preset system prompt: auto, or one of the PromptForge presets (Krea 2 T2I, MOSS Image T2I, Qwen Image T2I, generic styles...)."}),
                 "seed": ("INT", {"default": 1, "min": 1, "max": 2 ** 32 - 1, "tooltip": "Sampling seed for the Qwen-style generation. 1 = deterministic-ish / keep last logic."}),
                 "max_tokens": ("INT", {"default": 8192, "min": 32, "max": 16384, "tooltip": "Max new tokens for the enhanced prompt."}),
-                "temperature": ("FLOAT", {"default": 0.7, "min": 0.1, "max": 1.0, "tooltip": "Sampling temperature."}),
-                "top_p": ("FLOAT", {"default": 0.9, "min": 0.0, "max": 1.0, "tooltip": "Nucleus sampling cutoff."}),
+                "temperature": ("FLOAT", {"default": 0.7, "min": 0.1, "max": 1.0, "step": 0.01, "tooltip": "Sampling temperature."}),
+                "top_p": ("FLOAT", {"default": 0.9, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "Nucleus sampling cutoff."}),
                 "top_k": ("INT", {"default": 0, "min": 0, "max": 100, "tooltip": "Top-K (Qwen3.5 heretic recommended: 20). 0 = model default."}),
                 "num_beams": ("INT", {"default": 1, "min": 1, "max": 8, "tooltip": "Beam search width. 1 = fast sampling; >1 trades speed for stability."}),
-                "repetition_penalty": ("FLOAT", {"default": 1.1, "min": 0.5, "max": 2.0, "tooltip": "Repetition penalty."}),
+                "repetition_penalty": ("FLOAT", {"default": 1.1, "min": 0.5, "max": 2.0, "step": 0.01, "tooltip": "Repetition penalty."}),
+                "use_default_sampling": ("BOOLEAN", {"default": False, "tooltip": "Use sampling defaults found in the model files (generation_config.json / GGUF metadata) for temperature, top_p, top_k and repetition_penalty. Falls back to the node values when the model has none."}),
                 "disable_thinking": ("BOOLEAN", {"default": True, "tooltip": "Disable model reasoning/thinking before the answer (native template flag where supported). Thinking is always stripped from ENHANCED_PROMPT and exposed on the THINKING output instead."}),
                 "keep_model_loaded": ("BOOLEAN", {"default": False, "tooltip": "Unload the text encoder / LLM after the prompt has been generated. Turn on to keep it resident."}),
                 "system_prompt_override": ("STRING", {"default": "", "multiline": True, "tooltip": "Custom system prompt override. Leave empty to use the selected preset. Toggle save_system_prompt to write it to your saved custom templates."}),
@@ -298,6 +365,7 @@ class PROMPTFORGE_PromptEnhancer:
         num_beams,
         repetition_penalty,
         disable_thinking,
+        use_default_sampling,
         keep_model_loaded,
         system_prompt_override,
         save_system_prompt,
@@ -350,6 +418,7 @@ class PROMPTFORGE_PromptEnhancer:
             custom_repo_id=custom_repo_id,
             local_model_path=local_model_path,
             disable_thinking=disable_thinking,
+            use_default_sampling=use_default_sampling,
             keep_model_loaded=keep_model_loaded,
         )
         answer, thinking = _split_thinking(enhanced)
@@ -406,14 +475,15 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Generation dispatch
     # ------------------------------------------------------------------ #
-    def _generate(self, full_prompt, mode, engine, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, disable_thinking, keep_model_loaded):
+    def _generate(self, full_prompt, mode, engine, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, disable_thinking, use_default_sampling, keep_model_loaded):
         if engine == "gguf":
             return self._generate_gguf(
                 full_prompt=full_prompt, model_name=model_name, quantization=quantization,
                 max_tokens=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k,
                 num_beams=num_beams, repetition_penalty=repetition_penalty, seed=seed,
                 custom_repo_id=custom_repo_id, local_model_path=local_model_path,
-                disable_thinking=disable_thinking, keep_model_loaded=keep_model_loaded,
+                disable_thinking=disable_thinking, use_default_sampling=use_default_sampling,
+                keep_model_loaded=keep_model_loaded,
             )
         return self._generate_text_encoder(
             full_prompt=full_prompt, mode=mode, model_name=model_name, quantization=quantization,
@@ -421,13 +491,14 @@ class PROMPTFORGE_PromptEnhancer:
             num_beams=num_beams, repetition_penalty=repetition_penalty,
             image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
             seed=seed, clip=clip, custom_repo_id=custom_repo_id, local_model_path=local_model_path,
-            disable_thinking=disable_thinking, keep_model_loaded=keep_model_loaded,
+            disable_thinking=disable_thinking, use_default_sampling=use_default_sampling,
+            keep_model_loaded=keep_model_loaded,
         )
 
     # ------------------------------------------------------------------ #
     # GGUF / llama.cpp engine
     # ------------------------------------------------------------------ #
-    def _generate_gguf(self, full_prompt, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, custom_repo_id, local_model_path, disable_thinking, keep_model_loaded):
+    def _generate_gguf(self, full_prompt, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, custom_repo_id, local_model_path, disable_thinking, use_default_sampling, keep_model_loaded):
         gguf_path = None
         entry = None
         eff_local = (local_model_path or "").strip() or _local_model_option(model_name)
@@ -464,6 +535,10 @@ class PROMPTFORGE_PromptEnhancer:
             n_ctx=int(defaults.get("context_length") or 65536),
             n_gpu_layers=int(defaults.get("gpu_layers") if defaults.get("gpu_layers") is not None else -1),
         )
+        if use_default_sampling:
+            temperature, top_p, top_k, repetition_penalty = _apply_sampling_defaults(
+                _generation_defaults_from_gguf(llm), temperature, top_p, top_k, repetition_penalty
+            )
         messages = [{"role": "user", "content": [{"type": "text", "text": full_prompt}]}]
         completion_kwargs = {
             "messages": messages,
@@ -485,7 +560,7 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Text encoder engines (native ComfyUI CLIP route / bitsandbytes route)
     # ------------------------------------------------------------------ #
-    def _generate_text_encoder(self, full_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, disable_thinking, keep_model_loaded):
+    def _generate_text_encoder(self, full_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, disable_thinking, use_default_sampling, keep_model_loaded):
         if clip is not None:
             enhanced = self._generate_with_clip(
                 full_prompt=full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
@@ -519,6 +594,11 @@ class PROMPTFORGE_PromptEnhancer:
             from huggingface_hub import snapshot_download
             src = snapshot_download(repo_id=src, local_dir=None)
             src_path = Path(src)
+
+        if use_default_sampling:
+            temperature, top_p, top_k, repetition_penalty = _apply_sampling_defaults(
+                _generation_defaults_from_files(src), temperature, top_p, top_k, repetition_penalty
+            )
 
         if src_path.is_dir() or quant in ("q8", "q4"):
             if quant in ("q8", "q4") and not src_path.is_dir():
