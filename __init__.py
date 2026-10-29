@@ -406,7 +406,6 @@ class PROMPTFORGE_PromptEnhancer:
             "required": {
                 "prompt_text": ("STRING", {"default": "", "multiline": True, "tooltip": "Raw user request / media-derived text to enhance. Can be loose natural language, random idea, detailed description, keyword pile, anything."}),
                 "mode": (MODE_OPTIONS, {"default": "text_only", "tooltip": "What the prompt is for: text_only (T2I / text-to-video), image (uses every connected reference from image / image2 / image3), video (sampled frames from video)."}),
-                "video_seconds": ("INT", {"default": 5, "min": 1, "max": 60, "tooltip": "Target video duration in seconds. Substituted into prompts that use {video_seconds} (MiniMax H3 presets) and added as duration context for video/minimax prompts."}),
                 "engine": (ENGINE_OPTIONS, {"default": "auto", "tooltip": "Model engine: auto (detect from the selected model), text_encoder (native ComfyUI CLIP / safetensors), gguf (llama.cpp)."}),
                 "model_name": (MODEL_OPTIONS, {"default": MODEL_OPTIONS[0], "tooltip": "Model: researched heretic HF / GGUF models first (marked [AVAILABLE] when downloaded), then every model detected in the ComfyUI model dirs, then auto. custom_repo_id / local_model_path allow models outside this list."}),
                 "quantization": (QUANT_OPTIONS, {"default": "auto", "tooltip": "Text encoder precision for safetensors models: auto (fp16), fp16 (native fp16), q8 / q4 (live bitsandbytes quantization before generation). Ignored for GGUF models."}),
@@ -426,6 +425,7 @@ class PROMPTFORGE_PromptEnhancer:
                 "save_system_prompt": ("BOOLEAN", {"default": False, "tooltip": "When true, the system_prompt_override is saved into the user's PromptForge custom system-prompt store."}),
             },
             "optional": {
+                "video_seconds": ("INT", {"default": 5, "min": 1, "max": 60, "tooltip": "Target video duration in seconds. Substituted into prompts that use {video_seconds} (MiniMax H3 presets) and added as duration context for video/minimax prompts."}),
                 "image": ("IMAGE", {"tooltip": "First reference image (or first video-frame context)."}),
                 "image2": ("IMAGE", {"tooltip": "Second reference image / edit source."}),
                 "image3": ("IMAGE", {"tooltip": "Third reference image / edit source."}),
@@ -445,7 +445,6 @@ class PROMPTFORGE_PromptEnhancer:
         self,
         prompt_text,
         mode,
-        video_seconds,
         engine,
         model_name,
         quantization,
@@ -463,6 +462,7 @@ class PROMPTFORGE_PromptEnhancer:
         use_system_prompt_override,
         system_prompt_override,
         save_system_prompt,
+        video_seconds=5,
         image=None,
         image2=None,
         image3=None,
