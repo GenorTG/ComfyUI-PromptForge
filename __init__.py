@@ -55,6 +55,49 @@ THINK_TAGS = (
 SAMPLING_KEYS = ("temperature", "top_p", "top_k", "repetition_penalty")
 
 
+REFUSAL_MARKERS = (
+    "i cannot fulfill", "i can't fulfill", "i cannot comply", "i can't comply",
+    "i cannot assist", "i can't assist", "i cannot help", "i can't help",
+    "i cannot create", "i can't create", "i cannot generate", "i can't generate",
+    "cannot provide", "can't provide", "unable to comply", "unable to help",
+    "i must decline", "i have to decline", "i won't", "i will not",
+    "as an ai", "against my guidelines", "violates my", "not able to help",
+    "not appropriate", "inappropriate content", "sorry, but i can",
+    "i'm sorry, but", "i am sorry, but", "i apologize, but",
+)
+
+
+def _next_seed(seed):
+    return (int(seed) + 1) % (2 ** 32 - 1) or 1
+
+
+def _is_bad_output(text):
+    """Detect empty, degenerate or refusal output. Content is never logged."""
+    clean = (text or "").strip()
+    if len(clean) < 20:
+        return True
+    if re.search(r"(.)\1{15,}", clean):
+        return True
+    if len(clean) > 200 and len(set(clean)) < 8:
+        return True
+    words = re.findall(r"\w+", clean.lower())
+    if len(words) > 30:
+        from collections import Counter
+        if Counter(words).most_common(1)[0][1] / len(words) > 0.45:
+            return True
+    lines = [line.strip() for line in clean.splitlines() if line.strip()]
+    if len(lines) >= 4:
+        from collections import Counter
+        if Counter(lines).most_common(1)[0][1] >= 4:
+            return True
+    lowered = clean.lower()
+    if len(clean) < 600 and any(marker in lowered for marker in REFUSAL_MARKERS):
+        return True
+    if any(lowered.startswith(marker) for marker in REFUSAL_MARKERS):
+        return True
+    return False
+
+
 def _tokens_have_images(tokens):
     if isinstance(tokens, dict):
         if tokens.get("type") == "image":
@@ -452,6 +495,7 @@ class PROMPTFORGE_PromptEnhancer:
                 "custom_repo_id": ("STRING", {"default": "", "tooltip": "Optional custom HuggingFace repo id for the safetensors source (e.g. 'foo/bar'). Overrides safetensors_model when set."}),
                 "local_model_path": ("STRING", {"default": "", "multiline": True, "tooltip": "Optional local model path (safetensors dir/file or GGUF file) - overrides model selection. Use for full safetensors models or custom local GGUF files."}),
                 "mmproj_path": ("STRING", {"default": "", "tooltip": "Optional path to the vision mmproj (.gguf) for GGUF image/video mode. Auto-detected next to the model or downloaded from the catalog repo when missing."}),
+                "auto_retry": ("BOOLEAN", {"default": True, "tooltip": "If the generated prompt is empty, degenerate/repetitive, or a refusal, retry once with the next seed."}),
             },
         }
 
@@ -490,6 +534,7 @@ class PROMPTFORGE_PromptEnhancer:
         custom_repo_id="",
         local_model_path="",
         mmproj_path="",
+        auto_retry=True,
     ):
         print("[PromptForge] request received.")
         override_text = (system_prompt_override or "").strip()
@@ -566,6 +611,7 @@ class PROMPTFORGE_PromptEnhancer:
             mmproj_path=mmproj_path,
             disable_thinking=disable_thinking,
             use_default_sampling=use_default_sampling,
+            auto_retry=auto_retry,
             keep_model_loaded=keep_model_loaded,
         )
         answer, thinking = _split_thinking(enhanced)
@@ -622,7 +668,7 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Generation dispatch
     # ------------------------------------------------------------------ #
-    def _generate(self, full_prompt, mode, engine, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, keep_model_loaded):
+    def _generate(self, full_prompt, mode, engine, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
         if engine == "gguf":
             return self._generate_gguf(
                 full_prompt=full_prompt, mode=mode, model_name=model_name, quantization=quantization,
@@ -631,7 +677,7 @@ class PROMPTFORGE_PromptEnhancer:
                 image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
                 custom_repo_id=custom_repo_id, local_model_path=local_model_path, mmproj_path=mmproj_path,
                 disable_thinking=disable_thinking, use_default_sampling=use_default_sampling,
-                keep_model_loaded=keep_model_loaded,
+                auto_retry=auto_retry, keep_model_loaded=keep_model_loaded,
             )
         return self._generate_text_encoder(
             full_prompt=full_prompt, mode=mode, model_name=model_name, quantization=quantization,
@@ -640,13 +686,13 @@ class PROMPTFORGE_PromptEnhancer:
             image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
             seed=seed, clip=clip, custom_repo_id=custom_repo_id, local_model_path=local_model_path,
             disable_thinking=disable_thinking, use_default_sampling=use_default_sampling,
-            keep_model_loaded=keep_model_loaded,
+            auto_retry=auto_retry, keep_model_loaded=keep_model_loaded,
         )
 
     # ------------------------------------------------------------------ #
     # GGUF / llama.cpp engine
     # ------------------------------------------------------------------ #
-    def _generate_gguf(self, full_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, image, image2, image3, video, frame_count, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, keep_model_loaded):
+    def _generate_gguf(self, full_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, image, image2, image3, video, frame_count, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
         entry = None
         gguf_path = None
         eff_local = (local_model_path or "").strip() or _local_model_option(model_name)
@@ -707,9 +753,18 @@ class PROMPTFORGE_PromptEnhancer:
             completion_kwargs["top_k"] = top_k
         if disable_thinking and "reasoning_budget" in inspect.signature(llm.create_chat_completion).parameters:
             completion_kwargs["reasoning_budget"] = 0
+
+        def attempt(seed_value):
+            kwargs = dict(completion_kwargs)
+            kwargs["seed"] = seed_value
+            out = llm.create_chat_completion(**kwargs)
+            return out.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+
         try:
-            out = llm.create_chat_completion(**completion_kwargs)
-            enhanced = out.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            enhanced = attempt(seed)
+            if auto_retry and _is_bad_output(_split_thinking(enhanced)[0]):
+                print("[PromptForge] output rejected (empty/repetitive/refusal); retrying with a new seed.")
+                enhanced = attempt(_next_seed(seed))
         except ValueError as exc:
             if images and "mmproj" in str(exc).lower():
                 expected = (entry or {}).get("mmproj_file") or "mmproj-*.gguf"
@@ -722,13 +777,13 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Text encoder engines (native ComfyUI CLIP route / bitsandbytes route)
     # ------------------------------------------------------------------ #
-    def _generate_text_encoder(self, full_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, disable_thinking, use_default_sampling, keep_model_loaded):
+    def _generate_text_encoder(self, full_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
         if clip is not None:
             enhanced = self._generate_with_clip(
                 full_prompt=full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
                 top_p=top_p, top_k=top_k, repetition_penalty=repetition_penalty,
                 seed=seed, image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
-                clip=clip, disable_thinking=disable_thinking,
+                clip=clip, disable_thinking=disable_thinking, auto_retry=auto_retry,
             )
             self._release(keep_model_loaded=keep_model_loaded)
             return enhanced
@@ -798,10 +853,18 @@ class PROMPTFORGE_PromptEnhancer:
                 kwargs.update({"do_sample": True, "temperature": temperature, "top_p": top_p})
                 if params_b is not None and params_b >= 3.5:
                     kwargs["top_k"] = top_k or 20
-            outputs = model.generate(**model_inputs, **kwargs)
-            input_len = model_inputs["input_ids"].shape[-1]
-            enhanced = tokenizer.decode(outputs[0, input_len:], skip_special_tokens=True)
-            del model, processor, tokenizer, outputs
+
+            def attempt(seed_value):
+                torch.manual_seed(seed_value)
+                outputs = model.generate(**model_inputs, **kwargs)
+                input_len = model_inputs["input_ids"].shape[-1]
+                return tokenizer.decode(outputs[0, input_len:], skip_special_tokens=True)
+
+            enhanced = attempt(seed)
+            if auto_retry and _is_bad_output(_split_thinking(enhanced)[0]):
+                print("[PromptForge] output rejected (empty/repetitive/refusal); retrying with a new seed.")
+                enhanced = attempt(_next_seed(seed))
+            del model, processor, tokenizer
             self._release(keep_model_loaded=keep_model_loaded)
             return enhanced
 
@@ -811,7 +874,7 @@ class PROMPTFORGE_PromptEnhancer:
             full_prompt=full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
             top_p=top_p, top_k=top_k, repetition_penalty=repetition_penalty,
             seed=seed, image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
-            clip=clip_obj, disable_thinking=disable_thinking,
+            clip=clip_obj, disable_thinking=disable_thinking, auto_retry=auto_retry,
         )
         self._release(keep_model_loaded=keep_model_loaded)
         return enhanced
@@ -819,7 +882,7 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Native ComfyUI CLIP generation (connected clip or locally loaded clip)
     # ------------------------------------------------------------------ #
-    def _generate_with_clip(self, full_prompt, mode, max_tokens, temperature, top_p, top_k, repetition_penalty, seed, image, image2, image3, video, frame_count, clip, disable_thinking):
+    def _generate_with_clip(self, full_prompt, mode, max_tokens, temperature, top_p, top_k, repetition_penalty, seed, image, image2, image3, video, frame_count, clip, disable_thinking, auto_retry):
         images = self._clip_images(mode, image, image2, image3, video, frame_count)
         tokenize_kwargs = {"images": images} if images else {}
         if disable_thinking:
@@ -828,7 +891,7 @@ class PROMPTFORGE_PromptEnhancer:
         if images and not _tokens_have_images(tokens):
             raise ValueError("[PromptForge] The selected text encoder has no vision support; the provided image/video would be ignored. Connect a vision-capable encoder or use text_only.")
 
-        def run(top_p_value):
+        def run(top_p_value, seed_value):
             return clip.generate(
                 tokens,
                 do_sample=True,
@@ -838,18 +901,23 @@ class PROMPTFORGE_PromptEnhancer:
                 top_p=top_p_value,
                 min_p=0.0,
                 repetition_penalty=repetition_penalty,
-                seed=seed,
+                seed=seed_value,
                 presence_penalty=0.0,
             )
 
-        try:
-            generated = run(top_p)
-        except RuntimeError as exc:
-            if top_p < 1.0 and "single memory location" in str(exc):
-                print("[PromptForge] ComfyUI's CLIP sampler hit a torch overlap error on top_p; retrying with top_p=1.0 (temperature, top_k, repetition and seed still apply).")
-                generated = run(1.0)
-            else:
+        def attempt(seed_value):
+            try:
+                return run(top_p, seed_value)
+            except RuntimeError as exc:
+                if top_p < 1.0 and "single memory location" in str(exc):
+                    print("[PromptForge] ComfyUI's CLIP sampler hit a torch overlap error on top_p; retrying with top_p=1.0 (temperature, top_k, repetition and seed still apply).")
+                    return run(1.0, seed_value)
                 raise
+
+        generated = attempt(seed)
+        if auto_retry and _is_bad_output(_split_thinking(clip.decode(generated, skip_special_tokens=True))[0]):
+            print("[PromptForge] output rejected (empty/repetitive/refusal); retrying with a new seed.")
+            generated = attempt(_next_seed(seed))
         return clip.decode(generated, skip_special_tokens=True)
 
     # ------------------------------------------------------------------ #

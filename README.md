@@ -19,6 +19,7 @@ One singular node that does the whole prompt-enhancement job:
 - **Custom system prompt**: override field + `use_system_prompt_override` on/off toggle (text stays populated between runs) + save toggle → persisted to user dir.
 - **Sampling**: seed, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, keep_model_loaded. Floats use 0.01 steps for fine control. If ComfyUI's CLIP sampler throws a torch overlap error on `top_p`, the node retries that generation once with `top_p=1.0` (other sampler settings still apply).
 - **Model sampling defaults**: `use_default_sampling` reads temperature / top_p / top_k / repetition_penalty from `generation_config.json` (HF dirs and single-file encoders) or GGUF metadata when the model provides them, falling back to the node values otherwise.
+- **Auto-retry**: `auto_retry` (default on) rejects empty, degenerate/repetitive, or refusal output and retries once with the next seed. Only a status line is printed; no prompt content.
 - **Thinking**: `disable_thinking` (default on) turns reasoning off where the model template supports it. Reasoning is always stripped from `ENHANCED_PROMPT` and returned on the second output, `THINKING`, for debugging.
 
 ## Outputs
