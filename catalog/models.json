@@ -1,0 +1,106 @@
+{
+  "heretic_hf_models": [
+    {
+      "key": "heretic_qwen35_9b",
+      "name": "Qwen3.5-9B Defiant Fable Heretic (NEO-IMATRIX MAX)",
+      "repo_id": "DavidAU/Qwen3.5-9B-The-Defiant-Fable-DARK-ROAST-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP",
+      "params_b": 9,
+      "vl_capable": true,
+      "image_capable": true,
+      "context_length": 65536,
+      "recommended_quant": "8bit",
+      "default_quant": "fp16"
+    },
+    {
+      "key": "heretic_qwen35_4b_thinking",
+      "name": "Qwen3.5-4B Deckard Heretic Thinking (text-only OK, no image tower)",
+      "repo_id": "DavidAU/Qwen3.5-4B-Deckard-HERETIC-UNCENSORED-Thinking",
+      "params_b": 4,
+      "vl_capable": true,
+      "image_capable": false,
+      "context_length": 65536,
+      "recommended_quant": "4bit",
+      "default_quant": "fp16"
+    },
+    {
+      "key": "heretic_qwen36_27b",
+      "name": "Qwen3.6-27B Fable Fusion Heretic",
+      "repo_id": "DavidAU/Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-MTP",
+      "params_b": 27,
+      "vl_capable": true,
+      "image_capable": true,
+      "context_length": 65536,
+      "recommended_quant": "8bit",
+      "default_quant": "fp16"
+    }
+  ],
+  "gguf_models": [
+    {
+      "key": "gguf_qwen35_9b_fable",
+      "name": "Qwen3.5-9B Defiant Fable GGUF (llama.cpp)",
+      "repo_id": "DavidAU/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-GGUF",
+      "author": "DavidAU",
+      "params_b": 9,
+      "vl_capable": true,
+      "image_capable": true,
+      "base_dir": "LLM/GGUF",
+      "mmproj_file": "mmproj-BF16.gguf",
+      "quant_files": {
+        "fp16": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-Q8_0.gguf",
+        "8bit": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-Q8_0.gguf",
+        "4bit": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-Q4_K_M.gguf"
+      }
+    },
+    {
+      "key": "gguf_qwen36_27b_fusion",
+      "name": "Qwen3.6-27B Fable Fusion GGUF (llama.cpp)",
+      "repo_id": "DavidAU/Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP-GGUF",
+      "author": "DavidAU",
+      "params_b": 27,
+      "vl_capable": true,
+      "image_capable": true,
+      "base_dir": "LLM/GGUF",
+      "mmproj_file": "mmproj-BF16.gguf",
+      "quant_files": {
+        "fp16": "Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-Q8_0.gguf",
+        "8bit": "Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-Q8_0.gguf",
+        "4bit": "Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-Q4_K_M.gguf"
+      }
+    },
+    {
+      "key": "gguf_qwen35_4b_claude",
+      "name": "Qwen3.5-4B Claude OS Heretic GGUF (llama.cpp, text-only)",
+      "repo_id": "mradermacher/Qwen3.5-4B-Claude-4.6-OS-Auto-Variable-HERETIC-UNCENSORED-THINKING-GGUF",
+      "author": "mradermacher",
+      "params_b": 4,
+      "vl_capable": true,
+      "image_capable": false,
+      "base_dir": "LLM/GGUF",
+      "mmproj_file": "Qwen3.5-4B-Claude-4.6-OS-Auto-Variable-HERETIC-UNCENSORED-THINKING.mmproj-f16.gguf",
+      "quant_files": {
+        "fp16": "Qwen3.5-4B-Claude-4.6-OS-Auto-Variable-HERETIC-UNCENSORED-THINKING.Q8_0.gguf",
+        "8bit": "Qwen3.5-4B-Claude-4.6-OS-Auto-Variable-HERETIC-UNCENSORED-THINKING.Q8_0.gguf",
+        "4bit": "Qwen3.5-4B-Claude-4.6-OS-Auto-Variable-HERETIC-UNCENSORED-THINKING.Q4_K_M.gguf"
+      }
+    }
+  ],
+  "local_scan_dirs": [
+    "text_encoders",
+    "clip",
+    "clip_vision",
+    "llm",
+    "LLM",
+    "Llama",
+    "llama",
+    "gguf",
+    "GGUF",
+    "GPT4All",
+    "gpt4all",
+    "qwen",
+    "Qwen",
+    "moss",
+    "MOSS",
+    "mistral",
+    "Mistral"
+  ]
+}

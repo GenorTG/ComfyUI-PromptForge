@@ -1,0 +1,27 @@
+[project]
+name = "ComfyUI-PromptForge"
+description = "Unified, fully-loaded ComfyUI prompt enhancement node: heretic VL model catalog (HF + GGUF), rich preset catalog, custom system-prompt overrides, hardcore sampling options, recommended option sets, local model scanning."
+version = "1.0.0"
+license = { file = "LICENSE" }
+dependencies = [
+    "transformers",
+    "torch",
+    "huggingface-hub",
+    "hf_xet",
+    "psutil",
+    "numpy",
+    "Pillow",
+    "bitsandbytes",
+    "accelerate",
+    "llama-cpp-python",
+]
+
+[project.urls]
+Repository = "https://github.com/GenorTG/ComfyUI-PromptForge"
+
+[tool.comfy]
+PublisherId = "GenorTG"
+DisplayName = "PromptForge: Unified Prompt Enhancer"
+Icon = "https://raw.githubusercontent.com/GenorTG/ComfyUI-PromptForge/main/icon.png"
+Banner = "https://raw.githubusercontent.com/GenorTG/ComfyUI-PromptForge/main/banner.png"
+Category = "video"
