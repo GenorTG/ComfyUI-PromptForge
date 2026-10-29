@@ -12,6 +12,8 @@ Single ComfyUI node that combines:
 
 import json
 import gc
+import inspect
+import re
 from pathlib import Path
 
 import torch
@@ -43,6 +45,37 @@ OUTPUT_GUARD = (
     "self-corrections, or notes. Do not write phrases such as Final Plan, Final Check, Wait, Okay, First, Next, "
     "Then, I will, or I need. Start directly with the required prompt text."
 )
+
+THINK_TAGS = (
+    ("\u27e8think\u27e9", "\u27e8/think\u27e9"),
+    ("<think>", "</think>"),
+    ("<thinking>", "</thinking>"),
+)
+
+
+def _split_thinking(text):
+    """Remove reasoning blocks from model output and return (answer, thinking)."""
+    answer = text or ""
+    thoughts = []
+    for open_tag, close_tag in THINK_TAGS:
+        pattern = r"(?is)" + re.escape(open_tag) + r".*?" + re.escape(close_tag)
+        for match in re.finditer(pattern, answer):
+            inner = match.group(0).replace(open_tag, "").replace(close_tag, "").strip()
+            if inner:
+                thoughts.append(inner)
+        answer = re.sub(pattern, "", answer)
+    best_idx = -1
+    best_tag = ""
+    for open_tag, _ in THINK_TAGS:
+        idx = answer.rfind(open_tag)
+        if idx > best_idx:
+            best_idx, best_tag = idx, open_tag
+    if best_idx != -1:
+        tail = answer[best_idx + len(best_tag):].strip()
+        if tail:
+            thoughts.append(tail)
+        answer = answer[:best_idx]
+    return answer.strip(), "\n\n".join(thoughts).strip()
 
 DEFAULT_PRESET = "Enhance"
 
@@ -208,8 +241,8 @@ def _user_dir():
 
 class PROMPTFORGE_PromptEnhancer:
     CATEGORY = "🔮 PromptForge"
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("ENHANCED_PROMPT",)
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("ENHANCED_PROMPT", "THINKING")
     FUNCTION = "enhance"
 
     @classmethod
@@ -229,6 +262,7 @@ class PROMPTFORGE_PromptEnhancer:
                 "top_k": ("INT", {"default": 0, "min": 0, "max": 100, "tooltip": "Top-K (Qwen3.5 heretic recommended: 20). 0 = model default."}),
                 "num_beams": ("INT", {"default": 1, "min": 1, "max": 8, "tooltip": "Beam search width. 1 = fast sampling; >1 trades speed for stability."}),
                 "repetition_penalty": ("FLOAT", {"default": 1.1, "min": 0.5, "max": 2.0, "tooltip": "Repetition penalty."}),
+                "disable_thinking": ("BOOLEAN", {"default": True, "tooltip": "Disable model reasoning/thinking before the answer (native template flag where supported). Thinking is always stripped from ENHANCED_PROMPT and exposed on the THINKING output instead."}),
                 "keep_model_loaded": ("BOOLEAN", {"default": False, "tooltip": "Unload the text encoder / LLM after the prompt has been generated. Turn on to keep it resident."}),
                 "system_prompt_override": ("STRING", {"default": "", "multiline": True, "tooltip": "Custom system prompt override. Leave empty to use the selected preset. Toggle save_system_prompt to write it to your saved custom templates."}),
                 "save_system_prompt": ("BOOLEAN", {"default": False, "tooltip": "When true, the system_prompt_override is saved into the user's PromptForge custom system-prompt store."}),
@@ -263,6 +297,7 @@ class PROMPTFORGE_PromptEnhancer:
         top_k,
         num_beams,
         repetition_penalty,
+        disable_thinking,
         keep_model_loaded,
         system_prompt_override,
         save_system_prompt,
@@ -287,7 +322,10 @@ class PROMPTFORGE_PromptEnhancer:
             sys_text = entry.get("text") or entry.get("system_prompt") or (PROMPTFORGE_PRESETS.get(DEFAULT_PRESET) or {}).get("text") or ""
 
         user_text = (prompt_text or "").strip()
-        parts = [p for p in (user_text, sys_text, OUTPUT_GUARD) if p and p.strip()]
+        guard = OUTPUT_GUARD
+        if disable_thinking:
+            guard += " Do not output chain-of-thought or reasoning; start with the final prompt."
+        parts = [p for p in (user_text, sys_text, guard) if p and p.strip()]
         full_prompt = "\n\n".join(parts)
 
         enhanced = self._generate(
@@ -311,9 +349,11 @@ class PROMPTFORGE_PromptEnhancer:
             clip=clip,
             custom_repo_id=custom_repo_id,
             local_model_path=local_model_path,
+            disable_thinking=disable_thinking,
             keep_model_loaded=keep_model_loaded,
         )
-        return (enhanced,)
+        answer, thinking = _split_thinking(enhanced)
+        return (answer, thinking)
 
     # ------------------------------------------------------------------ #
     # Custom system prompt store
@@ -366,14 +406,14 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Generation dispatch
     # ------------------------------------------------------------------ #
-    def _generate(self, full_prompt, mode, engine, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, keep_model_loaded):
+    def _generate(self, full_prompt, mode, engine, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, disable_thinking, keep_model_loaded):
         if engine == "gguf":
             return self._generate_gguf(
                 full_prompt=full_prompt, model_name=model_name, quantization=quantization,
                 max_tokens=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k,
-                num_beams=num_beams, repetition_penalty=repetition_penalty,
+                num_beams=num_beams, repetition_penalty=repetition_penalty, seed=seed,
                 custom_repo_id=custom_repo_id, local_model_path=local_model_path,
-                keep_model_loaded=keep_model_loaded,
+                disable_thinking=disable_thinking, keep_model_loaded=keep_model_loaded,
             )
         return self._generate_text_encoder(
             full_prompt=full_prompt, mode=mode, model_name=model_name, quantization=quantization,
@@ -381,13 +421,13 @@ class PROMPTFORGE_PromptEnhancer:
             num_beams=num_beams, repetition_penalty=repetition_penalty,
             image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
             seed=seed, clip=clip, custom_repo_id=custom_repo_id, local_model_path=local_model_path,
-            keep_model_loaded=keep_model_loaded,
+            disable_thinking=disable_thinking, keep_model_loaded=keep_model_loaded,
         )
 
     # ------------------------------------------------------------------ #
     # GGUF / llama.cpp engine
     # ------------------------------------------------------------------ #
-    def _generate_gguf(self, full_prompt, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, custom_repo_id, local_model_path, keep_model_loaded):
+    def _generate_gguf(self, full_prompt, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, custom_repo_id, local_model_path, disable_thinking, keep_model_loaded):
         gguf_path = None
         entry = None
         eff_local = (local_model_path or "").strip() or _local_model_option(model_name)
@@ -425,14 +465,19 @@ class PROMPTFORGE_PromptEnhancer:
             n_gpu_layers=int(defaults.get("gpu_layers") if defaults.get("gpu_layers") is not None else -1),
         )
         messages = [{"role": "user", "content": [{"type": "text", "text": full_prompt}]}]
-        out = llm.create_chat_completion(
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            num_beams=num_beams,
-            repetition_penalty=repetition_penalty,
-        )
+        completion_kwargs = {
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+            "repeat_penalty": repetition_penalty,
+            "seed": seed,
+        }
+        if top_k:
+            completion_kwargs["top_k"] = top_k
+        if disable_thinking and "reasoning_budget" in inspect.signature(llm.create_chat_completion).parameters:
+            completion_kwargs["reasoning_budget"] = 0
+        out = llm.create_chat_completion(**completion_kwargs)
         enhanced = out.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
         self._release(keep_model_loaded=keep_model_loaded, llm=llm)
         return enhanced
@@ -440,12 +485,13 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Text encoder engines (native ComfyUI CLIP route / bitsandbytes route)
     # ------------------------------------------------------------------ #
-    def _generate_text_encoder(self, full_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, keep_model_loaded):
+    def _generate_text_encoder(self, full_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, disable_thinking, keep_model_loaded):
         if clip is not None:
             enhanced = self._generate_with_clip(
                 full_prompt=full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
                 top_p=top_p, top_k=top_k, repetition_penalty=repetition_penalty,
-                seed=seed, image=image, image2=image2, image3=image3, video=video, frame_count=frame_count, clip=clip,
+                seed=seed, image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
+                clip=clip, disable_thinking=disable_thinking,
             )
             self._release(keep_model_loaded=keep_model_loaded)
             return enhanced
@@ -490,7 +536,7 @@ class PROMPTFORGE_PromptEnhancer:
             if refs:
                 conversation[0]["content"].extend([{"type": "image", "image": r} for r in refs if r is not None])
             conversation[0]["content"].append({"type": "text", "text": full_prompt})
-            chat = processor.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
+            chat = processor.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True, enable_thinking=not disable_thinking)
             processed = processor(text=chat, images=[r for r in refs if r is not None] or None, return_tensors="pt")
             model_device = next(model.parameters()).device
             model_inputs = {k: (v.to(model_device, non_blocking=True) if torch.is_tensor(v) else v) for k, v in processed.items()}
@@ -520,7 +566,8 @@ class PROMPTFORGE_PromptEnhancer:
         enhanced = self._generate_with_clip(
             full_prompt=full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
             top_p=top_p, top_k=top_k, repetition_penalty=repetition_penalty,
-            seed=seed, image=image, image2=image2, image3=image3, video=video, frame_count=frame_count, clip=clip_obj,
+            seed=seed, image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
+            clip=clip_obj, disable_thinking=disable_thinking,
         )
         self._release(keep_model_loaded=keep_model_loaded)
         return enhanced
@@ -528,9 +575,12 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Native ComfyUI CLIP generation (connected clip or locally loaded clip)
     # ------------------------------------------------------------------ #
-    def _generate_with_clip(self, full_prompt, mode, max_tokens, temperature, top_p, top_k, repetition_penalty, seed, image, image2, image3, video, frame_count, clip):
+    def _generate_with_clip(self, full_prompt, mode, max_tokens, temperature, top_p, top_k, repetition_penalty, seed, image, image2, image3, video, frame_count, clip, disable_thinking):
         images = self._mode_images(mode, image, image2, image3, video, frame_count)
-        tokens = clip.tokenize(full_prompt, images=images) if images else clip.tokenize(full_prompt)
+        tokenize_kwargs = {"images": images} if images else {}
+        if disable_thinking:
+            tokenize_kwargs["thinking"] = False
+        tokens = clip.tokenize(full_prompt, **tokenize_kwargs)
         generated = clip.generate(
             tokens,
             do_sample=True,

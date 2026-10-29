@@ -16,6 +16,12 @@ One singular node that does the whole prompt-enhancement job:
 - **Preset**: `auto` or any of the bundled presets (Krea 2 T2I, Krea 2 Identity Edit, MOSS Image T2I/I2I, Qwen Image T2I, generic styles…).
 - **Custom system prompt**: override field + save toggle → persisted to user dir.
 - **Sampling**: seed, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, keep_model_loaded.
+- **Thinking**: `disable_thinking` (default on) turns reasoning off where the model template supports it. Reasoning is always stripped from `ENHANCED_PROMPT` and returned on the second output, `THINKING`, for debugging.
+
+## Outputs
+
+- `ENHANCED_PROMPT` — the final prompt text only.
+- `THINKING` — reasoning that was removed from the output, empty when the model produced none.
 
 ## Memory
 
