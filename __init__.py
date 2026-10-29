@@ -92,9 +92,9 @@ def _scan_local_text_models():
     found = []
     base = None
     if folder_paths is not None:
-        base = getattr(folder_paths, "models_dir", None)
+        base = Path(getattr(folder_paths, "models_dir", "") or "")
     candidates = []
-    if base is not None:
+    if base is not None and str(base) and str(base) != ".":
         for d in LOCAL_SCAN_DIRS:
             candidates.append(base / d)
     candidates.append(Path("/models"))
@@ -392,7 +392,8 @@ class PROMPTFORGE_PromptEnhancer:
         base_dir = Path(entry.get("base_dir") or "LLM/GGUF")
         try:
             import folder_paths as _fp
-            base_dir = _fp.models_dir / base_dir
+            _md = getattr(_fp, "models_dir", "") or ""
+            base_dir = (Path(_md) if str(_md) and str(_md) != "." else Path("/home/genortg/ComfyUI/Comfy/models")) / base_dir
         except Exception:
             pass
         qf = entry.get("quant_files") or {}
