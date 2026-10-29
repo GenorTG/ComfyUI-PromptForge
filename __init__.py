@@ -6,7 +6,7 @@ Single ComfyUI node that combines:
   - text encoder engines: native ComfyUI CLIP route (fp16 / live-quantized),
     GGUF route via llama.cpp
   - heretic model catalog (HF + GGUF) with local availability markers
-  - media-aware modes (text / image / image2 / image3 / video)
+  - media-aware modes (text / image / video)
   - hardcore sampling options
 """
 
@@ -243,7 +243,7 @@ PRESET_OPTIONS = ["auto"] + sorted(
 )
 
 ENGINE_OPTIONS = ["auto", "text_encoder", "gguf"]
-MODE_OPTIONS = ["text_only", "image", "image2", "image3", "video"]
+MODE_OPTIONS = ["text_only", "image", "video"]
 QUANT_OPTIONS = ["auto", "fp16", "q8", "q4"]
 
 
@@ -316,7 +316,7 @@ class PROMPTFORGE_PromptEnhancer:
         return {
             "required": {
                 "prompt_text": ("STRING", {"default": "", "multiline": True, "tooltip": "Raw user request / media-derived text to enhance. Can be loose natural language, random idea, detailed description, keyword pile, anything."}),
-                "mode": (MODE_OPTIONS, {"default": "text_only", "tooltip": "What the prompt is for: text_only (T2I / text-to-video), image (image-to-image / reference), image2 (second reference / edit), image3 (third reference), video (video frame analysis)."}),
+                "mode": (MODE_OPTIONS, {"default": "text_only", "tooltip": "What the prompt is for: text_only (T2I / text-to-video), image (uses every connected reference from image / image2 / image3), video (sampled frames from video)."}),
                 "engine": (ENGINE_OPTIONS, {"default": "auto", "tooltip": "Model engine: auto (detect from the selected model), text_encoder (native ComfyUI CLIP / safetensors), gguf (llama.cpp)."}),
                 "model_name": (MODEL_OPTIONS, {"default": MODEL_OPTIONS[0], "tooltip": "Model: researched heretic HF / GGUF models first (marked [AVAILABLE] when downloaded), then every model detected in the ComfyUI model dirs, then auto. custom_repo_id / local_model_path allow models outside this list."}),
                 "quantization": (QUANT_OPTIONS, {"default": "auto", "tooltip": "Text encoder precision for safetensors models: auto (fp16), fp16 (native fp16), q8 / q4 (live bitsandbytes quantization before generation). Ignored for GGUF models."}),
@@ -605,7 +605,7 @@ class PROMPTFORGE_PromptEnhancer:
             if quant in ("q8", "q4") and not src_path.is_dir():
                 raise ValueError("[PromptForge] q8/q4 quantization needs an HF model directory; use auto/fp16 for single-file ComfyUI text encoders.")
             quant_cfg = BitsAndBytesConfig(load_in_8bit=(quant == "q8"), load_in_4bit=(quant == "q4")) if quant in ("q8", "q4") else None
-            if mode in ("image", "image2", "image3", "video"):
+            if mode in ("image", "video"):
                 model = AutoVision.from_pretrained(src, quantization_config=quant_cfg, torch_dtype=torch.float16, device_map="auto")
             else:
                 from transformers import AutoModelForCausalLM
@@ -657,7 +657,7 @@ class PROMPTFORGE_PromptEnhancer:
     # Native ComfyUI CLIP generation (connected clip or locally loaded clip)
     # ------------------------------------------------------------------ #
     def _generate_with_clip(self, full_prompt, mode, max_tokens, temperature, top_p, top_k, repetition_penalty, seed, image, image2, image3, video, frame_count, clip, disable_thinking):
-        images = self._mode_images(mode, image, image2, image3, video, frame_count)
+        images = self._clip_images(mode, image, image2, image3, video, frame_count)
         tokenize_kwargs = {"images": images} if images else {}
         if disable_thinking:
             tokenize_kwargs["thinking"] = False
@@ -679,15 +679,27 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Input adapters
     # ------------------------------------------------------------------ #
+    def _clip_images(self, mode, image, image2, image3, video, frame_count):
+        """Build the [1, H, W, C] tensor list ComfyUI multimodal tokenizers expect."""
+        images = []
+        if mode == "video":
+            if torch.is_tensor(video) and video.ndim == 4 and video.shape[0] > 0:
+                steps = min(max(1, frame_count), video.shape[0])
+                idx = torch.linspace(0, video.shape[0] - 1, steps=steps).round().long()
+                images.extend(video[i:i + 1] for i in idx)
+        elif mode == "image":
+            for tensor in (image, image2, image3):
+                if torch.is_tensor(tensor) and tensor.ndim == 4:
+                    images.append(tensor[:1])
+                elif torch.is_tensor(tensor) and tensor.ndim == 3:
+                    images.append(tensor.unsqueeze(0))
+        return [t.detach().float().cpu().clamp(0.0, 1.0) for t in images]
+
     def _mode_images(self, mode, image, image2, image3, video, frame_count):
         if mode == "video":
             return self._frames_from_input(video, frame_count)
         if mode == "image":
-            return [self._pil_from_input(image)]
-        if mode == "image2":
-            return [self._pil_from_input(image2)]
-        if mode == "image3":
-            return [self._pil_from_input(image3)]
+            return [p for p in (self._pil_from_input(image), self._pil_from_input(image2), self._pil_from_input(image3)) if p is not None]
         return []
 
     def _pil_from_input(self, img):
@@ -696,19 +708,24 @@ class PROMPTFORGE_PromptEnhancer:
             return None
         if isinstance(img, Image.Image):
             return img
-        try:
+        if torch.is_tensor(img):
+            img = img.detach().float().cpu()
+            if img.ndim == 4:
+                img = img[0]
+            arr = img.clamp(0.0, 1.0).mul(255.0).round().to(torch.uint8).numpy()
+        else:
             import numpy as np
             arr = np.asarray(img)
-            if arr.ndim == 2:
-                arr = arr[:, :, None]
-            if arr.ndim == 3 and arr.shape[0] > 4:
-                arr = arr[::4, ::4, :]
-            im = Image.fromarray(arr)
-            if im.mode != "RGB":
-                im = im.convert("RGB")
-            return im
-        except Exception:
-            return None
+            if arr.ndim == 4:
+                arr = arr[0]
+            if arr.dtype != np.uint8:
+                arr = (np.clip(arr, 0.0, 1.0) * 255.0).round().astype(np.uint8)
+        if arr.ndim == 2:
+            arr = arr[:, :, None]
+        im = Image.fromarray(arr)
+        if im.mode != "RGB":
+            im = im.convert("RGB")
+        return im
 
     def _frames_from_input(self, video, frame_count):
         from PIL import Image
@@ -717,16 +734,11 @@ class PROMPTFORGE_PromptEnhancer:
             return frames
         if isinstance(video, list) and all(isinstance(f, Image.Image) for f in video):
             frames = list(video)
-        elif hasattr(video, "mean"):
-            try:
-                shape = list(video.shape)
-                n = shape[0] if len(shape) > 0 else len(video)
-                idx = [int(i * (len(video) - 1) / max(1, frame_count - 1)) for i in range(frame_count)] if hasattr(video, "__len__") else list(range(min(frame_count, 4)))
-                for i in idx:
-                    frames.append(self._pil_from_input(video[i]))
-            except Exception:
-                frames = []
-        return frames[: max(1, frame_count)]
+        elif torch.is_tensor(video) and video.ndim == 4:
+            steps = min(max(1, frame_count), video.shape[0])
+            idx = torch.linspace(0, video.shape[0] - 1, steps=steps).round().long()
+            frames = [self._pil_from_input(video[i]) for i in idx]
+        return [f for f in frames if f is not None][: max(1, frame_count)]
 
 
 NODE_CLASS_MAPPINGS = {
