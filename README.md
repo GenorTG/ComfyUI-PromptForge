@@ -25,8 +25,11 @@ One singular node that does the whole prompt-enhancement job:
 - `ENHANCED_PROMPT` — the final prompt text only.
 - `THINKING` — reasoning that was removed from the output, empty when the model produced none.
 
-## Memory
+## Privacy
 
+The node never prints or stores prompts, responses, enhanced prompts, thinking, or token text. The only runtime console line is `[PromptForge] request received.`; llama.cpp verbose output is disabled. The optional `save_system_prompt` toggle is the only persistence path and stores just the system-prompt text you explicitly choose to save.
+
+## Memory
 After the enhanced prompt has been generated the text encoder / LLM is unloaded
 (`comfy.model_management` free/cleanup helpers) so it does not hog VRAM/RAM for
 other tasks. Set `keep_model_loaded` to true to keep it resident. A native ComfyUI

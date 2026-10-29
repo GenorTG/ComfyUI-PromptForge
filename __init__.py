@@ -473,6 +473,7 @@ class PROMPTFORGE_PromptEnhancer:
         local_model_path="",
         mmproj_path="",
     ):
+        print("[PromptForge] request received.")
         override_text = (system_prompt_override or "").strip()
         if save_system_prompt and override_text:
             self._save_custom_system_prompt(override_text)
@@ -543,7 +544,7 @@ class PROMPTFORGE_PromptEnhancer:
         try:
             p.write_text(_json.dumps(data, indent=2), encoding="utf-8")
         except Exception as e:
-            print(f"[PromptForge] failed to save custom system prompt: {e}")
+            print("[PromptForge] failed to save custom system prompt.")
 
     def _load_custom_system_prompts(self):
         p = _user_dir() / "promptforge_custom_system_prompts.json"
@@ -630,6 +631,7 @@ class PROMPTFORGE_PromptEnhancer:
             "model_path": str(gguf_path),
             "n_ctx": min(int(defaults.get("context_length") or 16384), 16384),
             "n_gpu_layers": int(defaults.get("gpu_layers") if defaults.get("gpu_layers") is not None else -1),
+            "verbose": False,
         }
         if images:
             try:
