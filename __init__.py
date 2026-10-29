@@ -55,6 +55,16 @@ THINK_TAGS = (
 SAMPLING_KEYS = ("temperature", "top_p", "top_k", "repetition_penalty")
 
 
+def _tokens_have_images(tokens):
+    if isinstance(tokens, dict):
+        if tokens.get("type") == "image":
+            return True
+        return any(_tokens_have_images(value) for value in tokens.values())
+    if isinstance(tokens, (list, tuple)):
+        return any(_tokens_have_images(value) for value in tokens)
+    return False
+
+
 def _split_thinking(text):
     """Remove reasoning blocks from model output and return (answer, thinking).
 
@@ -231,18 +241,30 @@ def _entry_label(entry):
     return label
 
 
-MODEL_OPTIONS = (
-    [_entry_label(e) for e in HERETIC_MODEL_ENTRIES]
-    + [e["path"] for e in LOCAL_TEXT_MODELS if e.get("path")]
-    + ["auto"]
-)
+SOURCE_OPTIONS = ["safetensors", "GGUF", "connected clip"]
+
+SAFETENSORS_MODEL_OPTIONS = (
+    [_entry_label(e) for e in HERETIC_MODEL_ENTRIES if e["kind"] == "hf"]
+    + [e["path"] for e in LOCAL_TEXT_MODELS if (e.get("path") or "") and not e["path"].lower().endswith(".gguf")]
+) or ["none"]
+
+GGUF_MODEL_OPTIONS = (
+    [_entry_label(e) for e in HERETIC_MODEL_ENTRIES if e["kind"] == "gguf"]
+    + [e["path"] for e in LOCAL_TEXT_MODELS if (e.get("path") or "").lower().endswith(".gguf")]
+) or ["none"]
+
+
+def _preferred_option(options):
+    for option in options:
+        if option.startswith("[AVAILABLE] "):
+            return option
+    return options[0] if options else "none"
 
 PRESET_OPTIONS = ["auto"] + sorted(
     k for k, v in PROMPTFORGE_PRESETS.items()
     if isinstance(v, dict) and (v.get("text") or v.get("system_prompt"))
 )
 
-ENGINE_OPTIONS = ["auto", "text_encoder", "gguf"]
 MODE_OPTIONS = ["text_only", "image", "video"]
 QUANT_OPTIONS = ["auto", "fp16", "q8", "q4"]
 
@@ -288,12 +310,6 @@ def _model_kind(model_name, local_model_path):
     if not entry:
         return "text_encoder"
     return entry.get("kind") or "text_encoder"
-
-
-def _effective_engine(engine, model_name, local_model_path):
-    if engine and engine != "auto":
-        return engine
-    return _model_kind(model_name, local_model_path)
 
 
 def _gguf_avail_tokens(entry):
@@ -406,8 +422,9 @@ class PROMPTFORGE_PromptEnhancer:
             "required": {
                 "prompt_text": ("STRING", {"default": "", "multiline": True, "tooltip": "Raw user request / media-derived text to enhance. Can be loose natural language, random idea, detailed description, keyword pile, anything."}),
                 "mode": (MODE_OPTIONS, {"default": "text_only", "tooltip": "What the prompt is for: text_only (T2I / text-to-video), image (uses every connected reference from image / image2 / image3), video (sampled frames from video)."}),
-                "engine": (ENGINE_OPTIONS, {"default": "auto", "tooltip": "Model engine: auto (detect from the selected model), text_encoder (native ComfyUI CLIP / safetensors), gguf (llama.cpp)."}),
-                "model_name": (MODEL_OPTIONS, {"default": MODEL_OPTIONS[0], "tooltip": "Model: researched heretic HF / GGUF models first (marked [AVAILABLE] when downloaded), then every model detected in the ComfyUI model dirs, then auto. custom_repo_id / local_model_path allow models outside this list."}),
+                "source": (SOURCE_OPTIONS, {"default": "safetensors", "tooltip": "Where the text model comes from: safetensors (HF dir / single-file text encoder, loaded by the node), GGUF (llama.cpp), or connected clip (use the CLIP input; no model is loaded)."}),
+                "safetensors_model": (SAFETENSORS_MODEL_OPTIONS, {"default": _preferred_option(SAFETENSORS_MODEL_OPTIONS), "tooltip": "Safetensors / HF model to load when source is safetensors. [AVAILABLE] entries already exist locally."}),
+                "gguf_model": (GGUF_MODEL_OPTIONS, {"default": _preferred_option(GGUF_MODEL_OPTIONS), "tooltip": "GGUF model to load when source is GGUF. [AVAILABLE] entries already exist locally; otherwise put the .gguf in a scanned models dir."}),
                 "quantization": (QUANT_OPTIONS, {"default": "auto", "tooltip": "Text encoder precision for safetensors models: auto (fp16), fp16 (native fp16), q8 / q4 (live bitsandbytes quantization before generation). Ignored for GGUF models."}),
                 "enhancement_preset": (PRESET_OPTIONS, {"default": "auto", "tooltip": "Preset system prompt: auto, or one of the PromptForge presets (Krea 2 T2I, MOSS Image T2I, Qwen Image T2I, generic styles...)."}),
                 "seed": ("INT", {"default": 1, "min": 1, "max": 2 ** 32 - 1, "tooltip": "Sampling seed for the Qwen-style generation. 1 = deterministic-ish / keep last logic."}),
@@ -431,8 +448,8 @@ class PROMPTFORGE_PromptEnhancer:
                 "image3": ("IMAGE", {"tooltip": "Third reference image / edit source."}),
                 "video": ("IMAGE", {"tooltip": "Video frames input. Use frame_count to control how many frames are sampled."}),
                 "frame_count": ("INT", {"default": 16, "min": 1, "max": 64, "tooltip": "Frames sampled from video input."}),
-                "clip": ("CLIP", {"tooltip": "Native ComfyUI text encoder (CLIP) to use for generation. When connected, the node generates from this encoder instead of loading its own model."}),
-                "custom_repo_id": ("STRING", {"default": "", "tooltip": "Optional custom HuggingFace repo id for text_encoder engine (e.g. 'foo/bar'). Overrides model_name when set."}),
+                "clip": ("CLIP", {"tooltip": "Connected ComfyUI text encoder. Used only when source is \"connected clip\"; no model is loaded in that case."}),
+                "custom_repo_id": ("STRING", {"default": "", "tooltip": "Optional custom HuggingFace repo id for the safetensors source (e.g. 'foo/bar'). Overrides safetensors_model when set."}),
                 "local_model_path": ("STRING", {"default": "", "multiline": True, "tooltip": "Optional local model path (safetensors dir/file or GGUF file) - overrides model selection. Use for full safetensors models or custom local GGUF files."}),
                 "mmproj_path": ("STRING", {"default": "", "tooltip": "Optional path to the vision mmproj (.gguf) for GGUF image/video mode. Auto-detected next to the model or downloaded from the catalog repo when missing."}),
             },
@@ -445,8 +462,9 @@ class PROMPTFORGE_PromptEnhancer:
         self,
         prompt_text,
         mode,
-        engine,
-        model_name,
+        source,
+        safetensors_model,
+        gguf_model,
         quantization,
         enhancement_preset,
         seed,
@@ -497,10 +515,37 @@ class PROMPTFORGE_PromptEnhancer:
         parts = [p for p in (user_text, duration_line, sys_text, guard) if p and p.strip()]
         full_prompt = "\n\n".join(parts)
 
+        eff_local = (local_model_path or "").strip()
+        if source == "connected clip":
+            if clip is None:
+                raise ValueError("[PromptForge] Source is 'connected clip' but no CLIP input is connected.")
+            engine = "text_encoder"
+            model_name = "auto"
+            clip_for_generate = clip
+        elif source == "GGUF":
+            engine = "gguf"
+            model_name = gguf_model
+            clip_for_generate = None
+        else:
+            engine = "text_encoder"
+            model_name = safetensors_model
+            clip_for_generate = None
+
+        if eff_local:
+            is_gguf = eff_local.lower().endswith(".gguf")
+            if source == "GGUF" and not is_gguf:
+                raise ValueError("[PromptForge] Source is GGUF but local_model_path is not a .gguf file.")
+            if source != "GGUF" and is_gguf:
+                raise ValueError("[PromptForge] Source is safetensors but local_model_path points to a .gguf file; select the GGUF source.")
+        elif source == "safetensors" and model_name == "none":
+            raise ValueError("[PromptForge] No safetensors model available; add one to the model dirs or set local_model_path.")
+        elif source == "GGUF" and model_name == "none":
+            raise ValueError("[PromptForge] No GGUF model available; add a .gguf to the model dirs or set local_model_path.")
+
         enhanced = self._generate(
             full_prompt=full_prompt,
             mode=mode,
-            engine=_effective_engine(engine, model_name, local_model_path),
+            engine=engine,
             model_name=model_name,
             quantization=quantization,
             max_tokens=max_tokens,
@@ -515,7 +560,7 @@ class PROMPTFORGE_PromptEnhancer:
             video=video,
             frame_count=frame_count,
             seed=seed,
-            clip=clip,
+            clip=clip_for_generate,
             custom_repo_id=custom_repo_id,
             local_model_path=local_model_path,
             mmproj_path=mmproj_path,
@@ -730,6 +775,8 @@ class PROMPTFORGE_PromptEnhancer:
             tokenizer = AutoTokenizer.from_pretrained(src)
             conversation = [{"role": "user", "content": []}]
             refs = self._mode_images(mode, image, image2, image3, video, frame_count)
+            if refs and getattr(processor, "image_processor", None) is None:
+                raise ValueError("[PromptForge] The selected safetensors model has no image processor; image/video mode needs a vision-capable model.")
             if refs:
                 conversation[0]["content"].extend([{"type": "image", "image": r} for r in refs if r is not None])
             conversation[0]["content"].append({"type": "text", "text": full_prompt})
@@ -778,6 +825,8 @@ class PROMPTFORGE_PromptEnhancer:
         if disable_thinking:
             tokenize_kwargs["thinking"] = False
         tokens = clip.tokenize(full_prompt, **tokenize_kwargs)
+        if images and not _tokens_have_images(tokens):
+            raise ValueError("[PromptForge] The selected text encoder has no vision support; the provided image/video would be ignored. Connect a vision-capable encoder or use text_only.")
 
         def run(top_p_value):
             return clip.generate(
@@ -878,3 +927,5 @@ class PROMPTFORGE_PromptEnhancer:
 NODE_CLASS_MAPPINGS = {
     "PROMPTFORGE_PromptEnhancer": PROMPTFORGE_PromptEnhancer,
 }
+
+WEB_DIRECTORY = "./web"

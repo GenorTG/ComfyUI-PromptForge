@@ -11,8 +11,9 @@ One singular node that does the whole prompt-enhancement job:
 - **Prompt input**: free-form text box — loose natural language, random ideas, keyword piles, detailed descriptions; the model always expands to a proper prompt for the target mode/model.
 - **Modes**: `text_only`, `image` (uses every connected reference from `image` / `image2` / `image3`), `video` (frames sampled from `video` via `frame_count`).
 - **Video duration**: `video_seconds` sets the exact clip length. MiniMax H3 presets use it for shot budget, timestamps, and the frame-alignment line (`{video_seconds}`).
-- **Engines**: `auto` (detect from the selected model), `text_encoder` (native ComfyUI CLIP / safetensors route), `gguf` (llama.cpp GGUF route). GGUF finds models in the scanned dirs even when they are not in the catalog's expected folder; image/video mode uses the model's mmproj automatically (catalog download or `mmproj_path`).
-- **Models**: one picker — researched heretic HF VL models (4B / 9B / 27B) and GGUF variants first (marked `[AVAILABLE]` when downloaded), then every model detected in the ComfyUI model dirs, then `auto`; `custom_repo_id` / `local_model_path` allow anything else.
+- **Source**: explicit choice — `safetensors` (HF dir / single-file text encoder, loaded by the node), `GGUF` (llama.cpp), or `connected clip` (uses the CLIP input; no model loaded). The UI hides model fields that do not apply to the selected source.
+- **Models**: separate pickers per source — `safetensors_model` lists HF / safetensors models only, `gguf_model` lists GGUF models only (both marked `[AVAILABLE]` when downloaded). `custom_repo_id` / `local_model_path` / `mmproj_path` cover anything outside the lists.
+- **Vision safety**: image/video mode never silently falls back to text-only. A connected text encoder without vision support, a text-only safetensors model, or a GGUF without a matching mmproj raises a clear error.
 - **Quantization**: `auto`, `fp16`, `q8`, `q4` (live bitsandbytes quantization before generation; ignored for GGUF).
 - **Preset**: `auto` or any of the bundled presets (Krea 2 T2I, Krea 2 Identity Edit, MOSS Image T2I/I2I, Qwen Image T2I, generic styles…).
 - **Custom system prompt**: override field + `use_system_prompt_override` on/off toggle (text stays populated between runs) + save toggle → persisted to user dir.
