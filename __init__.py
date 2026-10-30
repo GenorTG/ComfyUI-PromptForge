@@ -61,6 +61,67 @@ _META_PATTERNS = (
 )
 _META_RE = re.compile("|".join(f"(?:{p})" for p in _META_PATTERNS), re.I)
 
+_CHAT_MARKER_RE = re.compile(
+    r"<\|(?:im_start|im_end|endoftext|begin_of_text|start_header_id|end_header_id|eot_id|end|system|user|assistant|model|think|/think)\|>\s*(?:system|user|assistant|model)?\s*>?",
+    re.I,
+)
+_CHAT_TAG_RE = re.compile(
+    r"</?(?:start_of_turn|end_of_turn|bos|eos|pad|unk|s)>|\[/?INST\]|<<?/?SYS>>",
+    re.I,
+)
+_ROLE_LINE_RE = re.compile(r"^(system|user|assistant|model)\s*:\s*", re.I)
+
+
+def _extract_last_turn(text):
+    """Keep only the final assistant/model turn when template markers are present."""
+    patterns = (
+        (r"<\|im_start\|>\s*(system|user|assistant|model)\s*>?", r"<\|im_end\|>", ("assistant", "model")),
+        (r"<start_of_turn>\s*(system|user|model|assistant)\s*>?", r"<end_of_turn>", ("model", "assistant")),
+        (r"<\|start_header_id\|>\s*(system|user|assistant)\s*<\|end_header_id\|>[ \t]*", r"<\|eot_id\|>", ("assistant",)),
+    )
+    for start_pattern, end_pattern, roles in patterns:
+        matches = list(re.finditer(start_pattern, text, re.I))
+        if not matches:
+            continue
+        for match in reversed(matches):
+            if match.group(1).lower() in roles:
+                tail = text[match.end():]
+                end = re.search(end_pattern, tail)
+                return tail[:end.start()] if end else tail
+        return ""
+    return text
+
+
+def _strip_chat_tokens(text):
+    """Remove ChatML/Gemma/Llama role markers and keep the assistant answer."""
+    text = _extract_last_turn(text or "")
+    text = _CHAT_MARKER_RE.sub("", text)
+    text = _CHAT_TAG_RE.sub("", text)
+    lines = text.splitlines()
+    role_positions = []
+    assistant_positions = []
+    for index, line in enumerate(lines):
+        role = line.strip().lower().rstrip(":")
+        if role in ("system", "user", "assistant", "model"):
+            role_positions.append(index)
+            if role in ("assistant", "model"):
+                assistant_positions.append(index)
+    if role_positions:
+        if not assistant_positions:
+            return ""
+        lines = lines[assistant_positions[-1] + 1:]
+    kept_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            kept_lines.append("")
+            continue
+        if stripped.lower().rstrip(":") in ("system", "user", "assistant", "model"):
+            continue
+        kept_lines.append(_ROLE_LINE_RE.sub("", stripped))
+    cleaned = "\n".join(kept_lines)
+    return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+
 _NEGATIVE_PROMPT_TERMS = (
     "blur", "blurry", "watermark", "text", "logo", "extra fingers", "extra limbs",
     "bad anatomy", "low quality", "worst quality", "deformed", "nsfw", "sweat",
@@ -77,7 +138,8 @@ _NEGATIVE_PROMPT_RE = re.compile(
 
 def _clean_prompt_output(text):
     """Remove leaked instructions/meta lines while keeping the prompt structure."""
-    lines = (text or "").splitlines()
+    text = _strip_chat_tokens(text)
+    lines = text.splitlines()
     kept_lines = []
     for line in lines:
         stripped = line.strip()
@@ -459,6 +521,19 @@ def _model_kind(model_name, local_model_path):
     if not entry:
         return "text_encoder"
     return entry.get("kind") or "text_encoder"
+
+
+def _gguf_chat_format(name):
+    low = (name or "").lower()
+    if "gemma" in low:
+        return "gemma"
+    if "llama" in low:
+        return "llama-3"
+    if "ministral" in low or "mistral" in low:
+        return "mistral-instruct"
+    if "qwen" in low or "heretic" in low or "phi" in low:
+        return "chatml"
+    return None
 
 
 def _gguf_avail_tokens(entry):
@@ -874,6 +949,10 @@ class PROMPTFORGE_PromptEnhancer:
             model_name_lower = f"{gguf_path.name} {(entry or {}).get('name', '')}".lower()
             handler = Qwen35ChatHandler if ("qwen3.5" in model_name_lower or "qwen3.6" in model_name_lower or "qwen35" in model_name_lower) else Qwen3VLChatHandler
             llama_kwargs["chat_handler"] = handler(clip_model_path=str(mmproj), verbose=False)
+        else:
+            chat_format = _gguf_chat_format(f"{gguf_path.name} {(entry or {}).get('name', '')}")
+            if chat_format:
+                llama_kwargs["chat_format"] = chat_format
         llm = Llama(**llama_kwargs)
 
         if use_default_sampling:

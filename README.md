@@ -24,6 +24,7 @@ One singular node that does the whole prompt-enhancement job:
 - **Negative prompt**: `use_negative_prompt` + `negative_prompt` (both at the end) feed your exclusions into the generation request so the model writes around them instead of naming them. Works for keywords and natural language (for example “blurry, extra fingers, sweat, water droplets”).
 - **No embellishment**: every preset forbids adding unrequested moisture (sweat, wetness, droplets, sheen) and forbids inventing subjects, actions or scene changes beyond the user's text.
 - **No negatives in the positive prompt**: none of these families benefit from negative words in the positive prompt — Krea 2, Qwen Image and MiniMax H3 run at distilled CFG where negatives are weak or ignored, and MOSS Image / Anima have a separate negative prompt. Presets require positive-only wording; the node retries if a negative-prompt phrase appears.
+- **Chat templates**: GGUF uses family-correct formats (Gemma, Llama-3, ChatML/Qwen, Mistral) and output cleanup strips ChatML/Gemma/Llama role markers (including malformed markers and system/user turns) across all engines.
 - **Thinking**: `disable_thinking` (default on) turns reasoning off where the model template supports it. Reasoning is always stripped from `ENHANCED_PROMPT` and returned on the second output, `THINKING`, for debugging.
 
 ## Outputs
