@@ -71,6 +71,17 @@ def _next_seed(seed):
     return (int(seed) + 1) % (2 ** 32 - 1) or 1
 
 
+_TOP_P_WARNED = False
+
+
+def _clip_top_p_supported():
+    try:
+        major, minor = (int(part) for part in torch.__version__.split("+")[0].split(".")[:2])
+        return (major, minor) < (2, 13)
+    except Exception:
+        return True
+
+
 def _is_bad_output(text):
     """Detect empty, degenerate or refusal output. Content is never logged."""
     clean = (text or "").strip()
@@ -934,6 +945,7 @@ class PROMPTFORGE_PromptEnhancer:
     # Native ComfyUI CLIP generation (connected clip or locally loaded clip)
     # ------------------------------------------------------------------ #
     def _generate_with_clip(self, full_prompt, mode, max_tokens, temperature, top_p, top_k, repetition_penalty, seed, image, image2, image3, video, frame_count, clip, disable_thinking, auto_retry):
+        global _TOP_P_WARNED
         images = self._clip_images(mode, image, image2, image3, video, frame_count)
         tokenize_kwargs = {"images": images} if images else {}
         if disable_thinking:
@@ -941,6 +953,13 @@ class PROMPTFORGE_PromptEnhancer:
         tokens = clip.tokenize(full_prompt, **tokenize_kwargs)
         if images and not _tokens_have_images(tokens):
             raise ValueError("[PromptForge] The selected text encoder has no vision support; the provided image/video would be ignored. Connect a vision-capable encoder or use text_only.")
+
+        effective_top_p = top_p
+        if top_p < 1.0 and not _clip_top_p_supported():
+            effective_top_p = 1.0
+            if not _TOP_P_WARNED:
+                print("[PromptForge] ComfyUI's CLIP sampler top_p is incompatible with this torch build; using top_p=1.0 (temperature, top_k, repetition and seed still apply).")
+                _TOP_P_WARNED = True
 
         def run(top_p_value, seed_value):
             return clip.generate(
@@ -958,9 +977,9 @@ class PROMPTFORGE_PromptEnhancer:
 
         def attempt(seed_value):
             try:
-                return run(top_p, seed_value)
+                return run(effective_top_p, seed_value)
             except RuntimeError as exc:
-                if top_p < 1.0 and "single memory location" in str(exc):
+                if effective_top_p < 1.0 and "single memory location" in str(exc):
                     print("[PromptForge] ComfyUI's CLIP sampler hit a torch overlap error on top_p; retrying with top_p=1.0 (temperature, top_k, repetition and seed still apply).")
                     return run(1.0, seed_value)
                 raise
