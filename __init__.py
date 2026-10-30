@@ -535,6 +535,13 @@ def _hf_dtype_kwargs(dtype):
     return {"torch_dtype": dtype}
 
 
+def _hf_compute_dtype():
+    """bf16 where the GPU supports it; Gemma/Qwen logits overflow in fp16."""
+    if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
+        return torch.bfloat16
+    return torch.float16
+
+
 def _hf_max_memory(reserve=3 * 1024 ** 3):
     """GPU budget for device_map='auto', leaving headroom for activations and KV cache."""
     import psutil
@@ -1080,18 +1087,19 @@ class PROMPTFORGE_PromptEnhancer:
             if quant in ("q8", "q4") and not src_path.is_dir():
                 raise ValueError("[PromptForge] q8/q4 quantization needs an HF model directory; use auto/fp16 for single-file ComfyUI text encoders.")
             quant_cfg = None
+            hf_dtype = torch.float16 if quant == "fp16" else _hf_compute_dtype()
             if quant in ("q8", "q4"):
                 quant_cfg = BitsAndBytesConfig(
                     load_in_8bit=(quant == "q8"),
                     load_in_4bit=(quant == "q4"),
                     bnb_4bit_quant_type="nf4",
                     bnb_4bit_use_double_quant=True,
-                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_compute_dtype=hf_dtype,
                 )
             load_kwargs = {
                 "quantization_config": quant_cfg,
                 "device_map": "auto",
-                **_hf_dtype_kwargs(torch.float16),
+                **_hf_dtype_kwargs(hf_dtype),
             }
             if torch.cuda.is_available():
                 _free_vram()
@@ -1131,8 +1139,12 @@ class PROMPTFORGE_PromptEnhancer:
                     if params_b is not None and params_b >= 3.5:
                         kwargs["top_k"] = top_k or 20
 
-                from transformers import StoppingCriteria, StoppingCriteriaList
+                from transformers import LogitsProcessor, LogitsProcessorList, StoppingCriteria, StoppingCriteriaList
                 input_len = model_inputs["input_ids"].shape[-1]
+
+                class _FiniteLogits(LogitsProcessor):
+                    def __call__(self, input_ids, scores):
+                        return torch.nan_to_num(scores, nan=-1e4, posinf=1e4, neginf=-1e4)
 
                 class _LoopStop(StoppingCriteria):
                     def __init__(self):
@@ -1146,6 +1158,7 @@ class PROMPTFORGE_PromptEnhancer:
                         return _is_repetitive_text(text)
 
                 kwargs["stopping_criteria"] = StoppingCriteriaList([_LoopStop()])
+                kwargs["logits_processor"] = LogitsProcessorList([_FiniteLogits()])
 
                 def attempt(seed_value):
                     torch.manual_seed(seed_value)
