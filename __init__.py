@@ -67,6 +67,35 @@ REFUSAL_MARKERS = (
 )
 
 
+def _is_repetitive_text(text):
+    if not text or len(text) < 60:
+        return False
+    if re.search(r"(.{20,200}?)\1{2,}", text, re.S):
+        return True
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if len(s.strip()) > 30]
+    if sentences:
+        from collections import Counter
+        if Counter(sentences).most_common(1)[0][1] >= 3:
+            return True
+    tail = text[-120:].strip()
+    if len(tail) > 40 and text.count(tail) >= 3:
+        return True
+    return False
+
+
+class _RepetitionDetected(Exception):
+    pass
+
+
+def _clip_embed_module(clip):
+    wrapper = getattr(clip, "cond_stage_model", None)
+    inner_name = getattr(wrapper, "clip", None) if wrapper is not None else None
+    inner = getattr(wrapper, inner_name, None) if inner_name else None
+    transformer = getattr(inner, "transformer", None)
+    model = getattr(transformer, "model", None)
+    return getattr(model, "embed_tokens", None)
+
+
 def _next_seed(seed):
     return (int(seed) + 1) % (2 ** 32 - 1) or 1
 
@@ -86,6 +115,8 @@ def _is_bad_output(text):
     """Detect empty, degenerate or refusal output. Content is never logged."""
     clean = (text or "").strip()
     if len(clean) < 20:
+        return True
+    if _is_repetitive_text(clean):
         return True
     if re.search(r"(.)\1{15,}", clean):
         return True
@@ -916,10 +947,25 @@ class PROMPTFORGE_PromptEnhancer:
                 if params_b is not None and params_b >= 3.5:
                     kwargs["top_k"] = top_k or 20
 
+            from transformers import StoppingCriteria, StoppingCriteriaList
+            input_len = model_inputs["input_ids"].shape[-1]
+
+            class _LoopStop(StoppingCriteria):
+                def __init__(self):
+                    self.step = 0
+
+                def __call__(self, input_ids, scores, **kw):
+                    self.step += 1
+                    if self.step % 16:
+                        return False
+                    text = tokenizer.decode(input_ids[0, input_len:], skip_special_tokens=True)
+                    return _is_repetitive_text(text)
+
+            kwargs["stopping_criteria"] = StoppingCriteriaList([_LoopStop()])
+
             def attempt(seed_value):
                 torch.manual_seed(seed_value)
                 outputs = model.generate(**model_inputs, **kwargs)
-                input_len = model_inputs["input_ids"].shape[-1]
                 return tokenizer.decode(outputs[0, input_len:], skip_special_tokens=True)
 
             enhanced = attempt(seed)
@@ -961,11 +1007,33 @@ class PROMPTFORGE_PromptEnhancer:
                 print("[PromptForge] ComfyUI's CLIP sampler top_p is incompatible with this torch build; using top_p=1.0 (temperature, top_k, repetition and seed still apply).")
                 _TOP_P_WARNED = True
 
+        embed = _clip_embed_module(clip)
+        captured = []
+        hook = None
+        if embed is not None:
+            def _watch(module, args):
+                ids = args[0]
+                if not torch.is_tensor(ids) or ids.numel() == 0 or ids.numel() > 4:
+                    return
+                captured.append(ids.detach().clone())
+                if len(captured) % 16 == 0:
+                    try:
+                        text = clip.decode(torch.cat([c.flatten() for c in captured]).tolist(), skip_special_tokens=True)
+                    except Exception:
+                        return
+                    if _is_repetitive_text(text):
+                        raise _RepetitionDetected()
+            try:
+                hook = embed.register_forward_pre_hook(_watch)
+            except Exception:
+                hook = None
+        max_length = max_tokens if hook is not None else min(max_tokens, 2048)
+
         def run(top_p_value, seed_value):
             return clip.generate(
                 tokens,
                 do_sample=True,
-                max_length=max_tokens,
+                max_length=max_length,
                 temperature=temperature,
                 top_k=top_k,
                 top_p=top_p_value,
@@ -984,11 +1052,28 @@ class PROMPTFORGE_PromptEnhancer:
                     return run(1.0, seed_value)
                 raise
 
-        generated = attempt(seed)
-        if auto_retry and _is_bad_output(_split_thinking(clip.decode(generated, skip_special_tokens=True))[0]):
-            print("[PromptForge] output rejected (empty/repetitive/refusal); retrying with a new seed.")
-            generated = attempt(_next_seed(seed))
-        return clip.decode(generated, skip_special_tokens=True)
+        seed_value = seed
+        try:
+            for attempt_index in range(2):
+                try:
+                    generated = attempt(seed_value)
+                except _RepetitionDetected:
+                    if not auto_retry or attempt_index == 1:
+                        raise ValueError("[PromptForge] Repetition detected during generation; the model is looping. Try a different seed or lower max_tokens.")
+                    print("[PromptForge] repetition detected during generation; retrying with a new seed.")
+                    captured.clear()
+                    seed_value = _next_seed(seed_value)
+                    continue
+                decoded = clip.decode(generated, skip_special_tokens=True)
+                if auto_retry and attempt_index == 0 and _is_bad_output(_split_thinking(decoded)[0]):
+                    print("[PromptForge] output rejected (empty/repetitive/refusal); retrying with a new seed.")
+                    captured.clear()
+                    seed_value = _next_seed(seed_value)
+                    continue
+                return decoded
+        finally:
+            if hook is not None:
+                hook.remove()
 
     # ------------------------------------------------------------------ #
     # Input adapters
