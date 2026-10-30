@@ -566,12 +566,15 @@ def _free_vram(keep=None):
         torch.cuda.empty_cache()
 
 
-def _gguf_context_steps(base_ctx):
+def _gguf_context_steps(base_ctx, min_ctx):
     steps = []
-    for ctx in (base_ctx, 8192, 4096, 2048):
-        ctx = max(512, min(int(ctx), int(base_ctx)))
+    for ctx in (base_ctx, 16384, 12288, 8192, 6144, 4096, 3072, 2048):
+        if ctx < min_ctx or ctx > base_ctx:
+            continue
         if ctx not in steps:
             steps.append(ctx)
+    if not steps:
+        steps.append(int(base_ctx))
     return steps
 
 
@@ -987,10 +990,16 @@ class PROMPTFORGE_PromptEnhancer:
 
         from llama_cpp import Llama
         defaults = (entry or {}).get("defaults") or {}
-        if defaults.get("context_length"):
-            base_ctx = min(int(defaults["context_length"]), 16384)
-        else:
-            base_ctx = 8192 if gguf_path.stat().st_size >= 5 * 1024 ** 3 else 16384
+        media_tokens = len(images) * 1024
+        text_tokens = len(full_prompt) // 3
+        required_ctx = text_tokens + media_tokens + max_tokens + 512
+        if required_ctx > 32768:
+            raise ValueError(
+                f"[PromptForge] this request needs about {required_ctx} context tokens (text + {len(images)} image/video inputs + output), "
+                "more than the 32768-token limit. Reduce frame_count or the number of reference images."
+            )
+        configured_ctx = int(defaults["context_length"]) if defaults.get("context_length") else 16384
+        base_ctx = min(32768, max(16384, configured_ctx, ((required_ctx + 1023) // 1024) * 1024))
         llama_kwargs = {
             "model_path": str(gguf_path),
             "n_ctx": base_ctx,
@@ -1013,7 +1022,8 @@ class PROMPTFORGE_PromptEnhancer:
             _free_vram()
         llm = None
         last_error = None
-        for ctx in _gguf_context_steps(llama_kwargs["n_ctx"]):
+        steps = _gguf_context_steps(base_ctx, required_ctx)
+        for ctx in steps:
             llama_kwargs["n_ctx"] = ctx
             try:
                 llm = Llama(**llama_kwargs)
@@ -1027,8 +1037,9 @@ class PROMPTFORGE_PromptEnhancer:
                 gc.collect()
         if llm is None:
             raise ValueError(
-                "[PromptForge] llama.cpp could not create a context even at 2048 tokens. "
-                "Lower gpu_layers for this model or use a smaller quant. " + (last_error or "")
+                f"[PromptForge] llama.cpp could not create a {steps[-1]}-token context. "
+                "The model plus the requested image/video inputs does not fit in VRAM; "
+                "reduce frame_count or the number of reference images, or lower gpu_layers. " + (last_error or "")
             )
 
         if use_default_sampling:

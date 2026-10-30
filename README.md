@@ -48,8 +48,9 @@ other tasks. Before a safetensors model is loaded those helpers also unload
 ComfyUI's currently loaded models, and `device_map` gets an explicit VRAM budget
 that keeps headroom for activations while offloading overflow to CPU instead of
 failing with an OOM. GGUF models also unload ComfyUI's models before the
-llama.cpp context is created, and the context size steps down (8k → 4k → 2k) if
-the KV cache does not fit. Set `keep_model_loaded` to true to keep ComfyUI's models
+llama.cpp context is created; the context starts at 16k, grows up to 32k to fit
+image/video inputs, and only steps down when the KV cache does not fit. Set
+`keep_model_loaded` to true to keep ComfyUI's models
 resident. A native ComfyUI `CLIP` socket (`clip`) can be connected to
 generate from an already-loaded encoder instead of loading its own model.
 
