@@ -535,6 +535,30 @@ def _hf_dtype_kwargs(dtype):
     return {"torch_dtype": dtype}
 
 
+def _hf_max_memory(reserve=3 * 1024 ** 3):
+    """GPU budget for device_map='auto', leaving headroom for activations and KV cache."""
+    import psutil
+    free_bytes = torch.cuda.mem_get_info()[0]
+    budget = max(int(free_bytes) - reserve, 768 * 1024 ** 2)
+    return {torch.cuda.current_device(): budget, "cpu": psutil.virtual_memory().available}
+
+
+def _free_vram(keep=None):
+    """Unload ComfyUI's models so a separately loaded transformers model has room."""
+    try:
+        import comfy.model_management as model_management
+        keep_loaded = []
+        if keep is not None:
+            keep_loaded = [m for m in model_management.current_loaded_models if m.model is keep]
+        model_management.free_memory(10 ** 30, model_management.get_torch_device(), keep_loaded=keep_loaded)
+        model_management.soft_empty_cache()
+    except Exception:
+        pass
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
 def _gguf_chat_format(name):
     low = (name or "").lower()
     if "gemma" in low:
@@ -1055,69 +1079,87 @@ class PROMPTFORGE_PromptEnhancer:
         if src_path.is_dir() or quant in ("q8", "q4"):
             if quant in ("q8", "q4") and not src_path.is_dir():
                 raise ValueError("[PromptForge] q8/q4 quantization needs an HF model directory; use auto/fp16 for single-file ComfyUI text encoders.")
-            quant_cfg = BitsAndBytesConfig(load_in_8bit=(quant == "q8"), load_in_4bit=(quant == "q4")) if quant in ("q8", "q4") else None
-            dtype_kwargs = _hf_dtype_kwargs(torch.float16)
-            if mode != "text_only":
-                model = AutoVision.from_pretrained(src, quantization_config=quant_cfg, device_map="auto", **dtype_kwargs)
-            else:
-                from transformers import AutoModelForCausalLM
-                model = AutoModelForCausalLM.from_pretrained(src, quantization_config=quant_cfg, device_map="auto", **dtype_kwargs)
-            processor = AutoProcessor.from_pretrained(src)
-            tokenizer = AutoTokenizer.from_pretrained(src)
-            conversation = [{"role": "user", "content": []}]
-            refs = self._mode_images(mode, image, image2, image3, video, frame_count)
-            if refs and getattr(processor, "image_processor", None) is None:
-                raise ValueError("[PromptForge] The selected safetensors model has no image processor; image/video mode needs a vision-capable model.")
-            if refs:
-                conversation[0]["content"].extend([{"type": "image", "image": r} for r in refs if r is not None])
-            conversation[0]["content"].append({"type": "text", "text": full_prompt})
-            chat = processor.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True, enable_thinking=not disable_thinking)
-            processed = processor(text=chat, images=[r for r in refs if r is not None] or None, return_tensors="pt")
-            model_device = next(model.parameters()).device
-            model_inputs = {k: (v.to(model_device, non_blocking=True) if torch.is_tensor(v) else v) for k, v in processed.items()}
-            stop_tokens = [tokenizer.eos_token_id]
-            if getattr(tokenizer, "eot_id", None) is not None:
-                stop_tokens.append(tokenizer.eot_id)
-            kwargs = {
-                "max_new_tokens": max_tokens,
-                "repetition_penalty": repetition_penalty,
-                "num_beams": num_beams,
-                "eos_token_id": stop_tokens,
-                "pad_token_id": tokenizer.pad_token_id,
+            quant_cfg = None
+            if quant in ("q8", "q4"):
+                quant_cfg = BitsAndBytesConfig(
+                    load_in_8bit=(quant == "q8"),
+                    load_in_4bit=(quant == "q4"),
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_use_double_quant=True,
+                    bnb_4bit_compute_dtype=torch.float16,
+                )
+            load_kwargs = {
+                "quantization_config": quant_cfg,
+                "device_map": "auto",
+                **_hf_dtype_kwargs(torch.float16),
             }
-            if num_beams == 1:
-                kwargs.update({"do_sample": True, "temperature": temperature, "top_p": top_p})
-                if params_b is not None and params_b >= 3.5:
-                    kwargs["top_k"] = top_k or 20
+            if torch.cuda.is_available():
+                _free_vram()
+                load_kwargs["max_memory"] = _hf_max_memory()
+            model = processor = tokenizer = None
+            try:
+                if mode != "text_only":
+                    model = AutoVision.from_pretrained(src, **load_kwargs)
+                else:
+                    from transformers import AutoModelForCausalLM
+                    model = AutoModelForCausalLM.from_pretrained(src, **load_kwargs)
+                processor = AutoProcessor.from_pretrained(src)
+                tokenizer = AutoTokenizer.from_pretrained(src)
+                conversation = [{"role": "user", "content": []}]
+                refs = self._mode_images(mode, image, image2, image3, video, frame_count)
+                if refs and getattr(processor, "image_processor", None) is None:
+                    raise ValueError("[PromptForge] The selected safetensors model has no image processor; image/video mode needs a vision-capable model.")
+                if refs:
+                    conversation[0]["content"].extend([{"type": "image", "image": r} for r in refs if r is not None])
+                conversation[0]["content"].append({"type": "text", "text": full_prompt})
+                chat = processor.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True, enable_thinking=not disable_thinking)
+                processed = processor(text=chat, images=[r for r in refs if r is not None] or None, return_tensors="pt")
+                model_device = next(model.parameters()).device
+                model_inputs = {k: (v.to(model_device, non_blocking=True) if torch.is_tensor(v) else v) for k, v in processed.items()}
+                stop_tokens = [tokenizer.eos_token_id]
+                if getattr(tokenizer, "eot_id", None) is not None:
+                    stop_tokens.append(tokenizer.eot_id)
+                kwargs = {
+                    "max_new_tokens": max_tokens,
+                    "repetition_penalty": repetition_penalty,
+                    "num_beams": num_beams,
+                    "eos_token_id": stop_tokens,
+                    "pad_token_id": tokenizer.pad_token_id,
+                }
+                if num_beams == 1:
+                    kwargs.update({"do_sample": True, "temperature": temperature, "top_p": top_p})
+                    if params_b is not None and params_b >= 3.5:
+                        kwargs["top_k"] = top_k or 20
 
-            from transformers import StoppingCriteria, StoppingCriteriaList
-            input_len = model_inputs["input_ids"].shape[-1]
+                from transformers import StoppingCriteria, StoppingCriteriaList
+                input_len = model_inputs["input_ids"].shape[-1]
 
-            class _LoopStop(StoppingCriteria):
-                def __init__(self):
-                    self.step = 0
+                class _LoopStop(StoppingCriteria):
+                    def __init__(self):
+                        self.step = 0
 
-                def __call__(self, input_ids, scores, **kw):
-                    self.step += 1
-                    if self.step % 32:
-                        return False
-                    text = tokenizer.decode(input_ids[0, input_len:], skip_special_tokens=True)
-                    return _is_repetitive_text(text)
+                    def __call__(self, input_ids, scores, **kw):
+                        self.step += 1
+                        if self.step % 32:
+                            return False
+                        text = tokenizer.decode(input_ids[0, input_len:], skip_special_tokens=True)
+                        return _is_repetitive_text(text)
 
-            kwargs["stopping_criteria"] = StoppingCriteriaList([_LoopStop()])
+                kwargs["stopping_criteria"] = StoppingCriteriaList([_LoopStop()])
 
-            def attempt(seed_value):
-                torch.manual_seed(seed_value)
-                outputs = model.generate(**model_inputs, **kwargs)
-                return tokenizer.decode(outputs[0, input_len:], skip_special_tokens=True)
+                def attempt(seed_value):
+                    torch.manual_seed(seed_value)
+                    outputs = model.generate(**model_inputs, **kwargs)
+                    return tokenizer.decode(outputs[0, input_len:], skip_special_tokens=True)
 
-            enhanced = attempt(seed)
-            if auto_retry and _is_bad_output(_split_thinking(enhanced)[0]):
-                print("[PromptForge] output rejected (empty/repetitive/refusal); retrying with a new seed.")
-                enhanced = attempt(_next_seed(seed))
-            del model, processor, tokenizer
-            self._release(keep_model_loaded=keep_model_loaded)
-            return enhanced
+                enhanced = attempt(seed)
+                if auto_retry and _is_bad_output(_split_thinking(enhanced)[0]):
+                    print("[PromptForge] output rejected (empty/repetitive/refusal); retrying with a new seed.")
+                    enhanced = attempt(_next_seed(seed))
+                return enhanced
+            finally:
+                del model, processor, tokenizer
+                self._release(keep_model_loaded=keep_model_loaded)
 
         import comfy.sd
         clip_obj = comfy.sd.load_clip(ckpt_paths=[src], clip_type=comfy.sd.CLIPType.STABLE_DIFFUSION, model_options={"dtype": torch.float16})
@@ -1150,15 +1192,8 @@ class PROMPTFORGE_PromptEnhancer:
                 print("[PromptForge] ComfyUI's CLIP sampler top_p is incompatible with this torch build; using top_p=1.0 (temperature, top_k, repetition and seed still apply).")
                 _TOP_P_WARNED = True
 
-        try:
-            if torch.cuda.is_available():
-                free_bytes, _ = torch.cuda.mem_get_info()
-                if free_bytes < 2 * 1024 ** 3:
-                    import comfy.model_management as model_management
-                    keep = [m for m in model_management.current_loaded_models if m.model is getattr(clip, "patcher", None)]
-                    model_management.free_memory(10 ** 30, model_management.get_torch_device(), keep_loaded=keep)
-        except Exception:
-            pass
+        if torch.cuda.is_available() and torch.cuda.mem_get_info()[0] < 2 * 1024 ** 3:
+            _free_vram(getattr(clip, "patcher", None))
 
         max_length = min(max_tokens, 2048)
 
