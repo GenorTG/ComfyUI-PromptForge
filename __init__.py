@@ -683,6 +683,19 @@ def _gguf_context_steps(base_ctx, min_ctx):
     return steps
 
 
+def _gguf_vision_handler(name):
+    low = (name or "").lower()
+    if "gemma-4" in low or "gemma4" in low:
+        return "Gemma4ChatHandler"
+    if "gemma-3" in low or "gemma3" in low:
+        return "Gemma3ChatHandler"
+    if "qwen2.5" in low or "qwen25" in low:
+        return "Qwen25VLChatHandler"
+    if "qwen3.5" in low or "qwen3.6" in low or "qwen35" in low:
+        return "Qwen35ChatHandler"
+    return "Qwen3VLChatHandler"
+
+
 def _gguf_chat_format(name):
     low = (name or "").lower()
     if "gemma" in low:
@@ -779,7 +792,7 @@ def _find_mmproj(gguf_path, entry):
             candidate = directory / name
             if candidate.is_file():
                 return candidate
-        for candidate in sorted(directory.glob("mmproj*.gguf")):
+        for candidate in sorted(directory.glob("*mmproj*.gguf")):
             return candidate
     return None
 
@@ -1112,13 +1125,13 @@ class PROMPTFORGE_PromptEnhancer:
             "verbose": False,
         }
         if images:
-            try:
-                from llama_cpp.llama_chat_format import Qwen35ChatHandler, Qwen3VLChatHandler
-            except ImportError as exc:
-                raise ValueError("[PromptForge] Vision GGUF requires llama-cpp-python with multimodal chat handlers (Qwen3VLChatHandler / Qwen35ChatHandler). Upgrade llama-cpp-python.") from exc
+            from llama_cpp import llama_chat_format
             model_name_lower = f"{gguf_path.name} {(entry or {}).get('name', '')}".lower()
-            handler = Qwen35ChatHandler if ("qwen3.5" in model_name_lower or "qwen3.6" in model_name_lower or "qwen35" in model_name_lower) else Qwen3VLChatHandler
-            llama_kwargs["chat_handler"] = handler(clip_model_path=str(mmproj), verbose=False)
+            handler_name = _gguf_vision_handler(model_name_lower)
+            handler_cls = getattr(llama_chat_format, handler_name, None)
+            if handler_cls is None:
+                raise ValueError(f"[PromptForge] this llama-cpp-python build has no {handler_name}; upgrade llama-cpp-python for this vision architecture.")
+            llama_kwargs["chat_handler"] = handler_cls(clip_model_path=str(mmproj), verbose=False)
         else:
             chat_format = _gguf_chat_format(f"{gguf_path.name} {(entry or {}).get('name', '')}")
             if chat_format:
