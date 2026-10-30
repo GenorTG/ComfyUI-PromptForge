@@ -61,6 +61,19 @@ _META_PATTERNS = (
 )
 _META_RE = re.compile("|".join(f"(?:{p})" for p in _META_PATTERNS), re.I)
 
+_NEGATIVE_PROMPT_TERMS = (
+    "blur", "blurry", "watermark", "text", "logo", "extra fingers", "extra limbs",
+    "bad anatomy", "low quality", "worst quality", "deformed", "nsfw", "sweat",
+    "wet", "wetness", "moisture", "droplets", "people", "person", "humans",
+    "characters", "clutter", "noise",
+)
+_NEGATIVE_PROMPT_RE = re.compile(
+    r"\b(no|without|avoid|free of|not|don't|do not|must not|should not)\b[^.!?]{0,50}\b("
+    + "|".join(re.escape(term) for term in _NEGATIVE_PROMPT_TERMS)
+    + r")\b",
+    re.I,
+)
+
 
 def _clean_prompt_output(text):
     """Remove leaked instructions/meta lines while keeping the prompt structure."""
@@ -152,6 +165,8 @@ def _is_bad_output(text):
     if len(clean) < 20:
         return True
     if _is_repetitive_text(clean):
+        return True
+    if _NEGATIVE_PROMPT_RE.search(clean):
         return True
     if re.search(r"(.)\1{15,}", clean):
         return True
@@ -680,8 +695,8 @@ class PROMPTFORGE_PromptEnhancer:
                 "# Negative constraints\n"
                 "The generated prompt and the scene it describes must NOT contain any of the following: "
                 + negative_text +
-                ". Do not mention, describe, imply, or approximate these elements; write the scene so they are absent instead, "
-                "and never name them inside the prompt itself."
+                ". Write the scene so they are absent, converting each exclusion into a positive description "
+                "of the desired state; never name them inside the prompt itself."
             )
         parts = [p for p in (user_text, duration_line, sys_text, negative_line, guard) if p and p.strip()]
         full_prompt = "\n\n".join(parts)
