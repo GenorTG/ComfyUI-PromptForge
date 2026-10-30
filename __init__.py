@@ -17,6 +17,7 @@ import re
 from pathlib import Path
 
 import torch
+import transformers
 from transformers import AutoProcessor, AutoTokenizer, BitsAndBytesConfig
 
 try:
@@ -521,6 +522,17 @@ def _model_kind(model_name, local_model_path):
     if not entry:
         return "text_encoder"
     return entry.get("kind") or "text_encoder"
+
+
+def _hf_dtype_kwargs(dtype):
+    """transformers 4.56+ renamed `torch_dtype` to `dtype` on from_pretrained."""
+    try:
+        major, minor = (int(part) for part in transformers.__version__.split(".")[:2])
+        if (major, minor) >= (4, 56):
+            return {"dtype": dtype}
+    except Exception:
+        pass
+    return {"torch_dtype": dtype}
 
 
 def _gguf_chat_format(name):
@@ -1044,11 +1056,12 @@ class PROMPTFORGE_PromptEnhancer:
             if quant in ("q8", "q4") and not src_path.is_dir():
                 raise ValueError("[PromptForge] q8/q4 quantization needs an HF model directory; use auto/fp16 for single-file ComfyUI text encoders.")
             quant_cfg = BitsAndBytesConfig(load_in_8bit=(quant == "q8"), load_in_4bit=(quant == "q4")) if quant in ("q8", "q4") else None
+            dtype_kwargs = _hf_dtype_kwargs(torch.float16)
             if mode != "text_only":
-                model = AutoVision.from_pretrained(src, quantization_config=quant_cfg, torch_dtype=torch.float16, device_map="auto")
+                model = AutoVision.from_pretrained(src, quantization_config=quant_cfg, device_map="auto", **dtype_kwargs)
             else:
                 from transformers import AutoModelForCausalLM
-                model = AutoModelForCausalLM.from_pretrained(src, quantization_config=quant_cfg, torch_dtype=torch.float16, device_map="auto")
+                model = AutoModelForCausalLM.from_pretrained(src, quantization_config=quant_cfg, device_map="auto", **dtype_kwargs)
             processor = AutoProcessor.from_pretrained(src)
             tokenizer = AutoTokenizer.from_pretrained(src)
             conversation = [{"role": "user", "content": []}]
