@@ -14,6 +14,7 @@ import json
 import gc
 import inspect
 import re
+import struct
 from pathlib import Path
 
 import torch
@@ -566,6 +567,110 @@ def _free_vram(keep=None):
         torch.cuda.empty_cache()
 
 
+_GGUF_VALUE_SIZE = {0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1, 10: 8, 11: 8, 12: 8}
+
+
+def _gguf_skip(f, vtype):
+    if vtype == 8:
+        f.seek(struct.unpack("<Q", f.read(8))[0], 1)
+    elif vtype == 9:
+        elem = struct.unpack("<I", f.read(4))[0]
+        count = struct.unpack("<Q", f.read(8))[0]
+        if elem == 8:
+            for _ in range(count):
+                f.seek(struct.unpack("<Q", f.read(8))[0], 1)
+        else:
+            f.seek(_GGUF_VALUE_SIZE[elem] * count, 1)
+    else:
+        f.seek(_GGUF_VALUE_SIZE[vtype], 1)
+
+
+def _gguf_read(f, vtype):
+    if vtype == 8:
+        return f.read(struct.unpack("<Q", f.read(8))[0]).decode("utf-8", "replace")
+    if vtype == 9:
+        elem = struct.unpack("<I", f.read(4))[0]
+        return [_gguf_read(f, elem) for _ in range(struct.unpack("<Q", f.read(8))[0])]
+    fmt = {0: "<B", 1: "<b", 2: "<H", 3: "<h", 4: "<I", 5: "<i", 6: "<f", 7: "<?", 10: "<Q", 11: "<q", 12: "<d"}[vtype]
+    return struct.unpack(fmt, f.read(struct.calcsize(fmt)))[0]
+
+
+def _gguf_metadata(path):
+    """Read GGUF metadata without mapping the tensor data."""
+    meta = {}
+    needed = None
+    with open(path, "rb") as f:
+        if f.read(4) != b"GGUF":
+            return meta
+        f.read(4)
+        f.read(8)
+        count = struct.unpack("<Q", f.read(8))[0]
+        for _ in range(count):
+            key = f.read(struct.unpack("<Q", f.read(8))[0]).decode("utf-8", "replace")
+            vtype = struct.unpack("<I", f.read(4))[0]
+            if needed is not None and key not in needed:
+                _gguf_skip(f, vtype)
+                continue
+            value = _gguf_read(f, vtype)
+            meta[key] = value
+            if key == "general.architecture":
+                needed = {f"{value}.{k}" for k in (
+                    "block_count", "attention.head_count", "attention.head_count_kv",
+                    "embedding_length", "attention.key_length", "attention.value_length",
+                    "attention.sliding_window",
+                )}
+            if needed is not None and needed <= meta.keys():
+                break
+    return meta
+
+
+def _gguf_kv_profile(path):
+    """Return (layers, kv bytes per token, swa window or None) from GGUF metadata."""
+    try:
+        meta = _gguf_metadata(path)
+        prefix = f"{meta['general.architecture']}."
+        swa = meta.get(f"{prefix}attention.sliding_window")
+        n_layers = int(meta[f"{prefix}block_count"])
+        n_heads = int(meta[f"{prefix}attention.head_count"])
+        kv_heads = meta[f"{prefix}attention.head_count_kv"]
+        embd = int(meta[f"{prefix}embedding_length"])
+        key_len = meta.get(f"{prefix}attention.key_length", embd // n_heads)
+        value_len = meta.get(f"{prefix}attention.value_length", embd // n_heads)
+        def per_layer(value):
+            if isinstance(value, list):
+                return [int(v) for v in value] if len(value) == n_layers else None
+            return [int(value)] * n_layers
+        kv_heads_l = per_layer(kv_heads)
+        key_l = per_layer(key_len)
+        value_l = per_layer(value_len)
+        if kv_heads_l is None or key_l is None or value_l is None:
+            return None
+        kv_bytes = sum(kv_heads_l[i] * (key_l[i] + value_l[i]) * 2 for i in range(n_layers))
+        return n_layers, kv_bytes, int(swa) if swa is not None else None
+    except Exception:
+        return None
+
+
+def _gguf_layer_budget(path, n_ctx, mmproj_path=None):
+    """Layers that fit on the GPU alongside their KV cache; the rest go to CPU."""
+    profile = _gguf_kv_profile(path)
+    if profile is None:
+        return None
+    n_layers, kv_per_token, swa = profile
+    if swa is not None:
+        kv_bytes = kv_per_token * (min(n_ctx, swa) * 0.95 + n_ctx * 0.05)
+    else:
+        kv_bytes = kv_per_token * n_ctx
+    weights = path.stat().st_size
+    extra = mmproj_path.stat().st_size if mmproj_path is not None else 0
+    free = torch.cuda.mem_get_info()[0]
+    budget = free - 1536 * 1024 ** 2 - extra
+    if budget <= 0:
+        return 0, n_layers
+    per_layer = (weights + kv_bytes) / n_layers
+    return max(0, min(n_layers, int(budget / per_layer))), n_layers
+
+
 def _gguf_context_steps(base_ctx, min_ctx):
     steps = []
     for ctx in (base_ctx, 16384, 12288, 8192, 6144, 4096, 3072, 2048):
@@ -1020,6 +1125,15 @@ class PROMPTFORGE_PromptEnhancer:
                 llama_kwargs["chat_format"] = chat_format
         if llama_kwargs["n_gpu_layers"] != 0:
             _free_vram()
+            if "swa_full" in inspect.signature(Llama.__init__).parameters:
+                llama_kwargs["swa_full"] = False
+            if llama_kwargs["n_gpu_layers"] == -1:
+                budget = _gguf_layer_budget(gguf_path, base_ctx, mmproj)
+                if budget is not None:
+                    layers, total = budget
+                    if layers < total:
+                        print(f"[PromptForge] offloading {total - layers}/{total} layers to CPU to fit a {base_ctx}-token context.")
+                    llama_kwargs["n_gpu_layers"] = layers
         llm = None
         last_error = None
         steps = _gguf_context_steps(base_ctx, required_ctx)
@@ -1037,9 +1151,8 @@ class PROMPTFORGE_PromptEnhancer:
                 gc.collect()
         if llm is None:
             raise ValueError(
-                f"[PromptForge] llama.cpp could not create a {steps[-1]}-token context. "
-                "The model plus the requested image/video inputs does not fit in VRAM; "
-                "reduce frame_count or the number of reference images, or lower gpu_layers. " + (last_error or "")
+                f"[PromptForge] llama.cpp could not create a {steps[-1]}-token context even with CPU offload. "
+                "Use a smaller quant or model, or reduce frame_count and reference images. " + (last_error or "")
             )
 
         if use_default_sampling:

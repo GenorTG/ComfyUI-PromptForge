@@ -49,7 +49,8 @@ ComfyUI's currently loaded models, and `device_map` gets an explicit VRAM budget
 that keeps headroom for activations while offloading overflow to CPU instead of
 failing with an OOM. GGUF models also unload ComfyUI's models before the
 llama.cpp context is created; the context starts at 16k, grows up to 32k to fit
-image/video inputs, and only steps down when the KV cache does not fit. Set
+image/video inputs, uses the windowed SWA cache (Gemma's full-size cache needs
+10+ GB at 16k), and offloads layers to CPU when weights + KV do not fit. Set
 `keep_model_loaded` to true to keep ComfyUI's models
 resident. A native ComfyUI `CLIP` socket (`clip`) can be connected to
 generate from an already-loaded encoder instead of loading its own model.
