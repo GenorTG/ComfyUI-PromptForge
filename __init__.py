@@ -243,14 +243,20 @@ def _scan_local_text_models():
 
 LOCAL_TEXT_MODELS = _scan_local_text_models()
 
-HERETIC_MODEL_ENTRIES = [
-    {"option": "Qwen3.5-9B Defiant Fable Heretic (HF) [9B]", "kind": "hf", "key": "heretic_qwen35_9b", "params_b": 9, "avail_match": ["Defiant"]},
-    {"option": "Qwen3.5-4B Deckard Heretic Thinking (HF) [4B, text-only]", "kind": "hf", "key": "heretic_qwen35_4b_thinking", "params_b": 4, "avail_match": ["Deckard"]},
-    {"option": "Qwen3.6-27B Fable Fusion Heretic (HF) [27B]", "kind": "hf", "key": "heretic_qwen36_27b", "params_b": 27, "avail_match": ["27B", "Fable"]},
-    {"option": "Qwen3.5-9B Defiant Fable GGUF (llama.cpp) [9B]", "kind": "gguf", "key": "gguf_qwen35_9b_fable", "params_b": 9, "avail_match": ["Defiant"]},
-    {"option": "Qwen3.6-27B Fable Fusion GGUF (llama.cpp) [27B]", "kind": "gguf", "key": "gguf_qwen36_27b_fusion", "params_b": 27, "avail_match": ["27B", "Fable"]},
-    {"option": "Qwen3.5-4B Claude OS Heretic GGUF (llama.cpp) [4B]", "kind": "gguf", "key": "gguf_qwen35_4b_claude", "params_b": 4, "avail_match": ["Claude"]},
-]
+def _catalog_entry(item, kind):
+    return {
+        "option": item.get("label") or item.get("name") or item.get("key"),
+        "kind": kind,
+        "key": item.get("key"),
+        "params_b": item.get("params_b"),
+        "avail_match": item.get("avail_match") or [],
+    }
+
+
+HERETIC_MODEL_ENTRIES = (
+    [_catalog_entry(item, "hf") for item in HERETIC_MODELS]
+    + [_catalog_entry(item, "gguf") for item in GGUF_MODELS]
+)
 
 
 def _entry_local_path(entry):
@@ -298,9 +304,6 @@ GGUF_MODEL_OPTIONS = (
 
 
 def _preferred_option(options):
-    for option in options:
-        if option.startswith("[AVAILABLE] "):
-            return option
     return options[0] if options else "none"
 
 PRESET_OPTIONS = ["auto"] + sorted(
@@ -308,8 +311,19 @@ PRESET_OPTIONS = ["auto"] + sorted(
     if isinstance(v, dict) and (v.get("text") or v.get("system_prompt"))
 )
 
-MODE_OPTIONS = ["text_only", "image", "video"]
-QUANT_OPTIONS = ["auto", "fp16", "q8", "q4"]
+MODE_OPTIONS = ["text_only", "inputs"]
+QUANT_OPTIONS = ["auto", "fp16", "q8", "q6", "q5", "q4"]
+GGUF_QUANT_ORDER = ("q8", "q6", "q5", "q4")
+
+
+def _gguf_quant_order(quantization, quant_files):
+    requested = {
+        "q8": "q8", "8bit": "q8", "q6": "q6", "6bit": "q6",
+        "q5": "q5", "5bit": "q5", "q4": "q4", "4bit": "q4",
+        "fp16": "q8", "auto": "q8",
+    }.get(quantization or "auto", "q8")
+    order = [requested] + [key for key in GGUF_QUANT_ORDER if key != requested]
+    return [key for key in order if key in quant_files]
 
 
 def _resolve_model_entry(option):
@@ -368,32 +382,53 @@ def _scanned_ggufs():
 
 
 def _find_gguf(entry, quantization):
-    """Find an existing GGUF for a catalog entry: catalog dir, exact scan match, then family match."""
+    """Find or download a GGUF for a catalog entry, honouring the requested quant."""
     qf = (entry or {}).get("quant_files") or {}
     if not qf:
         return None
-    requested = quantization if quantization in qf else ("8bit" if quantization in (None, "auto", "fp16") else "4bit")
-    ordered = [qf.get(requested)]
-    for key in ("8bit", "4bit", "fp16"):
-        if qf.get(key) and qf[key] not in ordered:
-            ordered.append(qf[key])
-    ordered = [name for name in ordered if name]
+    order = _gguf_quant_order(quantization, qf) or list(qf)
 
     base_dir = Path(entry.get("base_dir") or "LLM/GGUF")
     if folder_paths is not None:
         models_dir = getattr(folder_paths, "models_dir", "") or ""
         if models_dir:
             base_dir = Path(models_dir) / base_dir
-    for name in ordered:
+    scanned = _scanned_ggufs()
+    repo_id = (entry or {}).get("repo_id")
+
+    def local(name):
         candidate = base_dir / name
         if candidate.is_file():
             return candidate
-
-    scanned = _scanned_ggufs()
-    for name in ordered:
         for path in scanned:
             if Path(path).name == name:
                 return Path(path)
+        return None
+
+    def download(name):
+        if not repo_id:
+            return None
+        from huggingface_hub import hf_hub_download
+        try:
+            print("[PromptForge] downloading GGUF model (first use).")
+            return Path(hf_hub_download(repo_id=repo_id, filename=name))
+        except Exception:
+            return None
+
+    found = local(qf[order[0]])
+    if found is not None:
+        return found
+    found = download(qf[order[0]])
+    if found is not None:
+        return found
+
+    for key in order[1:]:
+        found = local(qf[key])
+        if found is not None:
+            return found
+        found = download(qf[key])
+        if found is not None:
+            return found
 
     tokens = _gguf_avail_tokens(entry)
     if tokens:
@@ -464,11 +499,11 @@ class PROMPTFORGE_PromptEnhancer:
         return {
             "required": {
                 "prompt_text": ("STRING", {"default": "", "multiline": True, "tooltip": "Raw user request / media-derived text to enhance. Can be loose natural language, random idea, detailed description, keyword pile, anything."}),
-                "mode": (MODE_OPTIONS, {"default": "text_only", "tooltip": "What the prompt is for: text_only (T2I / text-to-video), image (uses every connected reference from image / image2 / image3), video (sampled frames from video)."}),
+                "mode": (MODE_OPTIONS, {"default": "text_only", "tooltip": "text_only ignores all media; inputs uses every connected image (image / image2 / image3) and the sampled video frames."}),
                 "source": (SOURCE_OPTIONS, {"default": "safetensors", "tooltip": "Where the text model comes from: safetensors (HF dir / single-file text encoder, loaded by the node), GGUF (llama.cpp), or connected clip (use the CLIP input; no model is loaded)."}),
                 "safetensors_model": (SAFETENSORS_MODEL_OPTIONS, {"default": _preferred_option(SAFETENSORS_MODEL_OPTIONS), "tooltip": "Safetensors / HF model to load when source is safetensors. [AVAILABLE] entries already exist locally."}),
                 "gguf_model": (GGUF_MODEL_OPTIONS, {"default": _preferred_option(GGUF_MODEL_OPTIONS), "tooltip": "GGUF model to load when source is GGUF. [AVAILABLE] entries already exist locally; otherwise put the .gguf in a scanned models dir."}),
-                "quantization": (QUANT_OPTIONS, {"default": "auto", "tooltip": "Text encoder precision for safetensors models: auto (fp16), fp16 (native fp16), q8 / q4 (live bitsandbytes quantization before generation). Ignored for GGUF models."}),
+                "quantization": (QUANT_OPTIONS, {"default": "auto", "tooltip": "Safetensors: auto/fp16/q8/q4 (q8/q4 = live bitsandbytes). GGUF: q8/q6/q5/q4 selects the GGUF quant file. auto = fp16 for safetensors, q8 for GGUF."}),
                 "enhancement_preset": (PRESET_OPTIONS, {"default": "auto", "tooltip": "Preset system prompt: auto, or one of the PromptForge presets (Krea 2 T2I, MOSS Image T2I, Qwen Image T2I, generic styles...)."}),
                 "seed": ("INT", {"default": 1, "min": 1, "max": 2 ** 32 - 1, "tooltip": "Sampling seed for the Qwen-style generation. 1 = deterministic-ish / keep last logic."}),
                 "max_tokens": ("INT", {"default": 8192, "min": 32, "max": 16384, "tooltip": "Max new tokens for the enhanced prompt."}),
@@ -496,6 +531,8 @@ class PROMPTFORGE_PromptEnhancer:
                 "local_model_path": ("STRING", {"default": "", "multiline": True, "tooltip": "Optional local model path (safetensors dir/file or GGUF file) - overrides model selection. Use for full safetensors models or custom local GGUF files."}),
                 "mmproj_path": ("STRING", {"default": "", "tooltip": "Optional path to the vision mmproj (.gguf) for GGUF image/video mode. Auto-detected next to the model or downloaded from the catalog repo when missing."}),
                 "auto_retry": ("BOOLEAN", {"default": True, "tooltip": "If the generated prompt is empty, degenerate/repetitive, or a refusal, retry once with the next seed."}),
+                "use_negative_prompt": ("BOOLEAN", {"default": True, "tooltip": "Apply the negative prompt text to the generation request so the model writes around those elements."}),
+                "negative_prompt": ("STRING", {"default": "", "multiline": True, "tooltip": "Optional negative prompt: keywords or natural language describing what the generated prompt/scene must NOT contain. Used when use_negative_prompt is on."}),
             },
         }
 
@@ -535,6 +572,8 @@ class PROMPTFORGE_PromptEnhancer:
         local_model_path="",
         mmproj_path="",
         auto_retry=True,
+        use_negative_prompt=True,
+        negative_prompt="",
     ):
         print("[PromptForge] request received.")
         override_text = (system_prompt_override or "").strip()
@@ -552,12 +591,22 @@ class PROMPTFORGE_PromptEnhancer:
         duration_line = ""
         if sys_text and "{video_seconds}" in sys_text:
             sys_text = sys_text.replace("{video_seconds}", duration_text)
-        elif mode == "video" or "minimax" in (enhancement_preset or "").lower():
+        elif "minimax" in (enhancement_preset or "").lower():
             duration_line = f"Target video duration: {duration_text} seconds."
         guard = OUTPUT_GUARD
         if disable_thinking:
             guard += " Do not output chain-of-thought or reasoning; start with the final prompt."
-        parts = [p for p in (user_text, duration_line, sys_text, guard) if p and p.strip()]
+        negative_text = (negative_prompt or "").strip()
+        negative_line = ""
+        if use_negative_prompt and negative_text:
+            negative_line = (
+                "# Negative constraints\n"
+                "The generated prompt and the scene it describes must NOT contain any of the following: "
+                + negative_text +
+                ". Do not mention, describe, imply, or approximate these elements; write the scene so they are absent instead, "
+                "and never name them inside the prompt itself."
+            )
+        parts = [p for p in (user_text, duration_line, sys_text, negative_line, guard) if p and p.strip()]
         full_prompt = "\n\n".join(parts)
 
         eff_local = (local_model_path or "").strip()
@@ -711,7 +760,7 @@ class PROMPTFORGE_PromptEnhancer:
         if gguf_path is None:
             raise ValueError("[PromptForge] No GGUF model selected / available. Put the .gguf in a scanned models dir (text_encoders / LLM / gguf) or set local_model_path.")
 
-        images = self._mode_images(mode, image, image2, image3, video, frame_count) if mode in ("image", "video") else []
+        images = self._mode_images(mode, image, image2, image3, video, frame_count) if mode != "text_only" else []
         mmproj = _resolve_mmproj(gguf_path, entry, mmproj_path) if images else None
         if images and mmproj is None:
             raise ValueError("[PromptForge] Vision GGUF needs an mmproj file next to the model (e.g. mmproj-F16.gguf). Put one in the same folder, set mmproj_path, or switch mode to text_only.")
@@ -805,7 +854,9 @@ class PROMPTFORGE_PromptEnhancer:
         if not src:
             raise ValueError("[PromptForge] No text encoder selected.")
 
-        quant = quantization or "auto"
+        quant = {"8bit": "q8", "4bit": "q4"}.get(quantization or "auto", quantization or "auto")
+        if quant in ("q5", "q6"):
+            raise ValueError("[PromptForge] q5/q6 are GGUF quant levels; for safetensors use auto, fp16, q8 or q4.")
         src_path = Path(src)
         if not src_path.exists():
             from huggingface_hub import snapshot_download
@@ -821,7 +872,7 @@ class PROMPTFORGE_PromptEnhancer:
             if quant in ("q8", "q4") and not src_path.is_dir():
                 raise ValueError("[PromptForge] q8/q4 quantization needs an HF model directory; use auto/fp16 for single-file ComfyUI text encoders.")
             quant_cfg = BitsAndBytesConfig(load_in_8bit=(quant == "q8"), load_in_4bit=(quant == "q4")) if quant in ("q8", "q4") else None
-            if mode in ("image", "video"):
+            if mode != "text_only":
                 model = AutoVision.from_pretrained(src, quantization_config=quant_cfg, torch_dtype=torch.float16, device_map="auto")
             else:
                 from transformers import AutoModelForCausalLM
@@ -925,26 +976,28 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     def _clip_images(self, mode, image, image2, image3, video, frame_count):
         """Build the [1, H, W, C] tensor list ComfyUI multimodal tokenizers expect."""
+        if mode == "text_only":
+            return []
         images = []
-        if mode == "video":
-            if torch.is_tensor(video) and video.ndim == 4 and video.shape[0] > 0:
-                steps = min(max(1, frame_count), video.shape[0])
-                idx = torch.linspace(0, video.shape[0] - 1, steps=steps).round().long()
-                images.extend(video[i:i + 1] for i in idx)
-        elif mode == "image":
-            for tensor in (image, image2, image3):
-                if torch.is_tensor(tensor) and tensor.ndim == 4:
-                    images.append(tensor[:1])
-                elif torch.is_tensor(tensor) and tensor.ndim == 3:
-                    images.append(tensor.unsqueeze(0))
+        for tensor in (image, image2, image3):
+            if torch.is_tensor(tensor) and tensor.ndim == 4:
+                images.append(tensor[:1])
+            elif torch.is_tensor(tensor) and tensor.ndim == 3:
+                images.append(tensor.unsqueeze(0))
+        if torch.is_tensor(video) and video.ndim == 4 and video.shape[0] > 0:
+            steps = min(max(1, frame_count), video.shape[0])
+            idx = torch.linspace(0, video.shape[0] - 1, steps=steps).round().long()
+            images.extend(video[i:i + 1] for i in idx)
         return [t.detach().float().cpu().clamp(0.0, 1.0) for t in images]
 
     def _mode_images(self, mode, image, image2, image3, video, frame_count):
-        if mode == "video":
-            return self._frames_from_input(video, frame_count)
-        if mode == "image":
-            return [p for p in (self._pil_from_input(image), self._pil_from_input(image2), self._pil_from_input(image3)) if p is not None]
-        return []
+        if mode == "text_only":
+            return []
+        images = [self._pil_from_input(image), self._pil_from_input(image2), self._pil_from_input(image3)]
+        images = [p for p in images if p is not None]
+        if video is not None:
+            images.extend(self._frames_from_input(video, frame_count))
+        return images
 
     def _pil_from_input(self, img):
         from PIL import Image

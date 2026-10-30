@@ -1,43 +1,388 @@
 {
   "heretic_hf_models": [
     {
+      "key": "huihui_qwen3_8b_abliterated",
+      "name": "Qwen3-8B abliterated (Huihui)",
+      "label": "Qwen3-8B abliterated (HF) [8B]",
+      "family": "Qwen3",
+      "repo_id": "huihui-ai/Huihui-Qwen3-8B-abliterated-v2",
+      "params_b": 8,
+      "vl_capable": false,
+      "image_capable": false,
+      "context_length": 32768,
+      "avail_match": ["Qwen3-8B", "abliterated"]
+    },
+    {
+      "key": "huihui_qwen3_14b_abliterated",
+      "name": "Qwen3-14B abliterated (Huihui)",
+      "label": "Qwen3-14B abliterated (HF) [14B]",
+      "family": "Qwen3",
+      "repo_id": "huihui-ai/Huihui-Qwen3-14B-abliterated-v2",
+      "params_b": 14,
+      "vl_capable": false,
+      "image_capable": false,
+      "context_length": 32768,
+      "avail_match": ["Qwen3-14B", "abliterated"]
+    },
+    {
+      "key": "huihui_qwen3vl_4b_abliterated",
+      "name": "Qwen3-VL-4B abliterated (Huihui)",
+      "label": "Qwen3-VL-4B abliterated (HF) [4B, vision]",
+      "family": "Qwen3-VL",
+      "repo_id": "huihui-ai/Huihui-Qwen3-VL-4B-Instruct-abliterated",
+      "params_b": 4,
+      "vl_capable": true,
+      "image_capable": true,
+      "context_length": 32768,
+      "avail_match": ["Qwen3-VL-4B", "abliterated"]
+    },
+    {
+      "key": "huihui_qwen25vl_7b_abliterated",
+      "name": "Qwen2.5-VL-7B abliterated (Huihui)",
+      "label": "Qwen2.5-VL-7B abliterated (HF) [7B, vision]",
+      "family": "Qwen2.5-VL",
+      "repo_id": "huihui-ai/Qwen2.5-VL-7B-Instruct-abliterated",
+      "params_b": 7,
+      "vl_capable": true,
+      "image_capable": true,
+      "context_length": 32768,
+      "avail_match": ["Qwen2.5-VL-7B", "abliterated"]
+    },
+    {
+      "key": "huihui_gemma3_12b_abliterated",
+      "name": "Gemma-3-12B abliterated (Huihui)",
+      "label": "Gemma-3-12B abliterated (HF) [12B, vision]",
+      "family": "Gemma",
+      "repo_id": "huihui-ai/gemma-3-12b-it-abliterated",
+      "params_b": 12,
+      "vl_capable": true,
+      "image_capable": true,
+      "context_length": 32768,
+      "avail_match": ["gemma-3-12b", "abliterated"]
+    },
+    {
+      "key": "failspy_llama3_8b_abliterated",
+      "name": "Llama-3-8B abliterated (failspy)",
+      "label": "Llama-3-8B abliterated (HF) [8B]",
+      "family": "Llama",
+      "repo_id": "failspy/Meta-Llama-3-8B-Instruct-abliterated-v3",
+      "params_b": 8,
+      "vl_capable": false,
+      "image_capable": false,
+      "context_length": 8192,
+      "avail_match": ["Llama-3-8B", "abliterated"]
+    },
+    {
       "key": "heretic_qwen35_9b",
       "name": "Qwen3.5-9B Defiant Fable Heretic (NEO-IMATRIX MAX)",
+      "label": "Qwen3.5-9B Defiant Fable Heretic (HF) [9B]",
+      "family": "Qwen3.5",
       "repo_id": "DavidAU/Qwen3.5-9B-The-Defiant-Fable-DARK-ROAST-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP",
       "params_b": 9,
       "vl_capable": true,
       "image_capable": true,
       "context_length": 65536,
-      "recommended_quant": "8bit",
-      "default_quant": "fp16"
+      "avail_match": ["Defiant"]
     },
     {
       "key": "heretic_qwen35_4b_thinking",
       "name": "Qwen3.5-4B Deckard Heretic Thinking (text-only OK, no image tower)",
+      "label": "Qwen3.5-4B Deckard Heretic Thinking (HF) [4B, text-only]",
+      "family": "Qwen3.5",
       "repo_id": "DavidAU/Qwen3.5-4B-Deckard-HERETIC-UNCENSORED-Thinking",
       "params_b": 4,
       "vl_capable": true,
       "image_capable": false,
       "context_length": 65536,
-      "recommended_quant": "4bit",
-      "default_quant": "fp16"
+      "avail_match": ["Deckard"]
     },
     {
       "key": "heretic_qwen36_27b",
       "name": "Qwen3.6-27B Fable Fusion Heretic",
+      "label": "Qwen3.6-27B Fable Fusion Heretic (HF) [27B]",
+      "family": "Qwen3.6",
       "repo_id": "DavidAU/Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-MTP",
       "params_b": 27,
       "vl_capable": true,
       "image_capable": true,
       "context_length": 65536,
-      "recommended_quant": "8bit",
-      "default_quant": "fp16"
+      "avail_match": ["Fable", "27B"]
     }
   ],
   "gguf_models": [
     {
+      "key": "gguf_qwen3_8b_abliterated",
+      "name": "Qwen3-8B abliterated GGUF (llama.cpp)",
+      "label": "Qwen3-8B abliterated GGUF [8B]",
+      "family": "Qwen3",
+      "repo_id": "mradermacher/Huihui-Qwen3-8B-abliterated-v2-GGUF",
+      "author": "mradermacher",
+      "params_b": 8,
+      "vl_capable": false,
+      "image_capable": false,
+      "base_dir": "LLM/GGUF",
+      "quant_files": {
+        "q4": "Huihui-Qwen3-8B-abliterated-v2.Q4_K_M.gguf",
+        "q5": "Huihui-Qwen3-8B-abliterated-v2.Q5_K_M.gguf",
+        "q6": "Huihui-Qwen3-8B-abliterated-v2.Q6_K.gguf",
+        "q8": "Huihui-Qwen3-8B-abliterated-v2.Q8_0.gguf"
+      },
+      "avail_match": ["Qwen3-8B", "abliterated"]
+    },
+    {
+      "key": "gguf_qwen3_14b_abliterated",
+      "name": "Qwen3-14B abliterated GGUF (llama.cpp)",
+      "label": "Qwen3-14B abliterated GGUF [14B]",
+      "family": "Qwen3",
+      "repo_id": "mradermacher/Huihui-Qwen3-14B-abliterated-v2-GGUF",
+      "author": "mradermacher",
+      "params_b": 14,
+      "vl_capable": false,
+      "image_capable": false,
+      "base_dir": "LLM/GGUF",
+      "quant_files": {
+        "q4": "Huihui-Qwen3-14B-abliterated-v2.Q4_K_M.gguf",
+        "q5": "Huihui-Qwen3-14B-abliterated-v2.Q5_K_M.gguf",
+        "q6": "Huihui-Qwen3-14B-abliterated-v2.Q6_K.gguf",
+        "q8": "Huihui-Qwen3-14B-abliterated-v2.Q8_0.gguf"
+      },
+      "avail_match": ["Qwen3-14B", "abliterated"]
+    },
+    {
+      "key": "gguf_qwen3vl_4b_abliterated",
+      "name": "Qwen3-VL-4B abliterated GGUF (vision)",
+      "label": "Qwen3-VL-4B abliterated GGUF [4B, vision]",
+      "family": "Qwen3-VL",
+      "repo_id": "mradermacher/Qwen3-VL-4B-Instruct-abliterated-GGUF",
+      "author": "mradermacher",
+      "params_b": 4,
+      "vl_capable": true,
+      "image_capable": true,
+      "base_dir": "LLM/GGUF",
+      "mmproj_file": "Qwen3-VL-4B-Instruct-abliterated.mmproj-Q8_0.gguf",
+      "quant_files": {
+        "q4": "Qwen3-VL-4B-Instruct-abliterated.Q4_K_M.gguf",
+        "q5": "Qwen3-VL-4B-Instruct-abliterated.Q5_K_M.gguf",
+        "q6": "Qwen3-VL-4B-Instruct-abliterated.Q6_K.gguf",
+        "q8": "Qwen3-VL-4B-Instruct-abliterated.Q8_0.gguf"
+      },
+      "avail_match": ["Qwen3-VL-4B", "abliterated"]
+    },
+    {
+      "key": "gguf_qwen3vl_8b_abliterated",
+      "name": "Qwen3-VL-8B abliterated GGUF (vision)",
+      "label": "Qwen3-VL-8B abliterated GGUF [8B, vision]",
+      "family": "Qwen3-VL",
+      "repo_id": "mradermacher/Qwen3-VL-8B-Instruct-abliterated-GGUF",
+      "author": "mradermacher",
+      "params_b": 8,
+      "vl_capable": true,
+      "image_capable": true,
+      "base_dir": "LLM/GGUF",
+      "mmproj_file": "Qwen3-VL-8B-Instruct-abliterated.mmproj-Q8_0.gguf",
+      "quant_files": {
+        "q4": "Qwen3-VL-8B-Instruct-abliterated.Q4_K_M.gguf",
+        "q5": "Qwen3-VL-8B-Instruct-abliterated.Q5_K_M.gguf",
+        "q6": "Qwen3-VL-8B-Instruct-abliterated.Q6_K.gguf",
+        "q8": "Qwen3-VL-8B-Instruct-abliterated.Q8_0.gguf"
+      },
+      "avail_match": ["Qwen3-VL-8B", "abliterated"]
+    },
+    {
+      "key": "gguf_qwen25vl_7b_abliterated",
+      "name": "Qwen2.5-VL-7B abliterated GGUF (vision)",
+      "label": "Qwen2.5-VL-7B abliterated GGUF [7B, vision]",
+      "family": "Qwen2.5-VL",
+      "repo_id": "mradermacher/Qwen2.5-VL-7B-Instruct-abliterated-GGUF",
+      "author": "mradermacher",
+      "params_b": 7,
+      "vl_capable": true,
+      "image_capable": true,
+      "base_dir": "LLM/GGUF",
+      "mmproj_file": "Qwen2.5-VL-7B-Instruct-abliterated.mmproj-Q8_0.gguf",
+      "quant_files": {
+        "q4": "Qwen2.5-VL-7B-Instruct-abliterated.Q4_K_M.gguf",
+        "q5": "Qwen2.5-VL-7B-Instruct-abliterated.Q5_K_M.gguf",
+        "q6": "Qwen2.5-VL-7B-Instruct-abliterated.Q6_K.gguf",
+        "q8": "Qwen2.5-VL-7B-Instruct-abliterated.Q8_0.gguf"
+      },
+      "avail_match": ["Qwen2.5-VL-7B", "abliterated"]
+    },
+    {
+      "key": "gguf_qwen25_14b_abliterated",
+      "name": "Qwen2.5-14B abliterated GGUF (llama.cpp)",
+      "label": "Qwen2.5-14B abliterated GGUF [14B]",
+      "family": "Qwen2.5",
+      "repo_id": "mradermacher/Qwen2.5-14B-Instruct-abliterated-GGUF",
+      "author": "mradermacher",
+      "params_b": 14,
+      "vl_capable": false,
+      "image_capable": false,
+      "base_dir": "LLM/GGUF",
+      "quant_files": {
+        "q4": "Qwen2.5-14B-Instruct-abliterated.Q4_K_M.gguf",
+        "q5": "Qwen2.5-14B-Instruct-abliterated.Q5_K_M.gguf",
+        "q6": "Qwen2.5-14B-Instruct-abliterated.Q6_K.gguf",
+        "q8": "Qwen2.5-14B-Instruct-abliterated.Q8_0.gguf"
+      },
+      "avail_match": ["Qwen2.5-14B", "abliterated"]
+    },
+    {
+      "key": "gguf_phi4_14b_abliterated",
+      "name": "Phi-4-14B abliterated GGUF (llama.cpp)",
+      "label": "Phi-4-14B abliterated GGUF [14B]",
+      "family": "Phi",
+      "repo_id": "mradermacher/phi-4-abliterated-GGUF",
+      "author": "mradermacher",
+      "params_b": 14,
+      "vl_capable": false,
+      "image_capable": false,
+      "base_dir": "LLM/GGUF",
+      "quant_files": {
+        "q4": "phi-4-abliterated.Q4_K_M.gguf",
+        "q5": "phi-4-abliterated.Q5_K_M.gguf",
+        "q6": "phi-4-abliterated.Q6_K.gguf",
+        "q8": "phi-4-abliterated.Q8_0.gguf"
+      },
+      "avail_match": ["phi-4", "abliterated"]
+    },
+    {
+      "key": "gguf_llama33_8b_heretic",
+      "name": "Llama-3.3-8B Thinking Heretic GGUF (llama.cpp)",
+      "label": "Llama-3.3-8B Thinking Heretic GGUF [8B]",
+      "family": "Llama",
+      "repo_id": "mradermacher/Llama3.3-8B-Instruct-Thinking-Heretic-Uncensored-Claude-4.5-Opus-High-Reasoning-i1-GGUF",
+      "author": "mradermacher",
+      "params_b": 8,
+      "vl_capable": false,
+      "image_capable": false,
+      "base_dir": "LLM/GGUF",
+      "quant_files": {
+        "q4": "Llama3.3-8B-Instruct-Thinking-Heretic-Uncensored-Claude-4.5-Opus-High-Reasoning.i1-Q4_K_M.gguf",
+        "q5": "Llama3.3-8B-Instruct-Thinking-Heretic-Uncensored-Claude-4.5-Opus-High-Reasoning.i1-Q5_K_M.gguf",
+        "q6": "Llama3.3-8B-Instruct-Thinking-Heretic-Uncensored-Claude-4.5-Opus-High-Reasoning.i1-Q6_K.gguf"
+      },
+      "avail_match": ["Llama3.3-8B", "heretic"]
+    },
+    {
+      "key": "gguf_ministral_8b_abliterated",
+      "name": "Ministral-8B abliterated GGUF (llama.cpp)",
+      "label": "Ministral-8B abliterated GGUF [8B]",
+      "family": "Mistral",
+      "repo_id": "mradermacher/Ministral-8B-Instruct-2410-abliterated-i1-GGUF",
+      "author": "mradermacher",
+      "params_b": 8,
+      "vl_capable": false,
+      "image_capable": false,
+      "base_dir": "LLM/GGUF",
+      "quant_files": {
+        "q4": "ministral-8B-Instruct-2410-abliterated.i1-Q4_K_M.gguf",
+        "q5": "ministral-8B-Instruct-2410-abliterated.i1-Q5_K_M.gguf",
+        "q6": "ministral-8B-Instruct-2410-abliterated.i1-Q6_K.gguf"
+      },
+      "avail_match": ["Ministral-8B", "abliterated"]
+    },
+    {
+      "key": "gguf_gemma4_12b_heretic",
+      "name": "Gemma-4-12B Heretic Abliterated GGUF (vision)",
+      "label": "Gemma-4-12B Heretic GGUF [12B, vision]",
+      "family": "Gemma",
+      "repo_id": "culturerevolt/gemma-4-12b-heretic-abliterated-GGUF",
+      "author": "culturerevolt",
+      "params_b": 12,
+      "vl_capable": true,
+      "image_capable": true,
+      "base_dir": "LLM/GGUF",
+      "mmproj_file": "gemma-4-12b-heretic-mmproj-f16.gguf",
+      "quant_files": {
+        "q4": "gemma-4-12b-heretic-Q4_K_M.gguf",
+        "q5": "gemma-4-12b-heretic-Q5_K_M.gguf",
+        "q6": "gemma-4-12b-heretic-Q6_K.gguf",
+        "q8": "gemma-4-12b-heretic-abliterated-Q8_0.gguf"
+      },
+      "avail_match": ["gemma-4-12b", "heretic"]
+    },
+    {
+      "key": "gguf_gemma4_e4b_heretic",
+      "name": "Gemma-4-E4B Heretic GGUF (vision)",
+      "label": "Gemma-4-E4B Heretic GGUF [4B, vision]",
+      "family": "Gemma",
+      "repo_id": "llmfan46/gemma-4-E4B-it-ultra-uncensored-heretic-GGUF",
+      "author": "llmfan46",
+      "params_b": 4,
+      "vl_capable": true,
+      "image_capable": true,
+      "base_dir": "LLM/GGUF",
+      "mmproj_file": "gemma-4-E4B-it-mmproj-BF16.gguf",
+      "quant_files": {
+        "q4": "gemma-4-E4B-it-ultra-uncensored-heretic-Q4_K_M.gguf",
+        "q5": "gemma-4-E4B-it-ultra-uncensored-heretic-Q5_K_M.gguf",
+        "q6": "gemma-4-E4B-it-ultra-uncensored-heretic-Q6_K.gguf",
+        "q8": "gemma-4-E4B-it-ultra-uncensored-heretic-Q8_0.gguf"
+      },
+      "avail_match": ["gemma-4-e4b", "heretic"]
+    },
+    {
+      "key": "gguf_gemma4_12b_hauhau",
+      "name": "Gemma-4-12B QAT Uncensored GGUF (vision)",
+      "label": "Gemma-4-12B QAT Uncensored GGUF [12B, vision]",
+      "family": "Gemma",
+      "repo_id": "HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced",
+      "author": "HauhauCS",
+      "params_b": 12,
+      "vl_capable": true,
+      "image_capable": true,
+      "base_dir": "LLM/GGUF",
+      "mmproj_file": "mmproj-Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf",
+      "quant_files": {
+        "q4": "Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf"
+      },
+      "avail_match": ["Gemma4-12B", "Hauhau"]
+    },
+    {
+      "key": "gguf_qwen38_9b_heretic",
+      "name": "Qwen3.8-9B Heretic Uncensored GGUF (vision)",
+      "label": "Qwen3.8-9B Heretic GGUF [9B, vision]",
+      "family": "Qwen3.8",
+      "repo_id": "mradermacher/Qwen3.8-9B-heretic-uncensored-GGUF",
+      "author": "mradermacher",
+      "params_b": 9,
+      "vl_capable": true,
+      "image_capable": true,
+      "base_dir": "LLM/GGUF",
+      "mmproj_file": "Qwen3.8-9B-heretic-uncensored.mmproj-Q8_0.gguf",
+      "quant_files": {
+        "q4": "Qwen3.8-9B-heretic-uncensored.Q4_K_M.gguf",
+        "q5": "Qwen3.8-9B-heretic-uncensored.Q5_K_M.gguf",
+        "q6": "Qwen3.8-9B-heretic-uncensored.Q6_K.gguf",
+        "q8": "Qwen3.8-9B-heretic-uncensored.Q8_0.gguf"
+      },
+      "avail_match": ["Qwen3.8-9B", "heretic"]
+    },
+    {
+      "key": "gguf_qwen35_4b_hauhau",
+      "name": "Qwen3.5-4B Uncensored HauhauCS GGUF (vision)",
+      "label": "Qwen3.5-4B Uncensored GGUF [4B, vision]",
+      "family": "Qwen3.5",
+      "repo_id": "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
+      "author": "HauhauCS",
+      "params_b": 4,
+      "vl_capable": true,
+      "image_capable": true,
+      "base_dir": "LLM/GGUF",
+      "mmproj_file": "mmproj-Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16.gguf",
+      "quant_files": {
+        "q4": "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+        "q6": "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q6_K.gguf",
+        "q8": "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf"
+      },
+      "avail_match": ["Qwen3.5-4B", "Hauhau"]
+    },
+    {
       "key": "gguf_qwen35_9b_fable",
       "name": "Qwen3.5-9B Defiant Fable GGUF (llama.cpp)",
+      "label": "Qwen3.5-9B Defiant Fable GGUF [9B]",
+      "family": "Qwen3.5",
       "repo_id": "DavidAU/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-GGUF",
       "author": "DavidAU",
       "params_b": 9,
@@ -46,14 +391,18 @@
       "base_dir": "LLM/GGUF",
       "mmproj_file": "mmproj-BF16.gguf",
       "quant_files": {
-        "fp16": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-Q8_0.gguf",
-        "8bit": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-Q8_0.gguf",
-        "4bit": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-Q4_K_M.gguf"
-      }
+        "q4": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-MTP-Q4_K_M.gguf",
+        "q5": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-MTP-Q5_K_M.gguf",
+        "q6": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-MTP-Q6_K.gguf",
+        "q8": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-MTP-Q8_0.gguf"
+      },
+      "avail_match": ["Defiant"]
     },
     {
       "key": "gguf_qwen36_27b_fusion",
       "name": "Qwen3.6-27B Fable Fusion GGUF (llama.cpp)",
+      "label": "Qwen3.6-27B Fable Fusion GGUF [27B]",
+      "family": "Qwen3.6",
       "repo_id": "DavidAU/Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP-GGUF",
       "author": "DavidAU",
       "params_b": 27,
@@ -62,26 +411,32 @@
       "base_dir": "LLM/GGUF",
       "mmproj_file": "mmproj-BF16.gguf",
       "quant_files": {
-        "fp16": "Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-Q8_0.gguf",
-        "8bit": "Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-Q8_0.gguf",
-        "4bit": "Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-Q4_K_M.gguf"
-      }
+        "q4": "Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q4_K_M.gguf",
+        "q5": "Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q5_K_M.gguf",
+        "q6": "Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-AMD-MTP-Q6_K.gguf",
+        "q8": "Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf"
+      },
+      "avail_match": ["Fable", "27B"]
     },
     {
       "key": "gguf_qwen35_4b_claude",
       "name": "Qwen3.5-4B Claude OS Heretic GGUF (llama.cpp, text-only)",
+      "label": "Qwen3.5-4B Claude OS Heretic GGUF [4B]",
+      "family": "Qwen3.5",
       "repo_id": "mradermacher/Qwen3.5-4B-Claude-4.6-OS-Auto-Variable-HERETIC-UNCENSORED-THINKING-GGUF",
       "author": "mradermacher",
       "params_b": 4,
       "vl_capable": true,
       "image_capable": false,
       "base_dir": "LLM/GGUF",
-      "mmproj_file": "Qwen3.5-4B-Claude-4.6-OS-Auto-Variable-HERETIC-UNCENSORED-THINKING.mmproj-f16.gguf",
+      "mmproj_file": "Qwen3.5-4B-Claude-4.6-OS-Auto-Variable-HERETIC-UNCENSORED-THINKING.mmproj-Q8_0.gguf",
       "quant_files": {
-        "fp16": "Qwen3.5-4B-Claude-4.6-OS-Auto-Variable-HERETIC-UNCENSORED-THINKING.Q8_0.gguf",
-        "8bit": "Qwen3.5-4B-Claude-4.6-OS-Auto-Variable-HERETIC-UNCENSORED-THINKING.Q8_0.gguf",
-        "4bit": "Qwen3.5-4B-Claude-4.6-OS-Auto-Variable-HERETIC-UNCENSORED-THINKING.Q4_K_M.gguf"
-      }
+        "q4": "Qwen3.5-4B-Claude-4.6-OS-Auto-Variable-HERETIC-UNCENSORED-THINKING.Q4_K_M.gguf",
+        "q5": "Qwen3.5-4B-Claude-4.6-OS-Auto-Variable-HERETIC-UNCENSORED-THINKING.Q5_K_M.gguf",
+        "q6": "Qwen3.5-4B-Claude-4.6-OS-Auto-Variable-HERETIC-UNCENSORED-THINKING.Q6_K.gguf",
+        "q8": "Qwen3.5-4B-Claude-4.6-OS-Auto-Variable-HERETIC-UNCENSORED-THINKING.Q8_0.gguf"
+      },
+      "avail_match": ["Claude", "4B"]
     }
   ],
   "local_scan_dirs": [
