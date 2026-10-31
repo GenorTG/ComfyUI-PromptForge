@@ -469,6 +469,8 @@ PRESET_OPTIONS = ["auto"] + sorted(
 
 MODE_OPTIONS = ["text_only", "inputs"]
 QUANT_OPTIONS = ["auto", "fp16", "q8", "q6", "q5", "q4"]
+KV_CACHE_OPTIONS = ["f16", "q8_0", "q5_1", "q5_0", "q4_1", "q4_0"]
+FLASH_ATTN_OPTIONS = ["auto", "on", "off"]
 GGUF_QUANT_ORDER = ("q8", "q6", "q5", "q4")
 
 
@@ -546,7 +548,10 @@ def _hf_compute_dtype():
 def _hf_max_memory(reserve=3 * 1024 ** 3):
     """GPU budget for device_map='auto', leaving headroom for activations and KV cache."""
     import psutil
-    free_bytes = torch.cuda.mem_get_info()[0]
+    try:
+        free_bytes = torch.cuda.mem_get_info()[0]
+    except Exception:
+        return None
     budget = max(int(free_bytes) - reserve, 768 * 1024 ** 2)
     return {torch.cuda.current_device(): budget, "cpu": psutil.virtual_memory().available}
 
@@ -559,12 +564,16 @@ def _free_vram(keep=None):
         if keep is not None:
             keep_loaded = [m for m in model_management.current_loaded_models if m.model is keep]
         model_management.free_memory(10 ** 30, model_management.get_torch_device(), keep_loaded=keep_loaded)
+        model_management.free_memory(10 ** 30, torch.device("cpu"))
         model_management.soft_empty_cache()
     except Exception:
         pass
     gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    try:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
 
 
 _GGUF_VALUE_SIZE = {0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1, 10: 8, 11: 8, 12: 8}
@@ -663,24 +672,15 @@ def _gguf_layer_budget(path, n_ctx, mmproj_path=None):
         kv_bytes = kv_per_token * n_ctx
     weights = path.stat().st_size
     extra = mmproj_path.stat().st_size if mmproj_path is not None else 0
-    free = torch.cuda.mem_get_info()[0]
+    try:
+        free = torch.cuda.mem_get_info()[0]
+    except Exception:
+        return None
     budget = free - 1536 * 1024 ** 2 - extra
     if budget <= 0:
         return 0, n_layers
     per_layer = (weights + kv_bytes) / n_layers
     return max(0, min(n_layers, int(budget / per_layer))), n_layers
-
-
-def _gguf_context_steps(base_ctx, min_ctx):
-    steps = []
-    for ctx in (base_ctx, 16384, 12288, 8192, 6144, 4096, 3072, 2048):
-        if ctx < min_ctx or ctx > base_ctx:
-            continue
-        if ctx not in steps:
-            steps.append(ctx)
-    if not steps:
-        steps.append(int(base_ctx))
-    return steps
 
 
 def _gguf_vision_handler(name):
@@ -843,10 +843,19 @@ class PROMPTFORGE_PromptEnhancer:
                 "source": (SOURCE_OPTIONS, {"default": "safetensors", "tooltip": "Where the text model comes from: safetensors (HF dir / single-file text encoder, loaded by the node), GGUF (llama.cpp), or connected clip (use the CLIP input; no model is loaded)."}),
                 "safetensors_model": (SAFETENSORS_MODEL_OPTIONS, {"default": _preferred_option(SAFETENSORS_MODEL_OPTIONS), "tooltip": "Safetensors / HF model to load when source is safetensors. [AVAILABLE] entries already exist locally."}),
                 "gguf_model": (GGUF_MODEL_OPTIONS, {"default": _preferred_option(GGUF_MODEL_OPTIONS), "tooltip": "GGUF model to load when source is GGUF. [AVAILABLE] entries already exist locally; otherwise put the .gguf in a scanned models dir."}),
-                "quantization": (QUANT_OPTIONS, {"default": "auto", "tooltip": "Safetensors: auto/fp16/q8/q4 (q8/q4 = live bitsandbytes). GGUF: q8/q6/q5/q4 selects the GGUF quant file. auto = fp16 for safetensors, q8 for GGUF."}),
+                "quantization": (QUANT_OPTIONS, {"default": "auto", "tooltip": "Safetensors: auto/fp16/q8/q4 (q8/q4 = live bitsandbytes). GGUF: q8/q6/q5/q4 selects the GGUF quant file. auto = fp16 for safetensors, q8 for GGUF. Unsupported combinations fall back with a warning."}),
+                "context_size": ("INT", {"default": 16384, "min": 512, "max": 262144, "step": 512, "tooltip": "GGUF context length (n_ctx). Raise it for long prompts or video, lower it to save VRAM."}),
+                "gpu_layers": ("INT", {"default": -1, "min": -1, "max": 999, "tooltip": "GGUF layers on the GPU: -1 = all, 0 = CPU only. Lower it when the model plus its KV cache does not fit."}),
+                "batch_size": ("INT", {"default": 2048, "min": 64, "max": 32768, "step": 64, "tooltip": "GGUF prompt-processing batch (n_batch). Larger is faster but uses more VRAM."}),
+                "ubatch_size": ("INT", {"default": 512, "min": 32, "max": 16384, "step": 32, "tooltip": "GGUF micro-batch (n_ubatch). Capped to batch_size when larger."}),
+                "kv_cache_type": (KV_CACHE_OPTIONS, {"default": "f16", "tooltip": "KV cache precision: f16 = full quality, q8_0 = near-lossless and ~half the KV memory, q5/q4 = smaller but lower quality."}),
+                "offload_kqv": ("BOOLEAN", {"default": True, "tooltip": "Keep the GGUF KV cache on the GPU. Turn off to move it to system RAM and save VRAM."}),
+                "swa_full": ("BOOLEAN", {"default": False, "tooltip": "Keep the full-size sliding-window cache. Off uses the 1024-token window and saves several GB on Gemma 3/4."}),
+                "flash_attn": (FLASH_ATTN_OPTIONS, {"default": "auto", "tooltip": "llama.cpp flash attention: auto lets the backend decide, on forces it, off disables it."}),
+                "auto_fit": ("BOOLEAN", {"default": False, "tooltip": "When gpu_layers is -1, compute the layer split from free VRAM instead of putting every layer on the GPU."}),
                 "enhancement_preset": (PRESET_OPTIONS, {"default": "auto", "tooltip": "Preset system prompt: auto, or one of the PromptForge presets (Krea 2 T2I, MOSS Image T2I, Qwen Image T2I, generic styles...)."}),
                 "seed": ("INT", {"default": 1, "min": 1, "max": 2 ** 32 - 1, "tooltip": "Sampling seed for the Qwen-style generation. 1 = deterministic-ish / keep last logic."}),
-                "max_tokens": ("INT", {"default": 8192, "min": 32, "max": 16384, "tooltip": "Max new tokens for the enhanced prompt."}),
+                "max_tokens": ("INT", {"default": 8192, "min": 32, "max": 65536, "tooltip": "Max new tokens for the enhanced prompt. Not capped by the node; keep it below context_size for GGUF."}),
                 "temperature": ("FLOAT", {"default": 0.7, "min": 0.1, "max": 1.0, "step": 0.01, "tooltip": "Sampling temperature."}),
                 "top_p": ("FLOAT", {"default": 0.9, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "Nucleus sampling cutoff. ComfyUI's CLIP sampler may fall back to top_p=1.0 automatically if torch raises an overlap error."}),
                 "top_k": ("INT", {"default": 0, "min": 0, "max": 100, "tooltip": "Top-K (Qwen3.5 heretic recommended: 20). 0 = model default."}),
@@ -887,6 +896,15 @@ class PROMPTFORGE_PromptEnhancer:
         safetensors_model,
         gguf_model,
         quantization,
+        context_size,
+        gpu_layers,
+        batch_size,
+        ubatch_size,
+        kv_cache_type,
+        offload_kqv,
+        swa_full,
+        flash_attn,
+        auto_fit,
         enhancement_preset,
         seed,
         max_tokens,
@@ -936,6 +954,7 @@ class PROMPTFORGE_PromptEnhancer:
         guard = OUTPUT_GUARD
         if disable_thinking:
             guard += " Do not output chain-of-thought or reasoning; start with the final prompt."
+        media_line = self._media_inventory(mode, image, image2, image3, video, frame_count)
         negative_text = (negative_prompt or "").strip()
         negative_line = ""
         if use_negative_prompt and negative_text:
@@ -946,7 +965,7 @@ class PROMPTFORGE_PromptEnhancer:
                 ". Write the scene so they are absent, converting each exclusion into a positive description "
                 "of the desired state; never name them inside the prompt itself."
             )
-        parts = [p for p in (user_text, duration_line, sys_text, negative_line, guard) if p and p.strip()]
+        parts = [p for p in (user_text, duration_line, sys_text, media_line, negative_line, guard) if p and p.strip()]
         full_prompt = "\n\n".join(parts)
 
         eff_local = (local_model_path or "").strip()
@@ -982,6 +1001,15 @@ class PROMPTFORGE_PromptEnhancer:
             engine=engine,
             model_name=model_name,
             quantization=quantization,
+            context_size=context_size,
+            gpu_layers=gpu_layers,
+            batch_size=batch_size,
+            ubatch_size=ubatch_size,
+            kv_cache_type=kv_cache_type,
+            offload_kqv=offload_kqv,
+            swa_full=swa_full,
+            flash_attn=flash_attn,
+            auto_fit=auto_fit,
             max_tokens=max_tokens,
             temperature=temperature,
             top_p=top_p,
@@ -1058,10 +1086,13 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Generation dispatch
     # ------------------------------------------------------------------ #
-    def _generate(self, full_prompt, mode, engine, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
+    def _generate(self, full_prompt, mode, engine, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, auto_fit, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
         if engine == "gguf":
             return self._generate_gguf(
                 full_prompt=full_prompt, mode=mode, model_name=model_name, quantization=quantization,
+                context_size=context_size, gpu_layers=gpu_layers, batch_size=batch_size, ubatch_size=ubatch_size,
+                kv_cache_type=kv_cache_type, offload_kqv=offload_kqv, swa_full=swa_full,
+                flash_attn=flash_attn, auto_fit=auto_fit,
                 max_tokens=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k,
                 num_beams=num_beams, repetition_penalty=repetition_penalty, seed=seed,
                 image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
@@ -1082,7 +1113,7 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # GGUF / llama.cpp engine
     # ------------------------------------------------------------------ #
-    def _generate_gguf(self, full_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, image, image2, image3, video, frame_count, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
+    def _generate_gguf(self, full_prompt, mode, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, auto_fit, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, image, image2, image3, video, frame_count, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
         entry = None
         gguf_path = None
         eff_local = (local_model_path or "").strip() or _local_model_option(model_name)
@@ -1107,21 +1138,35 @@ class PROMPTFORGE_PromptEnhancer:
             raise ValueError("[PromptForge] Vision GGUF needs an mmproj file next to the model (e.g. mmproj-F16.gguf). Put one in the same folder, set mmproj_path, or switch mode to text_only.")
 
         from llama_cpp import Llama
-        defaults = (entry or {}).get("defaults") or {}
-        media_tokens = len(images) * 1024
-        text_tokens = len(full_prompt) // 3
-        required_ctx = text_tokens + media_tokens + max_tokens + 512
-        if required_ctx > 32768:
-            raise ValueError(
-                f"[PromptForge] this request needs about {required_ctx} context tokens (text + {len(images)} image/video inputs + output), "
-                "more than the 32768-token limit. Reduce frame_count or the number of reference images."
-            )
-        configured_ctx = int(defaults["context_length"]) if defaults.get("context_length") else 16384
-        base_ctx = min(32768, max(16384, configured_ctx, ((required_ctx + 1023) // 1024) * 1024))
+        from llama_cpp._ggml import GGMLType
+        from llama_cpp.llama_cpp import llama_flash_attn_type
+
+        n_ctx = max(512, int(context_size))
+        estimated = len(full_prompt) // 3 + len(images) * 1024 + int(max_tokens) + 512
+        if estimated > n_ctx:
+            print(f"[PromptForge] context_size={n_ctx} may truncate this request (about {estimated} tokens needed).")
+
+        kv_type = int(getattr(GGMLType, f"GGML_TYPE_{str(kv_cache_type).upper()}", GGMLType.GGML_TYPE_F16))
+        flash_types = {
+            "auto": int(llama_flash_attn_type.LLAMA_FLASH_ATTN_TYPE_AUTO),
+            "on": int(llama_flash_attn_type.LLAMA_FLASH_ATTN_TYPE_ENABLED),
+            "off": int(llama_flash_attn_type.LLAMA_FLASH_ATTN_TYPE_DISABLED),
+        }
+        flash_type = flash_types.get(flash_attn, flash_types["auto"])
+        n_batch = min(max(64, int(batch_size)), n_ctx)
+        n_ubatch = max(32, min(int(ubatch_size), n_batch))
+
         llama_kwargs = {
             "model_path": str(gguf_path),
-            "n_ctx": base_ctx,
-            "n_gpu_layers": int(defaults.get("gpu_layers") if defaults.get("gpu_layers") is not None else -1),
+            "n_ctx": n_ctx,
+            "n_batch": n_batch,
+            "n_ubatch": n_ubatch,
+            "n_gpu_layers": int(gpu_layers),
+            "offload_kqv": bool(offload_kqv),
+            "swa_full": bool(swa_full),
+            "type_k": kv_type,
+            "type_v": kv_type,
+            "flash_attn_type": flash_type,
             "verbose": False,
         }
         if images:
@@ -1136,22 +1181,27 @@ class PROMPTFORGE_PromptEnhancer:
             chat_format = _gguf_chat_format(f"{gguf_path.name} {(entry or {}).get('name', '')}")
             if chat_format:
                 llama_kwargs["chat_format"] = chat_format
+        if llama_kwargs["n_gpu_layers"] == -1 and auto_fit:
+            budget = _gguf_layer_budget(gguf_path, n_ctx, mmproj)
+            if budget is not None:
+                fitted, total = budget
+                if fitted < total:
+                    print(f"[PromptForge] auto_fit: {total - fitted}/{total} layers on CPU for a {n_ctx}-token context.")
+                llama_kwargs["n_gpu_layers"] = fitted
         if llama_kwargs["n_gpu_layers"] != 0:
             _free_vram()
-            if "swa_full" in inspect.signature(Llama.__init__).parameters:
-                llama_kwargs["swa_full"] = False
-            if llama_kwargs["n_gpu_layers"] == -1:
-                budget = _gguf_layer_budget(gguf_path, base_ctx, mmproj)
-                if budget is not None:
-                    layers, total = budget
-                    if layers < total:
-                        print(f"[PromptForge] offloading {total - layers}/{total} layers to CPU to fit a {base_ctx}-token context.")
-                    llama_kwargs["n_gpu_layers"] = layers
+
+        fallbacks = []
+        if kv_type != int(GGMLType.GGML_TYPE_F16):
+            fallbacks.append(("kv_cache_type", {"type_k": int(GGMLType.GGML_TYPE_F16), "type_v": int(GGMLType.GGML_TYPE_F16)}))
+        if flash_type == flash_types["on"]:
+            fallbacks.append(("flash_attn", {"flash_attn_type": flash_types["auto"]}))
+        if bool(swa_full):
+            fallbacks.append(("swa_full", {"swa_full": False}))
+
         llm = None
         last_error = None
-        steps = _gguf_context_steps(base_ctx, required_ctx)
-        for ctx in steps:
-            llama_kwargs["n_ctx"] = ctx
+        for index in range(len(fallbacks) + 1):
             try:
                 llm = Llama(**llama_kwargs)
                 break
@@ -1160,12 +1210,17 @@ class PROMPTFORGE_PromptEnhancer:
                 if "Failed to create llama context" not in message:
                     raise
                 last_error = message
-                print(f"[PromptForge] llama.cpp could not allocate a {ctx}-token context; retrying with fewer tokens.")
+                if index >= len(fallbacks):
+                    break
+                label, overrides = fallbacks[index]
+                print(f"[PromptForge] llama.cpp rejected {label}; retrying with the safer setting.")
+                llama_kwargs.update(overrides)
                 gc.collect()
         if llm is None:
             raise ValueError(
-                f"[PromptForge] llama.cpp could not create a {steps[-1]}-token context even with CPU offload. "
-                "Use a smaller quant or model, or reduce frame_count and reference images. " + (last_error or "")
+                f"[PromptForge] llama.cpp could not create a {n_ctx}-token context. "
+                "Lower context_size, gpu_layers or batch_size, set kv_cache_type to q8_0/q4_0, or turn offload_kqv off. "
+                + (last_error or "")
             )
 
         if use_default_sampling:
@@ -1241,7 +1296,8 @@ class PROMPTFORGE_PromptEnhancer:
 
         quant = {"8bit": "q8", "4bit": "q4"}.get(quantization or "auto", quantization or "auto")
         if quant in ("q5", "q6"):
-            raise ValueError("[PromptForge] q5/q6 are GGUF quant levels; for safetensors use auto, fp16, q8 or q4.")
+            print(f"[PromptForge] {quant} is a GGUF quant level; loading safetensors in q8 instead.")
+            quant = "q8"
         src_path = Path(src)
         if not src_path.exists():
             from huggingface_hub import snapshot_download
@@ -1253,9 +1309,11 @@ class PROMPTFORGE_PromptEnhancer:
                 _generation_defaults_from_files(src), temperature, top_p, top_k, repetition_penalty
             )
 
-        if src_path.is_dir() or quant in ("q8", "q4"):
-            if quant in ("q8", "q4") and not src_path.is_dir():
-                raise ValueError("[PromptForge] q8/q4 quantization needs an HF model directory; use auto/fp16 for single-file ComfyUI text encoders.")
+        if quant in ("q8", "q4") and not src_path.is_dir():
+            print(f"[PromptForge] {quant} quantization needs an HF model directory; loading this single file in fp16 instead.")
+            quant = "auto"
+
+        if src_path.is_dir():
             quant_cfg = None
             hf_dtype = torch.float16 if quant == "fp16" else _hf_compute_dtype()
             if quant in ("q8", "q4"):
@@ -1273,7 +1331,9 @@ class PROMPTFORGE_PromptEnhancer:
             }
             if torch.cuda.is_available():
                 _free_vram()
-                load_kwargs["max_memory"] = _hf_max_memory()
+                max_memory = _hf_max_memory()
+                if max_memory is not None:
+                    load_kwargs["max_memory"] = max_memory
             model = processor = tokenizer = None
             try:
                 if mode != "text_only":
@@ -1379,6 +1439,8 @@ class PROMPTFORGE_PromptEnhancer:
             _free_vram(getattr(clip, "patcher", None))
 
         max_length = min(max_tokens, 2048)
+        if max_tokens > max_length:
+            print("[PromptForge] the connected CLIP sampler is limited to 2048 tokens; using 2048.")
 
         def run(top_p_value, seed_value):
             return clip.generate(
@@ -1431,6 +1493,53 @@ class PROMPTFORGE_PromptEnhancer:
             idx = torch.linspace(0, video.shape[0] - 1, steps=steps).round().long()
             images.extend(video[i:i + 1] for i in idx)
         return [t.detach().float().cpu().clamp(0.0, 1.0) for t in images]
+
+    def _media_inventory(self, mode, image, image2, image3, video, frame_count):
+        """Describe only the media that actually reached the node."""
+        if mode == "text_only":
+            return (
+                "# Provided inputs (authoritative)\n"
+                "No media is used in text_only mode. Write a text-only prompt. "
+                "Do not mention images, references, video, or frames."
+            )
+        images = sum(1 for value in (image, image2, image3) if self._has_media(value))
+        frames = 0
+        if self._has_media(video):
+            if torch.is_tensor(video) and video.ndim == 4:
+                frames = min(max(1, int(frame_count)), int(video.shape[0]))
+            elif isinstance(video, (list, tuple)):
+                frames = min(max(1, int(frame_count)), len(video))
+            else:
+                frames = 1
+        media = []
+        if images == 1:
+            media.append("1 image")
+        elif images > 1:
+            media.append(f"{images} images")
+        if frames:
+            media.append(f"1 video ({frames} sampled frame{'s' if frames != 1 else ''})")
+        if not media:
+            return (
+                "# Provided inputs (authoritative)\n"
+                "No image or video is connected. Write a text-only prompt. "
+                "Do not mention images, references, video, or frames."
+            )
+        return (
+            "# Provided inputs (authoritative)\n"
+            f"The only media connected to this node: {' and '.join(media)}. "
+            "Nothing else is connected: no additional images, references, video, or frames. "
+            "Write the prompt for exactly these inputs. Never mention, imply, reference, or invent "
+            "any other image, reference, video, frame, or media."
+        )
+
+    def _has_media(self, value):
+        if value is None:
+            return False
+        if torch.is_tensor(value):
+            return value.numel() > 0
+        if isinstance(value, (list, tuple)):
+            return len(value) > 0
+        return True
 
     def _mode_images(self, mode, image, image2, image3, video, frame_count):
         if mode == "text_only":
