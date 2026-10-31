@@ -13,7 +13,7 @@ Owns model choice and runtime configuration; outputs a `MODEL` bundle and a `REP
 - **Auto config** (default on): reads total VRAM and the selected model, then picks the best **local** GGUF quant that fits, the largest context (16k first), KV precision (`f16` → `q8_0` → `q4_0`), GPU layers, batch sizes, windowed SWA and flash attention. For safetensors it picks bf16/fp16, q8 or q4 from the model size and VRAM.
 - **Manual**: turn `auto_config` off and set `context_size`, `gpu_layers`, `batch_size`, `ubatch_size`, `kv_cache_type`, `offload_kqv`, `swa_full`, `flash_attn` and `auto_fit` yourself.
 - **Profiles**: `profile_name` + `load_profile` / `save_profile` store the effective bundle in `user/promptforge_profiles.json`.
-- **Quant fallback**: unsupported combinations warn and use a working option — q5/q6 on safetensors load as q8, q8/q4 on a single-file encoder load in fp16, a missing GGUF quant falls through the available files, and an incompatible KV/flash/SWA choice is retried with the safe value.
+- **Quant fallback**: unsupported combinations warn and use a working option — q5/q6 on safetensors load as q8, q8/q4 on a single-file encoder load in fp16, a q8 model that cannot fit switches to q4, CPU-offloaded layers are allowed (slower) instead of raising, a missing GGUF quant falls through the available files, and an incompatible KV/flash/SWA choice is retried with the safe value.
 
 ### PromptForge Enhancer (`PROMPTFORGE_PromptEnhancer`)
 

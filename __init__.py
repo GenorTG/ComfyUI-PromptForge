@@ -1653,6 +1653,14 @@ class PROMPTFORGE_PromptEnhancer:
         if quant in ("q5", "q6"):
             print(f"[PromptForge] {quant} is a GGUF quant level; loading safetensors in q8 instead.")
             quant = "q8"
+        if quant == "q8" and params_b and torch.cuda.is_available():
+            try:
+                vram = torch.cuda.get_device_properties(0).total_memory
+            except Exception:
+                vram = 0
+            if vram and float(params_b) * 1.15 * 1024 ** 3 > vram * 0.85:
+                print("[PromptForge] q8 does not fit this GPU; using q4 instead.")
+                quant = "q4"
         src_path = Path(src)
         if not src_path.exists():
             from huggingface_hub import snapshot_download
@@ -1678,6 +1686,7 @@ class PROMPTFORGE_PromptEnhancer:
                     bnb_4bit_quant_type="nf4",
                     bnb_4bit_use_double_quant=True,
                     bnb_4bit_compute_dtype=hf_dtype,
+                    llm_int8_enable_fp32_cpu_offload=True,
                 )
             load_kwargs = {
                 "quantization_config": quant_cfg,
@@ -1696,6 +1705,9 @@ class PROMPTFORGE_PromptEnhancer:
                 else:
                     from transformers import AutoModelForCausalLM
                     model = AutoModelForCausalLM.from_pretrained(src, **load_kwargs)
+                device_map = getattr(model, "hf_device_map", None) or {}
+                if any(str(device) in ("cpu", "disk") for device in device_map.values()):
+                    print("[PromptForge] model is partly on CPU/disk; generation will be slower (use q4 or a smaller model).")
                 processor = AutoProcessor.from_pretrained(src)
                 tokenizer = AutoTokenizer.from_pretrained(src)
                 conversation = [{"role": "user", "content": []}]
