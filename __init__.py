@@ -1252,6 +1252,7 @@ class PROMPTFORGE_PromptEnhancer:
                 "Lower context_size, gpu_layers or batch_size, set kv_cache_type to q8_0/q4_0, or turn offload_kqv off. "
                 + (last_error or "")
             )
+        print(f"[PromptForge] GGUF ready: ctx {n_ctx}, gpu_layers {llama_kwargs['n_gpu_layers']}, kv {kv_cache_type}.")
 
         if use_default_sampling:
             temperature, top_p, top_k, repetition_penalty = _apply_sampling_defaults(
