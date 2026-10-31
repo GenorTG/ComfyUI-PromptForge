@@ -49,11 +49,12 @@ After the enhanced prompt has been generated the text encoder / LLM is unloaded
 other tasks. Before a safetensors model is loaded those helpers also unload
 ComfyUI's currently loaded models, and `device_map` gets an explicit VRAM budget
 that keeps headroom for activations while offloading overflow to CPU instead of
-failing with an OOM. GGUF models also unload ComfyUI's models (GPU and CPU) before
-the llama.cpp context is created. `context_size`, `gpu_layers`, `batch_size`,
-`ubatch_size`, `kv_cache_type`, `offload_kqv`, `swa_full` and `flash_attn` are
-used exactly as set; `auto_fit` computes a GPU/CPU layer split from free VRAM
-when enabled. Set `keep_model_loaded` to true to keep ComfyUI's models
+failing with an OOM. GGUF models unload ComfyUI's models (GPU and CPU) only
+when the model plus its KV cache does not fit in free VRAM. `context_size`,
+`gpu_layers`, `batch_size`, `ubatch_size`, `kv_cache_type`, `offload_kqv`,
+`swa_full` and `flash_attn` are used exactly as set; `auto_fit` computes a
+GPU/CPU layer split from free VRAM when enabled. Set `keep_model_loaded` to true
+to keep ComfyUI's models
 resident. A native ComfyUI `CLIP` socket (`clip`) can be connected to
 generate from an already-loaded encoder instead of loading its own model.
 

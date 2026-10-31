@@ -15,6 +15,7 @@ import gc
 import inspect
 import re
 import struct
+import time
 from pathlib import Path
 
 import torch
@@ -660,6 +661,24 @@ def _gguf_kv_profile(path):
         return None
 
 
+def _gguf_memory_estimate(path, n_ctx, layers, mmproj_path=None):
+    """Approximate VRAM needed for the GPU-resident part of a GGUF model."""
+    weights = path.stat().st_size
+    extra = mmproj_path.stat().st_size if mmproj_path is not None else 0
+    profile = _gguf_kv_profile(path)
+    if profile is None:
+        return weights + extra + 768 * 1024 ** 2
+    n_layers, kv_per_token, swa = profile
+    if swa is not None:
+        kv_bytes = kv_per_token * (min(n_ctx, swa) * 0.95 + n_ctx * 0.05)
+    else:
+        kv_bytes = kv_per_token * n_ctx
+    if layers == 0:
+        return extra + 768 * 1024 ** 2
+    fraction = 1.0 if layers < 0 else min(1.0, max(0.0, layers / n_layers))
+    return (weights + kv_bytes) * fraction + extra + 768 * 1024 ** 2
+
+
 def _gguf_layer_budget(path, n_ctx, mmproj_path=None):
     """Layers that fit on the GPU alongside their KV cache; the rest go to CPU."""
     profile = _gguf_kv_profile(path)
@@ -749,6 +768,10 @@ def _find_gguf(entry, quantization):
         if not repo_id:
             return None
         from huggingface_hub import hf_hub_download
+        try:
+            return Path(hf_hub_download(repo_id=repo_id, filename=name, local_files_only=True))
+        except Exception:
+            pass
         try:
             print("[PromptForge] downloading GGUF model (first use).")
             return Path(hf_hub_download(repo_id=repo_id, filename=name))
@@ -1167,6 +1190,7 @@ class PROMPTFORGE_PromptEnhancer:
             "type_k": kv_type,
             "type_v": kv_type,
             "flash_attn_type": flash_type,
+            "use_mmap": True,
             "verbose": False,
         }
         if images:
@@ -1181,15 +1205,21 @@ class PROMPTFORGE_PromptEnhancer:
             chat_format = _gguf_chat_format(f"{gguf_path.name} {(entry or {}).get('name', '')}")
             if chat_format:
                 llama_kwargs["chat_format"] = chat_format
-        if llama_kwargs["n_gpu_layers"] == -1 and auto_fit:
+        if auto_fit and llama_kwargs["n_gpu_layers"] == -1:
+            _free_vram()
             budget = _gguf_layer_budget(gguf_path, n_ctx, mmproj)
             if budget is not None:
                 fitted, total = budget
                 if fitted < total:
                     print(f"[PromptForge] auto_fit: {total - fitted}/{total} layers on CPU for a {n_ctx}-token context.")
                 llama_kwargs["n_gpu_layers"] = fitted
-        if llama_kwargs["n_gpu_layers"] != 0:
-            _free_vram()
+        elif llama_kwargs["n_gpu_layers"] != 0:
+            try:
+                free_bytes = torch.cuda.mem_get_info()[0]
+            except Exception:
+                free_bytes = 0
+            if free_bytes < _gguf_memory_estimate(gguf_path, n_ctx, llama_kwargs["n_gpu_layers"], mmproj):
+                _free_vram()
 
         fallbacks = []
         if kv_type != int(GGMLType.GGML_TYPE_F16):
@@ -1246,8 +1276,13 @@ class PROMPTFORGE_PromptEnhancer:
         def attempt(seed_value):
             kwargs = dict(completion_kwargs)
             kwargs["seed"] = seed_value
+            started = time.time()
             out = llm.create_chat_completion(**kwargs)
-            return out.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            text = out.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            tokens = (out.get("usage") or {}).get("completion_tokens")
+            if tokens:
+                print(f"[PromptForge] GGUF generated {tokens} tokens in {time.time() - started:.1f}s.")
+            return text
 
         try:
             enhanced = attempt(seed)
