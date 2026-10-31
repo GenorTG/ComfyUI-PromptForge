@@ -1,64 +1,64 @@
 # ComfyUI PromptForge
 
-Unified, fully-loaded ComfyUI prompt enhancement node.
+Prompt enhancement split into three focused nodes: model/config, prompt generation, and a standalone config finder.
 
-## Node
+## Nodes
 
-**`🔮 PromptForge / PROMPTFORGE_PromptEnhancer`**
+### PromptForge Model (`PROMPTFORGE_Model`)
 
-One singular node that does the whole prompt-enhancement job:
+Owns model choice and runtime configuration; outputs a `MODEL` bundle and a `REPORT` string.
+
+- **Source**: `safetensors`, `GGUF`, or `connected clip`.
+- **Models**: separate `safetensors_model` / `gguf_model` pickers. The catalog covers Qwen3, Qwen3.5, Qwen3.6, Qwen3.8, Qwen2.5, Qwen3-VL, Qwen2.5-VL, Gemma 3/4, Llama 3, Mistral/Ministral and Phi-4 heretic/abliterated models; GGUF entries offer q4/q5/q6/q8 and download automatically on first use. `custom_repo_id`, `local_model_path` and `mmproj_path` cover anything outside the lists.
+- **Auto config** (default on): reads total VRAM and the selected model, then picks the best **local** GGUF quant that fits, the largest context (16k first), KV precision (`f16` → `q8_0` → `q4_0`), GPU layers, batch sizes, windowed SWA and flash attention. For safetensors it picks bf16/fp16, q8 or q4 from the model size and VRAM.
+- **Manual**: turn `auto_config` off and set `context_size`, `gpu_layers`, `batch_size`, `ubatch_size`, `kv_cache_type`, `offload_kqv`, `swa_full`, `flash_attn` and `auto_fit` yourself.
+- **Profiles**: `profile_name` + `load_profile` / `save_profile` store the effective bundle in `user/promptforge_profiles.json`.
+- **Quant fallback**: unsupported combinations warn and use a working option — q5/q6 on safetensors load as q8, q8/q4 on a single-file encoder load in fp16, a missing GGUF quant falls through the available files, and an incompatible KV/flash/SWA choice is retried with the safe value.
+
+### PromptForge Enhancer (`PROMPTFORGE_PromptEnhancer`)
+
+Takes the `MODEL` bundle and writes the prompt. Only generation inputs live here.
 
 - **Request fidelity**: every preset treats the user's text as the authority on subject, acts, intensity and tone. Hardcore, explicit or intense requests are written directly and specifically, without sanitizing, softening, euphemizing, fading to black, or adding warnings or moral notes.
 - **Prompt input**: free-form text box — loose natural language, random ideas, keyword piles, detailed descriptions; the model always expands to a proper prompt for the target mode/model.
 - **Modes**: `text_only` (ignore media) or `inputs` (use every connected image from `image` / `image2` / `image3` plus frames sampled from `video` via `frame_count`). The prompt is told exactly which inputs arrived: bypassed or missing sockets are never mentioned, and the model is told not to invent extra images, references, video or frames.
-- **Video duration**: `video_seconds` sets the exact clip length. MiniMax H3 presets use it for shot budget, timestamps, and the frame-alignment line (`{video_seconds}`).
-- **Source**: explicit choice — `safetensors` (HF dir / single-file text encoder, loaded by the node), `GGUF` (llama.cpp), or `connected clip` (uses the CLIP input; no model loaded). All fields stay visible; only the ones for the selected source are used.
-- **Models**: separate pickers per source — `safetensors_model` lists HF / safetensors models only, `gguf_model` lists GGUF models only (both marked `[AVAILABLE]` when downloaded). The catalog covers Qwen3, Qwen3.5, Qwen3.6, Qwen3.8, Qwen2.5, Qwen3-VL, Qwen2.5-VL, Gemma 3/4, Llama 3, Mistral/Ministral and Phi-4 heretic/abliterated models; GGUF entries offer q4/q5/q6/q8 and download automatically from Hugging Face on first use. `custom_repo_id` / `local_model_path` / `mmproj_path` cover anything outside the lists.
-- **Vision safety**: image/video mode never silently falls back to text-only. A connected text encoder without vision support, a text-only safetensors model, or a GGUF without a matching mmproj raises a clear error. Vision GGUFs load the family-specific llama.cpp chat handler (Gemma 3/4, Qwen 2.5/3/3.5) and prefer the mmproj stored next to the model.
-- **Quantization**: `auto`, `fp16`, `q8`, `q4` (live bitsandbytes quantization before generation; q4 uses NF4 with double quantization; `auto`/`q8`/`q4` use bf16 on supported GPUs, which avoids the fp16 logit overflow that breaks Gemma sampling; ignored for GGUF).
-- **GGUF controls**: `context_size`, `gpu_layers`, `batch_size`, `ubatch_size`, `kv_cache_type` (`f16`, `q8_0`, `q5_1`, `q5_0`, `q4_1`, `q4_0`), `offload_kqv`, `swa_full`, `flash_attn` and `auto_fit`. Values are used as set; an incompatible KV/flash/SWA choice is retried with the safe value and a status line instead of failing.
-- **Quant fallback**: an unsupported quant is not an error — `q5`/`q6` on safetensors load as `q8`, `q8`/`q4` on a single-file encoder load in fp16, and a missing GGUF quant falls back through the available files, each with a warning.
-- **Preset**: `auto` or any of the bundled presets (Krea 2 T2I, Krea 2 Identity Edit, MOSS Image T2I/I2I, Qwen Image T2I, generic styles…).
-- **Custom system prompt**: override field + `use_system_prompt_override` on/off toggle (text stays populated between runs) + save toggle → persisted to user dir.
-- **Sampling**: seed, max_tokens (up to 65536, not capped by the node), temperature, top_p, top_k, num_beams, repetition_penalty, keep_model_loaded. Floats use 0.01 steps for fine control. If ComfyUI's CLIP sampler throws a torch overlap error on `top_p`, the node retries that generation once with `top_p=1.0` (other sampler settings still apply).
-- **Model sampling defaults**: `use_default_sampling` reads temperature / top_p / top_k / repetition_penalty from `generation_config.json` (HF dirs and single-file encoders) or GGUF metadata when the model provides them, falling back to the node values otherwise.
-- **Auto-retry**: `auto_retry` (default on) rejects empty, degenerate/repetitive, or refusal output and retries once with the next seed. Only a status line is printed; no prompt content.
-- **Repetition guard**: CLIP generation is capped at 2048 tokens and checked after each run; HF generation uses a stopping criterion during sampling. Detected repetition retries once with a new seed.
-- **Negative prompt**: `use_negative_prompt` + `negative_prompt` (both at the end) feed your exclusions into the generation request so the model writes around them instead of naming them. Works for keywords and natural language (for example “blurry, extra fingers, sweat, water droplets”).
-- **No embellishment**: every preset forbids adding unrequested moisture (sweat, wetness, droplets, sheen) and forbids inventing subjects, actions or scene changes beyond the user's text.
-- **No negatives in the positive prompt**: none of these families benefit from negative words in the positive prompt — Krea 2, Qwen Image and MiniMax H3 run at distilled CFG where negatives are weak or ignored, and MOSS Image / Anima have a separate negative prompt. Presets require positive-only wording; the node retries if a negative-prompt phrase appears.
-- **Chat templates**: GGUF uses family-correct formats (Gemma, Llama-3, ChatML/Qwen, Mistral) and output cleanup strips ChatML/Gemma/Llama role markers (including malformed markers and system/user turns) across all engines.
-- **Thinking**: `disable_thinking` (default on) turns reasoning off where the model template supports it. Reasoning is always stripped from `ENHANCED_PROMPT` and returned on the second output, `THINKING`, for debugging.
+- **Preset**: `auto` or any bundled preset (Krea 2 T2I, Krea 2 Identity Edit, MOSS Image T2I/I2I, Qwen Image T2I, MiniMax H3, Anima, ACE-Step, generic styles…).
+- **Video duration**: `video_seconds` sets the exact clip length; MiniMax H3 presets use it for shot budget, timestamps and the frame alignment line.
+- **Sampling**: seed, max_tokens (up to 65536, not capped by the node), temperature, top_p, top_k, num_beams, repetition_penalty, keep_model_loaded. `use_default_sampling` reads values from `generation_config.json` / GGUF metadata when available.
+- **Auto-retry**: rejects empty, degenerate/repetitive or refusal output and retries once with the next seed.
+- **Repetition guard**: CLIP generation is capped at 2048 tokens and checked after each run; HF generation uses a stopping criterion during sampling.
+- **Negative prompt**: `use_negative_prompt` + `negative_prompt` feed exclusions into the generation request so the model writes around them instead of naming them.
+- **No embellishment**: every preset forbids unrequested moisture (sweat, wetness, droplets, sheen) and forbids inventing subjects, actions or scene changes.
+- **No negatives in the positive prompt**: Krea 2, Qwen Image and MiniMax H3 run at distilled CFG where negatives are weak or ignored; MOSS Image / Anima have a separate negative prompt. Presets require positive-only wording; the node retries if a negative-prompt phrase appears.
+- **Chat templates**: GGUF uses family-correct formats (Gemma, Llama-3, ChatML/Qwen, Mistral) and output cleanup strips role markers across all engines.
+- **Thinking**: `disable_thinking` (default on) turns reasoning off where the template supports it; reasoning is always stripped from `ENHANCED_PROMPT` and returned on `THINKING`.
+- **Vision safety**: image/video mode never silently falls back to text-only. Vision GGUFs load the family-specific llama.cpp chat handler (Gemma 3/4, Qwen 2.5/3/3.5) and prefer the mmproj stored next to the model.
+- **Custom system prompt**: override field + `use_system_prompt_override` toggle + optional save to the user store.
 
-## Settings node
+**Outputs**: `ENHANCED_PROMPT` (final prompt only) and `THINKING` (removed reasoning, empty when none).
 
-**`🔮 PromptForge / PROMPTFORGE_Settings`**
+### PromptForge Config Finder (`PROMPTFORGE_ConfigFinder`)
 
-Outputs a `SETTINGS` bundle for the enhancer. Connect it to the enhancer's optional
-`settings` input; the enhancer's `use_settings` toggle (default on) decides whether
-the bundle overrides its own fields.
+Standalone output node; it never generates a prompt.
 
-- **Model selection**: `source` (`safetensors` / `GGUF` / `connected clip`),
-  `safetensors_model`, `gguf_model`, `quantization`.
-- **Auto profile** (default on): reads the GPU and picks the best local GGUF quant
-  that fits, a 16k-first context, KV precision (`f16` → `q8_0` → `q4_0`), layer
-  split, batch sizes, SWA and flash-attention settings. For safetensors it picks
-  bf16/fp16, q8 or q4 from the model size and VRAM.
-- **Manual**: turn `auto_profile` off and set `context_size`, `gpu_layers`,
-  `batch_size`, `ubatch_size`, `kv_cache_type`, `offload_kqv`, `swa_full`,
-  `flash_attn`, `auto_fit` and the sampling values yourself.
-- **Profiles**: `profile_name` + `load_profile` / `save_profile` store the effective
-  bundle in `user/promptforge_profiles.json`. Loading a profile overrides both auto
-  and the visible fields.
+- Scans every locally available GGUF/safetensors model (or one selected model), computes the recommended settings for this GPU, prints a compact report, and writes `user/promptforge_autoconfig.json`.
+- `profile_prefix` also saves every recommendation as a profile named `<prefix><model>`.
+- `OUTPUT_NODE`-only: queue it on its own (or use its button) to inspect configs without running the image workflow.
 
-## Outputs
+## One-click config
 
-- `ENHANCED_PROMPT` — the final prompt text only.
-- `THINKING` — reasoning that was removed from the output, empty when the model produced none.
+The front-end extension adds a button to both nodes:
+
+- **Find best config** on `PromptForge Model` calls `/promptforge/recommend`, fills `context_size`, `gpu_layers`, `batch_size`, `ubatch_size`, `kv_cache_type`, `offload_kqv`, `swa_full`, `flash_attn` and `quantization`, and turns `auto_config` off so you see exactly what will run.
+- **Scan local models** on `PromptForge Config Finder` calls `/promptforge/scan` and shows the report without queueing the rest of the workflow.
+
+## Profiles
+
+`profile_name` + `load_profile` / `save_profile` persist a bundle in `user/promptforge_profiles.json`. A loaded profile overrides auto and the visible fields; save stores the effective settings. The Config Finder can mass-create profiles with `profile_prefix`.
 
 ## Workflow values and schema stability
 
-ComfyUI execution prompts are keyed by **input name**, so queued/API workflows are safe. Saved UI workflows historically stored widget values as a positional array (`widgets_values`); changing input order could shift values between fields. This pack keeps input order append-only. For full protection, enable **Settings → Workflow → Named values restore** (`Comfy.Workflow.NamedValuesRestore`), which makes ComfyUI restore values by name (`widgets_values_named`) instead of position.
+ComfyUI execution prompts are keyed by **input name**, so queued/API workflows are safe. This refactor splits the old all-in-one node into `PromptForge Model` + `PromptForge Enhancer`; saved PromptForge nodes need to be rebuilt once — connect a `PromptForge Model` node to the enhancer's `model` input, and replace the old `PROMPTFORGE_Settings` node. Enable **Settings → Workflow → Named values restore** (`Comfy.Workflow.NamedValuesRestore`) so widget values are restored by name while you migrate.
 
 ## Privacy
 
