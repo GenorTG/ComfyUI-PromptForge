@@ -679,6 +679,86 @@ def _gguf_memory_estimate(path, n_ctx, layers, mmproj_path=None):
     return (weights + kv_bytes) * fraction + extra + 768 * 1024 ** 2
 
 
+def _gpu_budget_bytes():
+    try:
+        total = torch.cuda.get_device_properties(0).total_memory
+    except Exception:
+        return 0
+    return max(int(total) - 2 * 1024 ** 3, 1024 ** 3)
+
+
+def _auto_batch(budget):
+    if budget >= 12 * 1024 ** 3:
+        return 2048, 512
+    if budget >= 8 * 1024 ** 3:
+        return 1024, 256
+    return 512, 128
+
+
+def _auto_gguf_fit(path, mmproj_path, budget):
+    profile = _gguf_kv_profile(path)
+    if profile is None:
+        return None
+    n_layers, kv_per_token, swa = profile
+    weights = path.stat().st_size
+    extra = mmproj_path.stat().st_size if mmproj_path is not None else 0
+    scales = {"f16": 1.0, "q8_0": 0.5, "q4_0": 0.28}
+    for ctx in (16384, 12288, 8192, 6144, 4096):
+        for kind in ("f16", "q8_0", "q4_0"):
+            kv = kv_per_token * (min(ctx, swa) * 0.95 + ctx * 0.05) if swa is not None else kv_per_token * ctx
+            if weights + kv * scales[kind] + extra <= budget:
+                return {"context_size": ctx, "gpu_layers": -1, "kv_cache_type": kind, "offload_kqv": True}
+    ctx, kind = 4096, "q8_0"
+    kv = kv_per_token * (min(ctx, swa) * 0.95 + ctx * 0.05) if swa is not None else kv_per_token * ctx
+    cost = (weights + kv * scales[kind] + extra) / n_layers
+    layers = max(0, int((budget - extra - 512 * 1024 ** 2) / cost)) if cost > 0 else 0
+    return {"context_size": ctx, "gpu_layers": layers, "kv_cache_type": kind, "offload_kqv": True}
+
+
+def _auto_gguf_settings(entry, quantization, mmproj_path=None):
+    budget = _gpu_budget_bytes()
+    if budget <= 0:
+        return {}
+    candidates = []
+    if quantization in ("auto", "fp16", ""):
+        for q in ("q8", "q6", "q5", "q4"):
+            path = _find_gguf(entry, q, download=False)
+            if path is not None:
+                candidates.append((q, path))
+    else:
+        path = _find_gguf(entry, quantization, download=False)
+        if path is not None:
+            candidates.append((quantization, path))
+    chosen = None
+    for q, path in candidates:
+        fit = _auto_gguf_fit(path, mmproj_path, budget)
+        if fit is not None:
+            chosen = (q, fit)
+            break
+    if chosen is None:
+        return {"quantization": "q4" if quantization in ("auto", "fp16", "") else quantization}
+    q, fit = chosen
+    batch, ubatch = _auto_batch(budget)
+    settings = {
+        "quantization": q, "batch_size": batch, "ubatch_size": ubatch,
+        "swa_full": False, "flash_attn": "auto", "auto_fit": False,
+    }
+    settings.update(fit)
+    return settings
+
+
+def _auto_safetensors_settings(resolved):
+    budget = _gpu_budget_bytes()
+    params_b = (resolved or {}).get("params_b")
+    if not params_b or budget <= 0:
+        return {}
+    if params_b * 2.0 * 1024 ** 3 <= budget * 0.85:
+        return {"quantization": "auto"}
+    if params_b * 1.1 * 1024 ** 3 <= budget * 0.85:
+        return {"quantization": "q8"}
+    return {"quantization": "q4"}
+
+
 def _gguf_layer_budget(path, n_ctx, mmproj_path=None):
     """Layers that fit on the GPU alongside their KV cache; the rest go to CPU."""
     profile = _gguf_kv_profile(path)
@@ -740,7 +820,7 @@ def _scanned_ggufs():
     return [m["path"] for m in LOCAL_TEXT_MODELS if (m.get("path") or "").lower().endswith(".gguf")]
 
 
-def _find_gguf(entry, quantization):
+def _find_gguf(entry, quantization, download=True):
     """Find or download a GGUF for a catalog entry, honouring the requested quant."""
     qf = (entry or {}).get("quant_files") or {}
     if not qf:
@@ -764,7 +844,7 @@ def _find_gguf(entry, quantization):
                 return Path(path)
         return None
 
-    def download(name):
+    def download_q(name):
         if not repo_id:
             return None
         from huggingface_hub import hf_hub_download
@@ -772,6 +852,8 @@ def _find_gguf(entry, quantization):
             return Path(hf_hub_download(repo_id=repo_id, filename=name, local_files_only=True))
         except Exception:
             pass
+        if not download:
+            return None
         try:
             print("[PromptForge] downloading GGUF model (first use).")
             return Path(hf_hub_download(repo_id=repo_id, filename=name))
@@ -781,7 +863,7 @@ def _find_gguf(entry, quantization):
     found = local(qf[order[0]])
     if found is not None:
         return found
-    found = download(qf[order[0]])
+    found = download_q(qf[order[0]])
     if found is not None:
         return found
 
@@ -789,7 +871,7 @@ def _find_gguf(entry, quantization):
         found = local(qf[key])
         if found is not None:
             return found
-        found = download(qf[key])
+        found = download_q(qf[key])
         if found is not None:
             return found
 
@@ -851,6 +933,116 @@ def _user_dir():
     return Path("/home/genortg/ComfyUI/ComfyUI/user")
 
 
+def _profiles_file():
+    return _user_dir() / "promptforge_profiles.json"
+
+
+def _load_profiles():
+    try:
+        data = json.loads(_profiles_file().read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_profile(name, settings):
+    profiles = _load_profiles()
+    profiles[name] = settings
+    path = _profiles_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(profiles, indent=2, sort_keys=True), encoding="utf-8")
+
+
+class PROMPTFORGE_Settings:
+    CATEGORY = "🔮 PromptForge"
+    RETURN_TYPES = ("PROMPTFORGE_SETTINGS",)
+    RETURN_NAMES = ("SETTINGS",)
+    FUNCTION = "build"
+    DESCRIPTION = "PromptForge model + runtime settings bundle. Auto-detects a profile for the current GPU, or loads/saves a named profile."
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "source": (SOURCE_OPTIONS, {"default": "safetensors", "tooltip": "Model backend: safetensors (transformers), GGUF (llama.cpp) or connected clip (no model load)."}),
+                "safetensors_model": (SAFETENSORS_MODEL_OPTIONS, {"default": _preferred_option(SAFETENSORS_MODEL_OPTIONS), "tooltip": "Safetensors / HF model used when source is safetensors."}),
+                "gguf_model": (GGUF_MODEL_OPTIONS, {"default": _preferred_option(GGUF_MODEL_OPTIONS), "tooltip": "GGUF model used when source is GGUF."}),
+                "quantization": (QUANT_OPTIONS, {"default": "auto", "tooltip": "Quantization for the selected model. auto lets the settings node pick the best local option for this GPU."}),
+                "auto_profile": ("BOOLEAN", {"default": True, "tooltip": "Compute context, KV cache, batch and offload settings from the GPU and the selected model."}),
+                "profile_name": ("STRING", {"default": "", "tooltip": "Name used by load_profile / save_profile."}),
+                "load_profile": ("BOOLEAN", {"default": False, "tooltip": "Load profile_name from the saved profiles and use it instead of the fields below."}),
+                "save_profile": ("BOOLEAN", {"default": False, "tooltip": "Save the effective settings under profile_name when this node runs."}),
+                "context_size": ("INT", {"default": 16384, "min": 512, "max": 262144, "step": 512, "tooltip": "GGUF context length when auto_profile is off."}),
+                "gpu_layers": ("INT", {"default": -1, "min": -1, "max": 999, "tooltip": "GGUF layers on the GPU when auto_profile is off: -1 = all, 0 = CPU."}),
+                "batch_size": ("INT", {"default": 2048, "min": 64, "max": 32768, "step": 64, "tooltip": "GGUF n_batch when auto_profile is off."}),
+                "ubatch_size": ("INT", {"default": 512, "min": 32, "max": 16384, "step": 32, "tooltip": "GGUF n_ubatch when auto_profile is off."}),
+                "kv_cache_type": (KV_CACHE_OPTIONS, {"default": "f16", "tooltip": "GGUF KV cache precision when auto_profile is off."}),
+                "offload_kqv": ("BOOLEAN", {"default": True, "tooltip": "Keep the GGUF KV cache on the GPU when auto_profile is off."}),
+                "swa_full": ("BOOLEAN", {"default": False, "tooltip": "Use the full-size sliding-window cache when auto_profile is off."}),
+                "flash_attn": (FLASH_ATTN_OPTIONS, {"default": "auto", "tooltip": "llama.cpp flash attention when auto_profile is off."}),
+                "auto_fit": ("BOOLEAN", {"default": False, "tooltip": "Let the enhancer compute a layer split when auto_profile is off."}),
+                "max_tokens": ("INT", {"default": 8192, "min": 32, "max": 65536, "tooltip": "Max new tokens for the enhanced prompt."}),
+                "temperature": ("FLOAT", {"default": 0.7, "min": 0.1, "max": 1.0, "step": 0.01, "tooltip": "Sampling temperature."}),
+                "top_p": ("FLOAT", {"default": 0.9, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "Nucleus sampling cutoff."}),
+                "top_k": ("INT", {"default": 0, "min": 0, "max": 100, "tooltip": "Top-K. 0 = model default."}),
+                "repetition_penalty": ("FLOAT", {"default": 1.1, "min": 0.5, "max": 2.0, "step": 0.01, "tooltip": "Repetition penalty."}),
+            },
+        }
+
+    def build(self, source, safetensors_model, gguf_model, quantization, auto_profile, profile_name,
+              load_profile, save_profile, context_size, gpu_layers, batch_size, ubatch_size,
+              kv_cache_type, offload_kqv, swa_full, flash_attn, auto_fit, max_tokens,
+              temperature, top_p, top_k, repetition_penalty):
+        name = (profile_name or "").strip()
+        settings = {
+            "source": source,
+            "safetensors_model": safetensors_model,
+            "gguf_model": gguf_model,
+            "quantization": quantization,
+            "context_size": int(context_size),
+            "gpu_layers": int(gpu_layers),
+            "batch_size": int(batch_size),
+            "ubatch_size": int(ubatch_size),
+            "kv_cache_type": kv_cache_type,
+            "offload_kqv": bool(offload_kqv),
+            "swa_full": bool(swa_full),
+            "flash_attn": flash_attn,
+            "auto_fit": bool(auto_fit),
+            "max_tokens": int(max_tokens),
+            "temperature": float(temperature),
+            "top_p": float(top_p),
+            "top_k": int(top_k),
+            "repetition_penalty": float(repetition_penalty),
+            "profile_name": name,
+        }
+        loaded = False
+        if load_profile and name:
+            saved = _load_profiles().get(name)
+            if saved:
+                settings.update(saved)
+                loaded = True
+                print(f"[PromptForge] profile '{name}' loaded.")
+            else:
+                print(f"[PromptForge] profile '{name}' not found; using the node values.")
+        if not loaded and auto_profile:
+            if source == "GGUF":
+                resolved = _resolve_model_entry(gguf_model)
+                entry = resolved.get("entry") if resolved else None
+                path = _find_gguf(entry, settings["quantization"], download=False) if entry else None
+                mmproj = _find_mmproj(path, entry) if path is not None else None
+                settings.update(_auto_gguf_settings(entry, settings["quantization"], mmproj))
+            elif source == "safetensors":
+                settings.update(_auto_safetensors_settings(_resolve_model_entry(safetensors_model)))
+            print("[PromptForge] auto settings computed for this machine.")
+        if save_profile:
+            if not name:
+                print("[PromptForge] set profile_name before saving a profile.")
+            else:
+                _save_profile(name, settings)
+                print(f"[PromptForge] profile '{name}' saved.")
+        return (settings,)
+
+
 class PROMPTFORGE_PromptEnhancer:
     CATEGORY = "🔮 PromptForge"
     RETURN_TYPES = ("STRING", "STRING")
@@ -867,15 +1059,6 @@ class PROMPTFORGE_PromptEnhancer:
                 "safetensors_model": (SAFETENSORS_MODEL_OPTIONS, {"default": _preferred_option(SAFETENSORS_MODEL_OPTIONS), "tooltip": "Safetensors / HF model to load when source is safetensors. [AVAILABLE] entries already exist locally."}),
                 "gguf_model": (GGUF_MODEL_OPTIONS, {"default": _preferred_option(GGUF_MODEL_OPTIONS), "tooltip": "GGUF model to load when source is GGUF. [AVAILABLE] entries already exist locally; otherwise put the .gguf in a scanned models dir."}),
                 "quantization": (QUANT_OPTIONS, {"default": "auto", "tooltip": "Safetensors: auto/fp16/q8/q4 (q8/q4 = live bitsandbytes). GGUF: q8/q6/q5/q4 selects the GGUF quant file. auto = fp16 for safetensors, q8 for GGUF. Unsupported combinations fall back with a warning."}),
-                "context_size": ("INT", {"default": 16384, "min": 512, "max": 262144, "step": 512, "tooltip": "GGUF context length (n_ctx). Raise it for long prompts or video, lower it to save VRAM."}),
-                "gpu_layers": ("INT", {"default": -1, "min": -1, "max": 999, "tooltip": "GGUF layers on the GPU: -1 = all, 0 = CPU only. Lower it when the model plus its KV cache does not fit."}),
-                "batch_size": ("INT", {"default": 2048, "min": 64, "max": 32768, "step": 64, "tooltip": "GGUF prompt-processing batch (n_batch). Larger is faster but uses more VRAM."}),
-                "ubatch_size": ("INT", {"default": 512, "min": 32, "max": 16384, "step": 32, "tooltip": "GGUF micro-batch (n_ubatch). Capped to batch_size when larger."}),
-                "kv_cache_type": (KV_CACHE_OPTIONS, {"default": "f16", "tooltip": "KV cache precision: f16 = full quality, q8_0 = near-lossless and ~half the KV memory, q5/q4 = smaller but lower quality."}),
-                "offload_kqv": ("BOOLEAN", {"default": True, "tooltip": "Keep the GGUF KV cache on the GPU. Turn off to move it to system RAM and save VRAM."}),
-                "swa_full": ("BOOLEAN", {"default": False, "tooltip": "Keep the full-size sliding-window cache. Off uses the 1024-token window and saves several GB on Gemma 3/4."}),
-                "flash_attn": (FLASH_ATTN_OPTIONS, {"default": "auto", "tooltip": "llama.cpp flash attention: auto lets the backend decide, on forces it, off disables it."}),
-                "auto_fit": ("BOOLEAN", {"default": False, "tooltip": "When gpu_layers is -1, compute the layer split from free VRAM instead of putting every layer on the GPU."}),
                 "enhancement_preset": (PRESET_OPTIONS, {"default": "auto", "tooltip": "Preset system prompt: auto, or one of the PromptForge presets (Krea 2 T2I, MOSS Image T2I, Qwen Image T2I, generic styles...)."}),
                 "seed": ("INT", {"default": 1, "min": 1, "max": 2 ** 32 - 1, "tooltip": "Sampling seed for the Qwen-style generation. 1 = deterministic-ish / keep last logic."}),
                 "max_tokens": ("INT", {"default": 8192, "min": 32, "max": 65536, "tooltip": "Max new tokens for the enhanced prompt. Not capped by the node; keep it below context_size for GGUF."}),
@@ -890,6 +1073,16 @@ class PROMPTFORGE_PromptEnhancer:
                 "use_system_prompt_override": ("BOOLEAN", {"default": True, "tooltip": "Use the system_prompt_override text when it is non-empty. Turn off to keep the text in the field but run with the selected preset instead."}),
                 "system_prompt_override": ("STRING", {"default": "", "multiline": True, "tooltip": "Custom system prompt override. Leave empty to use the selected preset. Toggle use_system_prompt_override to switch it on/off without clearing the text."}),
                 "save_system_prompt": ("BOOLEAN", {"default": False, "tooltip": "When true, the system_prompt_override is saved into the user's PromptForge custom system-prompt store."}),
+                "context_size": ("INT", {"default": 16384, "min": 512, "max": 262144, "step": 512, "tooltip": "GGUF context length (n_ctx). Raise it for long prompts or video, lower it to save VRAM."}),
+                "gpu_layers": ("INT", {"default": -1, "min": -1, "max": 999, "tooltip": "GGUF layers on the GPU: -1 = all, 0 = CPU only. Lower it when the model plus its KV cache does not fit."}),
+                "batch_size": ("INT", {"default": 2048, "min": 64, "max": 32768, "step": 64, "tooltip": "GGUF prompt-processing batch (n_batch). Larger is faster but uses more VRAM."}),
+                "ubatch_size": ("INT", {"default": 512, "min": 32, "max": 16384, "step": 32, "tooltip": "GGUF micro-batch (n_ubatch). Capped to batch_size when larger."}),
+                "kv_cache_type": (KV_CACHE_OPTIONS, {"default": "f16", "tooltip": "KV cache precision: f16 = full quality, q8_0 = near-lossless and ~half the KV memory, q5/q4 = smaller but lower quality."}),
+                "offload_kqv": ("BOOLEAN", {"default": True, "tooltip": "Keep the GGUF KV cache on the GPU. Turn off to move it to system RAM and save VRAM."}),
+                "swa_full": ("BOOLEAN", {"default": False, "tooltip": "Keep the full-size sliding-window cache. Off uses the 1024-token window and saves several GB on Gemma 3/4."}),
+                "flash_attn": (FLASH_ATTN_OPTIONS, {"default": "auto", "tooltip": "llama.cpp flash attention: auto lets the backend decide, on forces it, off disables it."}),
+                "auto_fit": ("BOOLEAN", {"default": False, "tooltip": "When gpu_layers is -1, compute the layer split from free VRAM instead of putting every layer on the GPU."}),
+                "use_settings": ("BOOLEAN", {"default": True, "tooltip": "Use the SETTINGS input when one is connected; turn off to ignore it and use this node's fields."}),
             },
             "optional": {
                 "video_seconds": ("INT", {"default": 5, "min": 1, "max": 60, "tooltip": "Target video duration in seconds. Substituted into prompts that use {video_seconds} (MiniMax H3 presets) and added as duration context for video/minimax prompts."}),
@@ -905,6 +1098,7 @@ class PROMPTFORGE_PromptEnhancer:
                 "auto_retry": ("BOOLEAN", {"default": True, "tooltip": "If the generated prompt is empty, degenerate/repetitive, or a refusal, retry once with the next seed."}),
                 "use_negative_prompt": ("BOOLEAN", {"default": True, "tooltip": "Apply the negative prompt text to the generation request so the model writes around those elements."}),
                 "negative_prompt": ("STRING", {"default": "", "multiline": True, "tooltip": "Optional negative prompt: keywords or natural language describing what the generated prompt/scene must NOT contain. Used when use_negative_prompt is on."}),
+                "settings": ("PROMPTFORGE_SETTINGS", {"tooltip": "Optional settings bundle from the PromptForge Settings node."}),
             },
         }
 
@@ -928,6 +1122,7 @@ class PROMPTFORGE_PromptEnhancer:
         swa_full,
         flash_attn,
         auto_fit,
+        use_settings,
         enhancement_preset,
         seed,
         max_tokens,
@@ -955,8 +1150,28 @@ class PROMPTFORGE_PromptEnhancer:
         auto_retry=True,
         use_negative_prompt=True,
         negative_prompt="",
+        settings=None,
     ):
         print("[PromptForge] request received.")
+        if use_settings and isinstance(settings, dict):
+            source = settings.get("source", source)
+            safetensors_model = settings.get("safetensors_model", safetensors_model)
+            gguf_model = settings.get("gguf_model", gguf_model)
+            quantization = settings.get("quantization", quantization)
+            context_size = settings.get("context_size", context_size)
+            gpu_layers = settings.get("gpu_layers", gpu_layers)
+            batch_size = settings.get("batch_size", batch_size)
+            ubatch_size = settings.get("ubatch_size", ubatch_size)
+            kv_cache_type = settings.get("kv_cache_type", kv_cache_type)
+            offload_kqv = settings.get("offload_kqv", offload_kqv)
+            swa_full = settings.get("swa_full", swa_full)
+            flash_attn = settings.get("flash_attn", flash_attn)
+            auto_fit = settings.get("auto_fit", auto_fit)
+            max_tokens = settings.get("max_tokens", max_tokens)
+            temperature = settings.get("temperature", temperature)
+            top_p = settings.get("top_p", top_p)
+            top_k = settings.get("top_k", top_k)
+            repetition_penalty = settings.get("repetition_penalty", repetition_penalty)
         override_text = (system_prompt_override or "").strip()
         if save_system_prompt and override_text:
             self._save_custom_system_prompt(override_text)
@@ -1634,4 +1849,10 @@ class PROMPTFORGE_PromptEnhancer:
 
 NODE_CLASS_MAPPINGS = {
     "PROMPTFORGE_PromptEnhancer": PROMPTFORGE_PromptEnhancer,
+    "PROMPTFORGE_Settings": PROMPTFORGE_Settings,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "PROMPTFORGE_PromptEnhancer": "PromptForge Enhancer",
+    "PROMPTFORGE_Settings": "PromptForge Settings",
 }

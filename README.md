@@ -30,6 +30,27 @@ One singular node that does the whole prompt-enhancement job:
 - **Chat templates**: GGUF uses family-correct formats (Gemma, Llama-3, ChatML/Qwen, Mistral) and output cleanup strips ChatML/Gemma/Llama role markers (including malformed markers and system/user turns) across all engines.
 - **Thinking**: `disable_thinking` (default on) turns reasoning off where the model template supports it. Reasoning is always stripped from `ENHANCED_PROMPT` and returned on the second output, `THINKING`, for debugging.
 
+## Settings node
+
+**`🔮 PromptForge / PROMPTFORGE_Settings`**
+
+Outputs a `SETTINGS` bundle for the enhancer. Connect it to the enhancer's optional
+`settings` input; the enhancer's `use_settings` toggle (default on) decides whether
+the bundle overrides its own fields.
+
+- **Model selection**: `source` (`safetensors` / `GGUF` / `connected clip`),
+  `safetensors_model`, `gguf_model`, `quantization`.
+- **Auto profile** (default on): reads the GPU and picks the best local GGUF quant
+  that fits, a 16k-first context, KV precision (`f16` → `q8_0` → `q4_0`), layer
+  split, batch sizes, SWA and flash-attention settings. For safetensors it picks
+  bf16/fp16, q8 or q4 from the model size and VRAM.
+- **Manual**: turn `auto_profile` off and set `context_size`, `gpu_layers`,
+  `batch_size`, `ubatch_size`, `kv_cache_type`, `offload_kqv`, `swa_full`,
+  `flash_attn`, `auto_fit` and the sampling values yourself.
+- **Profiles**: `profile_name` + `load_profile` / `save_profile` store the effective
+  bundle in `user/promptforge_profiles.json`. Loading a profile overrides both auto
+  and the visible fields.
+
 ## Outputs
 
 - `ENHANCED_PROMPT` — the final prompt text only.
@@ -41,7 +62,7 @@ ComfyUI execution prompts are keyed by **input name**, so queued/API workflows a
 
 ## Privacy
 
-The node never prints or stores prompts, responses, enhanced prompts, thinking, or token text. The only runtime console line is `[PromptForge] request received.`; llama.cpp verbose output is disabled. The optional `save_system_prompt` toggle is the only persistence path and stores just the system-prompt text you explicitly choose to save.
+The node never prints or stores prompts, responses, enhanced prompts, thinking, or token text. Only short status lines are printed (model load, token counts, auto settings, profile save/load); llama.cpp verbose output is disabled. The optional `save_system_prompt` toggle is the only persistence path for prompt text and stores just the system-prompt you explicitly choose to save.
 
 ## Memory
 After the enhanced prompt has been generated the text encoder / LLM is unloaded
