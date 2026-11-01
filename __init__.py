@@ -629,6 +629,7 @@ def _gguf_metadata(path):
                     "embedding_length", "attention.key_length", "attention.value_length",
                     "attention.sliding_window",
                 )}
+                needed.add("tokenizer.chat_template")
             if needed is not None and needed <= meta.keys():
                 break
     return meta
@@ -1435,6 +1436,8 @@ class PROMPTFORGE_PromptEnhancer:
         sys_text = override_text if (use_system_prompt_override and override_text) else ""
         if not sys_text:
             key = enhancement_preset if enhancement_preset and enhancement_preset in PROMPTFORGE_PRESETS else DEFAULT_PRESET
+            if enhancement_preset and enhancement_preset not in PRESET_OPTIONS:
+                print(f"[PromptForge] preset '{enhancement_preset}' not found; using {DEFAULT_PRESET}.")
             entry = PROMPTFORGE_PRESETS.get(key) or {}
             sys_text = entry.get("text") or entry.get("system_prompt") or (PROMPTFORGE_PRESETS.get(DEFAULT_PRESET) or {}).get("text") or ""
 
@@ -1459,8 +1462,11 @@ class PROMPTFORGE_PromptEnhancer:
                 ". Write the scene so they are absent, converting each exclusion into a positive description "
                 "of the desired state; never name them inside the prompt itself."
             )
-        parts = [p for p in (user_text, duration_line, sys_text, media_line, negative_line, guard) if p and p.strip()]
-        full_prompt = "\n\n".join(parts)
+        system_parts = [p for p in (sys_text, media_line, negative_line, guard) if p and p.strip()]
+        user_parts = [p for p in (user_text, duration_line) if p and p.strip()]
+        system_prompt = "\n\n".join(system_parts)
+        user_prompt = "\n\n".join(user_parts)
+        full_prompt = "\n\n".join(p for p in (system_prompt, user_prompt) if p)
 
         eff_local = (local_model_path or "").strip()
         if source == "connected clip":
@@ -1491,6 +1497,8 @@ class PROMPTFORGE_PromptEnhancer:
 
         enhanced = self._generate(
             full_prompt=full_prompt,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             mode=mode,
             engine=engine,
             model_name=model_name,
@@ -1579,10 +1587,11 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Generation dispatch
     # ------------------------------------------------------------------ #
-    def _generate(self, full_prompt, mode, engine, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
+    def _generate(self, full_prompt, system_prompt, user_prompt, mode, engine, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
         if engine == "gguf":
             return self._generate_gguf(
-                full_prompt=full_prompt, mode=mode, model_name=model_name, quantization=quantization,
+                full_prompt=full_prompt, system_prompt=system_prompt, user_prompt=user_prompt,
+                mode=mode, model_name=model_name, quantization=quantization,
                 context_size=context_size, gpu_layers=gpu_layers, batch_size=batch_size, ubatch_size=ubatch_size,
                 kv_cache_type=kv_cache_type, offload_kqv=offload_kqv, swa_full=swa_full,
                 flash_attn=flash_attn,
@@ -1594,7 +1603,8 @@ class PROMPTFORGE_PromptEnhancer:
                 auto_retry=auto_retry, keep_model_loaded=keep_model_loaded,
             )
         return self._generate_text_encoder(
-            full_prompt=full_prompt, mode=mode, model_name=model_name, quantization=quantization,
+            full_prompt=full_prompt, system_prompt=system_prompt, user_prompt=user_prompt,
+            mode=mode, model_name=model_name, quantization=quantization,
             max_tokens=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k,
             num_beams=num_beams, repetition_penalty=repetition_penalty,
             image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
@@ -1606,10 +1616,12 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # GGUF / llama.cpp engine
     # ------------------------------------------------------------------ #
-    def _generate_gguf(self, full_prompt, mode, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, image, image2, image3, video, frame_count, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
+    def _generate_gguf(self, full_prompt, system_prompt, user_prompt, mode, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, image, image2, image3, video, frame_count, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
         entry = None
         gguf_path = None
         eff_local = (local_model_path or "").strip() or _local_model_option(model_name)
+        if not eff_local and str(model_name).lower().endswith(".gguf"):
+            eff_local = str(model_name)
         if eff_local and str(eff_local).lower().endswith(".gguf"):
             gguf_path = Path(str(eff_local))
         if gguf_path is None:
@@ -1668,9 +1680,11 @@ class PROMPTFORGE_PromptEnhancer:
                 raise ValueError(f"[PromptForge] this llama-cpp-python build has no {handler_name}; upgrade llama-cpp-python for this vision architecture.")
             llama_kwargs["chat_handler"] = handler_cls(clip_model_path=str(mmproj), verbose=False)
         else:
-            chat_format = _gguf_chat_format(f"{gguf_path.name} {(entry or {}).get('name', '')}")
-            if chat_format:
-                llama_kwargs["chat_format"] = chat_format
+            metadata = _gguf_metadata(gguf_path)
+            if "tokenizer.chat_template" not in metadata:
+                chat_format = _gguf_chat_format(f"{gguf_path.name} {(entry or {}).get('name', '')}")
+                if chat_format:
+                    llama_kwargs["chat_format"] = chat_format
         if llama_kwargs["n_gpu_layers"] != 0:
             try:
                 free_bytes = torch.cuda.mem_get_info()[0]
@@ -1716,9 +1730,16 @@ class PROMPTFORGE_PromptEnhancer:
             temperature, top_p, top_k, repetition_penalty = _apply_sampling_defaults(
                 _generation_defaults_from_gguf(llm), temperature, top_p, top_k, repetition_penalty
             )
-        content = [{"type": "text", "text": full_prompt}]
-        content.extend({"type": "image_url", "image_url": {"url": self._pil_data_url(p)}} for p in images)
-        messages = [{"role": "user", "content": content}]
+        user_text_value = user_prompt or full_prompt
+        if images:
+            content = [{"type": "text", "text": user_text_value}]
+            content.extend({"type": "image_url", "image_url": {"url": self._pil_data_url(p)}} for p in images)
+        else:
+            content = user_text_value
+        messages = []
+        if (system_prompt or "").strip():
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": content})
         completion_kwargs = {
             "messages": messages,
             "max_tokens": max_tokens,
@@ -1760,7 +1781,7 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Text encoder engines (native ComfyUI CLIP route / bitsandbytes route)
     # ------------------------------------------------------------------ #
-    def _generate_text_encoder(self, full_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
+    def _generate_text_encoder(self, full_prompt, system_prompt, user_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
         if clip is not None:
             enhanced = self._generate_with_clip(
                 full_prompt=full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
@@ -1772,6 +1793,8 @@ class PROMPTFORGE_PromptEnhancer:
             return enhanced
 
         eff_local = (local_model_path or "").strip() or _local_model_option(model_name)
+        if not eff_local and Path(str(model_name)).exists():
+            eff_local = str(model_name)
         src = eff_local or ""
         params_b = None
         resolved = _resolve_model_entry(model_name) if (model_name and model_name != "auto") else _resolve_model_entry("auto")
@@ -1849,13 +1872,17 @@ class PROMPTFORGE_PromptEnhancer:
                     print("[PromptForge] model is partly on CPU/disk; generation will be slower (use q4 or a smaller model).")
                 processor = AutoProcessor.from_pretrained(src)
                 tokenizer = AutoTokenizer.from_pretrained(src)
-                conversation = [{"role": "user", "content": []}]
+                conversation = []
+                if (system_prompt or "").strip():
+                    conversation.append({"role": "system", "content": system_prompt})
                 refs = self._mode_images(mode, image, image2, image3, video, frame_count)
                 if refs and getattr(processor, "image_processor", None) is None:
                     raise ValueError("[PromptForge] The selected safetensors model has no image processor; image/video mode needs a vision-capable model.")
+                user_content = user_prompt or full_prompt
                 if refs:
-                    conversation[0]["content"].extend([{"type": "image", "image": r} for r in refs if r is not None])
-                conversation[0]["content"].append({"type": "text", "text": full_prompt})
+                    user_content = [{"type": "image", "image": r} for r in refs if r is not None]
+                    user_content.append({"type": "text", "text": user_prompt or full_prompt})
+                conversation.append({"role": "user", "content": user_content})
                 chat = processor.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True, enable_thinking=not disable_thinking)
                 processed = processor(text=chat, images=[r for r in refs if r is not None] or None, return_tensors="pt")
                 model_device = next(model.parameters()).device

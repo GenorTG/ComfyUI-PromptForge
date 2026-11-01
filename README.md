@@ -29,7 +29,7 @@ Takes the `MODEL` bundle and writes the prompt. Only generation inputs live here
 - **Negative prompt**: `use_negative_prompt` + `negative_prompt` feed exclusions into the generation request so the model writes around them instead of naming them.
 - **No embellishment**: every preset forbids unrequested moisture (sweat, wetness, droplets, sheen) and forbids inventing subjects, actions or scene changes.
 - **No negatives in the positive prompt**: Krea 2, Qwen Image and MiniMax H3 run at distilled CFG where negatives are weak or ignored; MOSS Image / Anima have a separate negative prompt. Presets require positive-only wording; the node retries if a negative-prompt phrase appears.
-- **Chat templates**: GGUF uses family-correct formats (Gemma, Llama-3, ChatML/Qwen, Mistral) and output cleanup strips role markers across all engines.
+- **Chat templates**: GGUF uses the model's own `tokenizer.chat_template` when present and falls back to a family format (Gemma, Llama-3, ChatML/Qwen, Mistral) otherwise. Prompts are sent as a real system turn plus a user turn, so presets and output rules are not buried inside the user message. Output cleanup strips role markers across all engines.
 - **Thinking**: `disable_thinking` (default on) turns reasoning off where the template supports it; reasoning is always stripped from `ENHANCED_PROMPT` and returned on `THINKING`.
 - **Vision safety**: image/video mode never silently falls back to text-only. Vision GGUFs load the family-specific llama.cpp chat handler (Gemma 3/4, Qwen 2.5/3/3.5) and prefer the mmproj stored next to the model.
 - **Custom system prompt**: override field + `use_system_prompt_override` toggle + optional save to the user store.
