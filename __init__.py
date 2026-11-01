@@ -639,6 +639,27 @@ def _hf_dtype_kwargs(dtype):
     return {"torch_dtype": dtype}
 
 
+_SPEEDUP_HINTED = False
+
+
+def _speedup_hint():
+    global _SPEEDUP_HINTED
+    if _SPEEDUP_HINTED:
+        return
+    _SPEEDUP_HINTED = True
+    import importlib.util
+    missing = []
+    if importlib.util.find_spec("causal_conv1d") is None:
+        missing.append("causal-conv1d")
+    if importlib.util.find_spec("fla") is None and importlib.util.find_spec("flash_linear_attention") is None:
+        missing.append("flash-linear-attention")
+    if missing:
+        print(
+            "[PromptForge] optional speedups missing: " + ", ".join(missing) +
+            ". Install matching wheels for this torch/CUDA build to replace the slow reference kernels."
+        )
+
+
 def _hf_compute_dtype():
     """bf16 where the GPU supports it; Gemma/Qwen logits overflow in fp16."""
     if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
@@ -873,7 +894,7 @@ def _auto_safetensors_settings(resolved):
         return {}
     if params_b * 2.0 * 1024 ** 3 <= budget * 0.85:
         return {"quantization": "auto"}
-    if params_b * 1.1 * 1024 ** 3 <= budget * 0.85:
+    if params_b * 1.35 * 1024 ** 3 + 2 * 1024 ** 3 <= budget * 0.95:
         return {"quantization": "q8"}
     return {"quantization": "q4"}
 
@@ -1882,6 +1903,7 @@ class PROMPTFORGE_PromptEnhancer:
             quant = "auto"
 
         if src_path.is_dir():
+            _speedup_hint()
             if torch.cuda.is_available():
                 _free_vram()
             hf_dtype = torch.float16 if quant == "fp16" else _hf_compute_dtype()
@@ -1890,7 +1912,7 @@ class PROMPTFORGE_PromptEnhancer:
                     free_bytes = torch.cuda.mem_get_info()[0]
                 except Exception:
                     free_bytes = 0
-                if free_bytes and float(params_b) * 1.35 * 1024 ** 3 > free_bytes:
+                if free_bytes and float(params_b) * 1.35 * 1024 ** 3 + 1.5 * 1024 ** 3 > free_bytes:
                     print("[PromptForge] q8 does not fit free VRAM; using q4 instead.")
                     quant = "q4"
             quant_cfg = None
@@ -1989,7 +2011,11 @@ class PROMPTFORGE_PromptEnhancer:
 
                 def attempt(seed_value):
                     torch.manual_seed(seed_value)
+                    started = time.time()
                     outputs = model.generate(**model_inputs, **kwargs)
+                    tokens = outputs.shape[-1] - input_len
+                    if tokens:
+                        print(f"[PromptForge] safetensors generated {tokens} tokens in {time.time() - started:.1f}s.")
                     return tokenizer.decode(outputs[0, input_len:], skip_special_tokens=True)
 
                 enhanced = attempt(seed)

@@ -30,7 +30,7 @@ Takes the `MODEL` bundle and writes the prompt. Only generation inputs live here
 - **Chat templates**: GGUF uses the model's own `tokenizer.chat_template` when present and falls back to a family format (Gemma, Llama-3, ChatML/Qwen, Mistral) otherwise. Prompts are sent as a real system turn plus a user turn, so presets and output rules are not buried inside the user message. Output cleanup strips role markers across all engines.
 - **Output purity**: the system prompt forbids first-person commentary and self-assessment, and the post-clean removes instruction references, reasoning, closings, “Here is the prompt” lead-ins, and sign-offs such as “I followed the instructions / I did a good job”. Only the prompt text leaves the node.
 - **Thinking**: reasoning is disabled where the template supports it and always stripped from `ENHANCED_PROMPT`; it is returned on `THINKING`.
-- **Vision safety**: image/video mode never silently falls back to text-only. Vision GGUFs load the family-specific llama.cpp chat handler (Gemma 3/4, Qwen 2.5/3/3.5) and prefer the mmproj stored next to the model.
+- **Vision safety**: image/video mode never silently falls back to text-only. Vision GGUFs load the family-specific llama.cpp chat handler (Gemma 3/4, Qwen 2.5/3/3.5) and prefer the mmproj stored next to the model. Gemma 4 12B Heretic can emit only a `thought` channel for long multimodal prompts; the node detects that and reports it instead of returning an empty prompt — use Qwen3-VL for vision with that model.
 - **Custom system prompt**: a non-empty override field replaces the selected preset.
 
 **Outputs**: `ENHANCED_PROMPT` (final prompt only) and `THINKING` (removed reasoning, empty when none).
@@ -79,3 +79,11 @@ Every preset has an `NSFW › …` variant with explicit adult writing instructi
 ## Install
 
 Drop this folder into a ComfyUI `custom_nodes` directory (already placed at `ComfyUI-PromptForge/`). Requires: torch, transformers, bitsandbytes, accelerate, llama-cpp-python (for GGUF engine), huggingface-hub.
+
+Optional speedups for Qwen3.5/Qwen3-Next hybrid attention (install wheels matching your torch/CUDA build; the node never installs them automatically):
+
+```
+pip install causal-conv1d flash-linear-attention
+```
+
+Without them transformers uses slow reference kernels and prints the fallback warnings. On a 16 GB GPU the Model node now selects **q4** for 9B safetensors models instead of q8, which keeps them fully on the GPU.
