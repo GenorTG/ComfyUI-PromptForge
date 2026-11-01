@@ -83,7 +83,7 @@ _CHAT_MARKER_RE = re.compile(
     re.I,
 )
 _CHAT_TAG_RE = re.compile(
-    r"</?(?:start_of_turn|end_of_turn|bos|eos|pad|unk|s)>|\[/?INST\]|<<?/?SYS>>",
+    r"</?(?:start_of_turn|end_of_turn|bos|eos|pad|unk|s)>|\[/?INST\]|<<?/?SYS>>|<\|?/?channel\|?>",
     re.I,
 )
 _ROLE_LINE_RE = re.compile(r"^(system|user|assistant|model)\s*:\s*", re.I)
@@ -273,7 +273,8 @@ def _clip_top_p_supported():
 
 def _bad_output_reason(text, min_chars=20):
     """Return a short reason when output is empty, short, degenerate or a refusal."""
-    clean = _clean_prompt_output(text)
+    answer, _ = _split_thinking(text or "")
+    clean = _clean_prompt_output(answer)
     if len(clean) < min_chars:
         return "too short"
     if _is_repetitive_text(clean):
@@ -324,6 +325,17 @@ def _split_thinking(text):
     """
     answer = text or ""
     thoughts = []
+    channel_thought = re.findall(
+        r"(?is)<\|channel>\s*thought\b(.*?)(?=<\|channel>\s*final\b|<channel\|>|$)", answer
+    )
+    thoughts.extend(part.strip() for part in channel_thought if part.strip())
+    answer = re.sub(
+        r"(?is)<\|channel>\s*thought\b.*?(?=<\|channel>\s*final\b|<channel\|>|$)", "", answer
+    )
+    channel_final = re.search(r"(?is)<\|channel>\s*final\b(.*?)(?:<channel\|>|$)", answer)
+    if channel_final:
+        answer = channel_final.group(1)
+    answer = answer.replace("<|channel>", "").replace("<channel|>", "")
     for open_tag, close_tag in THINK_TAGS:
         pattern = r"(?is)" + re.escape(open_tag) + r".*?" + re.escape(close_tag)
         for match in re.finditer(pattern, answer):
@@ -1574,6 +1586,12 @@ class PROMPTFORGE_PromptEnhancer:
         preset_lower = (enhancement_preset or "").lower()
         if not any(marker in preset_lower for marker in ("minimax", "wan", "ltx", "ace-step")):
             answer = _strip_video_meta(answer)
+        if not answer.strip():
+            detail = "only reasoning/thinking" if thinking.strip() else "no usable text"
+            raise ValueError(
+                f"[PromptForge] the model returned {detail} and no final prompt. "
+                "Use a non-thinking model (Qwen3-VL for vision), raise max_tokens, or change the preset."
+            )
         return (answer, thinking)
 
     # ------------------------------------------------------------------ #
@@ -1741,14 +1759,23 @@ class PROMPTFORGE_PromptEnhancer:
             temperature, top_p, top_k, repetition_penalty = _apply_sampling_defaults(
                 _generation_defaults_from_gguf(llm), temperature, top_p, top_k, repetition_penalty
             )
+        model_label_lower = f"{gguf_path.name} {(entry or {}).get('name', '')}".lower()
+        gemma4 = "gemma-4" in model_label_lower or "gemma4" in model_label_lower
         user_text_value = user_prompt or full_prompt
+        if gemma4 and (system_prompt or "").strip():
+            user_text_value = f"{system_prompt.strip()}\n\n{user_text_value}".strip()
+        if gemma4:
+            user_text_value = (
+                user_text_value
+                + "\n\nIMPORTANT: Return the final prompt directly. Do not use a thought channel. Do not write reasoning."
+            )
         if images:
             content = [{"type": "text", "text": user_text_value}]
             content.extend({"type": "image_url", "image_url": {"url": self._pil_data_url(p)}} for p in images)
         else:
             content = user_text_value
         messages = []
-        if (system_prompt or "").strip():
+        if (system_prompt or "").strip() and not gemma4:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": content})
         completion_kwargs = {
