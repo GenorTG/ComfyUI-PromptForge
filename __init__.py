@@ -306,6 +306,16 @@ def _is_bad_output(text, min_chars=20):
     return bool(_bad_output_reason(text, min_chars))
 
 
+def _tokens_have_images(tokens):
+    if isinstance(tokens, dict):
+        if tokens.get("type") == "image":
+            return True
+        return any(_tokens_have_images(value) for value in tokens.values())
+    if isinstance(tokens, (list, tuple)):
+        return any(_tokens_have_images(value) for value in tokens)
+    return False
+
+
 def _split_thinking(text):
     """Remove reasoning blocks from model output and return (answer, thinking).
 
@@ -1224,7 +1234,6 @@ def _test_safetensors(option, quantization):
 
 def _scan_configs(data):
     scope = data.get("scope", "all local")
-    quantization = data.get("quantization", "auto")
     configs = {}
     lines = []
     if scope == "all local":
