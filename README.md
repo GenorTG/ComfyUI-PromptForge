@@ -80,10 +80,4 @@ Every preset has an `NSFW › …` variant with explicit adult writing instructi
 
 Drop this folder into a ComfyUI `custom_nodes` directory (already placed at `ComfyUI-PromptForge/`). Requires: torch, transformers, bitsandbytes, accelerate, llama-cpp-python (for GGUF engine), huggingface-hub.
 
-Optional speedups for Qwen3.5/Qwen3-Next hybrid attention (install wheels matching your torch/CUDA build; the node never installs them automatically):
-
-```
-pip install causal-conv1d flash-linear-attention
-```
-
-Without them transformers uses slow reference kernels and prints the fallback warnings. On a 16 GB GPU the Model node now selects **q4** for 9B safetensors models instead of q8, which keeps them fully on the GPU.
+Qwen3.5/Qwen3-Next hybrid attention uses reference kernels unless matching optional CUDA extensions are available. The node does not install packages at runtime; on this torch/CUDA build the available `flash-linear-attention` wheels are not recognized by transformers 5.16 and `causal-conv1d` has no matching wheel, so those transformers warnings are expected. For speed on a 16 GB GPU the Model node now selects **q4** for 9B safetensors models, keeps quantized models fully on the GPU, and the GGUF version is faster still.

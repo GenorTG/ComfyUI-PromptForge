@@ -639,27 +639,6 @@ def _hf_dtype_kwargs(dtype):
     return {"torch_dtype": dtype}
 
 
-_SPEEDUP_HINTED = False
-
-
-def _speedup_hint():
-    global _SPEEDUP_HINTED
-    if _SPEEDUP_HINTED:
-        return
-    _SPEEDUP_HINTED = True
-    import importlib.util
-    missing = []
-    if importlib.util.find_spec("causal_conv1d") is None:
-        missing.append("causal-conv1d")
-    if importlib.util.find_spec("fla") is None and importlib.util.find_spec("flash_linear_attention") is None:
-        missing.append("flash-linear-attention")
-    if missing:
-        print(
-            "[PromptForge] optional speedups missing: " + ", ".join(missing) +
-            ". Install matching wheels for this torch/CUDA build to replace the slow reference kernels."
-        )
-
-
 def _hf_compute_dtype():
     """bf16 where the GPU supports it; Gemma/Qwen logits overflow in fp16."""
     if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
@@ -1903,7 +1882,6 @@ class PROMPTFORGE_PromptEnhancer:
             quant = "auto"
 
         if src_path.is_dir():
-            _speedup_hint()
             if torch.cuda.is_available():
                 _free_vram()
             hf_dtype = torch.float16 if quant == "fp16" else _hf_compute_dtype()
