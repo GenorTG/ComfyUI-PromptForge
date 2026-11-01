@@ -977,9 +977,11 @@ def _parse_model_option(option):
     return "safetensors", text, "auto"
 
 
+_KV_TYPE_VALUES = {"f16": 1, "q8_0": 8, "q5_1": 7, "q5_0": 6, "q4_1": 3, "q4_0": 2}
+
+
 def _kv_type_value(name):
-    from llama_cpp._ggml import GGMLType
-    return int(getattr(GGMLType, f"GGML_TYPE_{str(name).upper()}", GGMLType.GGML_TYPE_F16))
+    return _KV_TYPE_VALUES.get(str(name).lower(), 1)
 
 
 def _gguf_target(option, quantization):
@@ -1627,20 +1629,14 @@ class PROMPTFORGE_PromptEnhancer:
             raise ValueError("[PromptForge] Vision GGUF needs an mmproj file next to the model (e.g. mmproj-F16.gguf). Put one in the same folder, set mmproj_path, or switch mode to text_only.")
 
         from llama_cpp import Llama
-        from llama_cpp._ggml import GGMLType
-        from llama_cpp.llama_cpp import llama_flash_attn_type
 
         n_ctx = max(512, int(context_size))
         estimated = len(full_prompt) // 3 + len(images) * 1024 + int(max_tokens) + 512
         if estimated > n_ctx:
             print(f"[PromptForge] context_size={n_ctx} may truncate this request (about {estimated} tokens needed).")
 
-        kv_type = int(getattr(GGMLType, f"GGML_TYPE_{str(kv_cache_type).upper()}", GGMLType.GGML_TYPE_F16))
-        flash_types = {
-            "auto": int(llama_flash_attn_type.LLAMA_FLASH_ATTN_TYPE_AUTO),
-            "on": int(llama_flash_attn_type.LLAMA_FLASH_ATTN_TYPE_ENABLED),
-            "off": int(llama_flash_attn_type.LLAMA_FLASH_ATTN_TYPE_DISABLED),
-        }
+        kv_type = _kv_type_value(kv_cache_type)
+        flash_types = {"auto": -1, "on": 1, "off": 0}
         flash_type = flash_types.get(flash_attn, flash_types["auto"])
         n_batch = min(max(64, int(batch_size)), n_ctx)
         n_ubatch = max(32, min(int(ubatch_size), n_batch))
@@ -1655,10 +1651,12 @@ class PROMPTFORGE_PromptEnhancer:
             "swa_full": bool(swa_full),
             "type_k": kv_type,
             "type_v": kv_type,
-            "flash_attn_type": flash_type,
             "use_mmap": True,
             "verbose": False,
         }
+        supports_flash = "flash_attn_type" in inspect.signature(Llama.__init__).parameters
+        if supports_flash:
+            llama_kwargs["flash_attn_type"] = flash_type
         if images:
             from llama_cpp import llama_chat_format
             model_name_lower = f"{gguf_path.name} {(entry or {}).get('name', '')}".lower()
@@ -1680,9 +1678,9 @@ class PROMPTFORGE_PromptEnhancer:
                 _free_vram()
 
         fallbacks = []
-        if kv_type != int(GGMLType.GGML_TYPE_F16):
-            fallbacks.append(("kv_cache_type", {"type_k": int(GGMLType.GGML_TYPE_F16), "type_v": int(GGMLType.GGML_TYPE_F16)}))
-        if flash_type == flash_types["on"]:
+        if kv_type != _kv_type_value("f16"):
+            fallbacks.append(("kv_cache_type", {"type_k": _kv_type_value("f16"), "type_v": _kv_type_value("f16")}))
+        if supports_flash and flash_type == flash_types["on"]:
             fallbacks.append(("flash_attn", {"flash_attn_type": flash_types["auto"]}))
         if bool(swa_full):
             fallbacks.append(("swa_full", {"swa_full": False}))
