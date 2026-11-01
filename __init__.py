@@ -521,27 +521,32 @@ def _entry_local_path(entry):
 
 
 def _entry_label(entry):
+    """(picker label, is_local): [LOCAL ...] for models on disk or in the HF cache, [DOWNLOAD] for the rest."""
     label = entry["option"]
     if entry.get("kind") == "gguf":
         quants = _gguf_local_quants(entry)
         if quants:
             ordered = [q for q in ("q4", "q5", "q6", "q8") if q in quants]
-            return f"[LOCAL {'/'.join(q.upper() for q in ordered)}] {label}"
-        return label
+            return f"[LOCAL {'/'.join(q.upper() for q in ordered)}] {label}", True
+        return f"[DOWNLOAD] {label}", False
     if _entry_local_path(entry) or _cache_has(entry.get("repo_id"), "config.json"):
-        return "[LOCAL] " + label
-    return label
+        return f"[LOCAL] {label}", True
+    return f"[DOWNLOAD] {label}", False
 
 
-SAFETENSORS_MODEL_OPTIONS = (
-    [_entry_label(e) for e in HERETIC_MODEL_ENTRIES if e["kind"] == "hf"]
-    + [e["option"] for e in LOCAL_TEXT_MODELS if e["kind"] == "safetensors"]
-) or ["none"]
+def _source_options(kind):
+    """Picker labels for one source, local models first: catalog entries on disk, scanned files, then downloads."""
+    labelled = [_entry_label(e) for e in HERETIC_MODEL_ENTRIES if e["kind"] == kind]
+    local = [label for label, is_local in labelled if is_local]
+    local += [f"[LOCAL] {e['option']}" for e in LOCAL_TEXT_MODELS if e["kind"] == ("gguf" if kind == "gguf" else "safetensors")]
+    remote = [label for label, is_local in labelled if not is_local]
+    return local, remote
 
-GGUF_MODEL_OPTIONS = (
-    [_entry_label(e) for e in HERETIC_MODEL_ENTRIES if e["kind"] == "gguf"]
-    + [e["option"] for e in LOCAL_TEXT_MODELS if e["kind"] == "gguf"]
-) or ["none"]
+
+LOCAL_SAFETENSORS_OPTIONS, REMOTE_SAFETENSORS_OPTIONS = _source_options("hf")
+LOCAL_GGUF_OPTIONS, REMOTE_GGUF_OPTIONS = _source_options("gguf")
+SAFETENSORS_MODEL_OPTIONS = (LOCAL_SAFETENSORS_OPTIONS + REMOTE_SAFETENSORS_OPTIONS) or ["none"]
+GGUF_MODEL_OPTIONS = (LOCAL_GGUF_OPTIONS + REMOTE_GGUF_OPTIONS) or ["none"]
 
 PRESET_OPTIONS = ["auto"] + sorted(
     k for k, v in PROMPTFORGE_PRESETS.items()
@@ -563,13 +568,20 @@ def _gguf_quant_order(quantization, quant_files):
     return [key for key in order if key in quant_files]
 
 
+_STATUS_PREFIX_RE = re.compile(r"^\[(?:AVAILABLE|LOCAL|DOWNLOAD)[^\]]*\]\s*", re.I)
+
+
+def _bare_option(option):
+    return _STATUS_PREFIX_RE.sub("", str(option or ""))
+
+
 def _resolve_model_entry(option):
     """Map a friendly model option to a runtime descriptor; the '[LOCAL ...] ' prefix is stripped first."""
     if not option or option == "auto":
         ent = HERETIC_MODELS[0] if HERETIC_MODELS else {}
         first = HERETIC_MODEL_ENTRIES[0] if HERETIC_MODEL_ENTRIES else {}
         return {"kind": "hf", "key": (ent or {}).get("key") or "heretic_qwen35_9b", "params_b": (ent or {}).get("params_b") or 9, "repo_id": (ent or {}).get("repo_id"), "local_path": _entry_local_path(first) if first else ""}
-    label = re.sub(r"^\[(?:AVAILABLE|LOCAL)[^\]]*\]\s*", "", str(option), flags=re.I)
+    label = _bare_option(option)
     for e in HERETIC_MODEL_ENTRIES:
         if e["option"] == label:
             if e["kind"] == "hf":
@@ -582,7 +594,7 @@ def _resolve_model_entry(option):
 
 def _local_model_option(option):
     """Return the absolute path when the picker option is a scanned local model (relative label or old absolute path)."""
-    opt = str(option or "")
+    opt = _bare_option(option)
     if not opt or opt == "auto":
         return ""
     for e in LOCAL_TEXT_MODELS:
@@ -1046,11 +1058,25 @@ def _option_for_key(key):
     return None
 
 
+LOCAL_HEADER = "────── local models (on disk, ready) ──────"
+REMOTE_HEADER = "────── not downloaded (fetched on first use) ──────"
 MODEL_OPTIONS = (
-    ["connected clip"]
-    + [f"[safetensors] {option}" for option in SAFETENSORS_MODEL_OPTIONS]
-    + [f"[gguf] {option}" for option in GGUF_MODEL_OPTIONS]
+    ["connected clip", LOCAL_HEADER]
+    + [f"[gguf] {option}" for option in LOCAL_GGUF_OPTIONS]
+    + [f"[safetensors] {option}" for option in LOCAL_SAFETENSORS_OPTIONS]
+    + [REMOTE_HEADER]
+    + [f"[gguf] {option}" for option in REMOTE_GGUF_OPTIONS]
+    + [f"[safetensors] {option}" for option in REMOTE_SAFETENSORS_OPTIONS]
 )
+print(
+    f"[PromptForge] {len(LOCAL_GGUF_OPTIONS)} local GGUF and {len(LOCAL_SAFETENSORS_OPTIONS)} local safetensors models ready; "
+    f"{len(REMOTE_GGUF_OPTIONS) + len(REMOTE_SAFETENSORS_OPTIONS)} catalog models would download on first use."
+)
+
+
+def _check_not_header(option):
+    if option in (LOCAL_HEADER, REMOTE_HEADER):
+        raise ValueError("[PromptForge] that picker entry is a section header; choose a model below it.")
 
 
 def _default_model_option():
@@ -1084,7 +1110,10 @@ def _kv_type_value(name):
 
 
 def _display_model(name, source):
-    bare = re.sub(r"^\[(?:AVAILABLE|LOCAL)[^\]]*\]\s*", "", str(name or ""))
+    """Re-check local availability at run time so the report never shows a stale widget label."""
+    bare = _bare_option(name)
+    if _local_model_option(bare) or Path(bare).exists():
+        return f"[LOCAL] {bare}"
     resolved = _resolve_model_entry(bare)
     if source == "GGUF":
         entry = resolved.get("entry") if resolved else None
@@ -1092,12 +1121,12 @@ def _display_model(name, source):
         if quants:
             ordered = [q for q in ("q4", "q5", "q6", "q8") if q in quants]
             return f"[LOCAL {'/'.join(q.upper() for q in ordered)}] {bare}"
-        return bare
+        return f"[DOWNLOAD] {bare}"
     local = (resolved or {}).get("local_path") or ""
     repo = (resolved or {}).get("repo_id") or ""
     if local or (repo and _cache_has(repo, "config.json")):
         return f"[LOCAL] {bare}"
-    return bare
+    return f"[DOWNLOAD] {bare}"
 
 
 def _settings_report(settings):
@@ -1114,6 +1143,7 @@ def _settings_report(settings):
 
 
 def _recommend_settings(data):
+    _check_not_header(data.get("model", ""))
     source, safetensors_model, gguf_model = _parse_model_option(data.get("model", ""))
     quantization = data.get("quantization", "auto")
     settings = {
@@ -1138,6 +1168,7 @@ def _recommend_settings(data):
 
 
 def _test_settings(data):
+    _check_not_header(data.get("model", ""))
     source, safetensors_model, gguf_model = _parse_model_option(data.get("model", ""))
     quantization = data.get("quantization", "auto")
     if source == "connected clip":
@@ -1274,15 +1305,16 @@ def _scan_configs(data):
             cfg.update({"source": "GGUF", "gguf_model": _option_for_key(key) or key, "safetensors_model": "auto"})
             configs[key] = cfg
             lines.append(f"{key}: {_settings_report(cfg)}")
-        for option in SAFETENSORS_MODEL_OPTIONS:
+        for option in LOCAL_SAFETENSORS_OPTIONS:
             local = _local_model_option(option)
-            if not option.startswith("[LOCAL] ") and not (local and Path(local).is_dir()):
+            if local and not Path(local).is_dir():
                 continue
             cfg = _auto_safetensors_settings(_resolve_model_entry(option), local)
             cfg.update({"source": "safetensors", "safetensors_model": option, "gguf_model": "auto"})
-            key = option[len("[LOCAL] "):] if option.startswith("[LOCAL] ") else option
+            key = _bare_option(option)
             configs[key] = cfg
             lines.append(f"{key}: {_settings_report(cfg)}")
+        lines.append(f"not downloaded: {len(REMOTE_GGUF_OPTIONS)} GGUF, {len(REMOTE_SAFETENSORS_OPTIONS)} safetensors catalog models (they fetch on first use).")
     else:
         cfg = _recommend_settings(data)
         configs[cfg["source"]] = cfg
@@ -1303,7 +1335,7 @@ class PROMPTFORGE_Model:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "model": (MODEL_OPTIONS, {"default": _DEFAULT_MODEL, "tooltip": "What to run. [LOCAL Q4/Q8] = those GGUF quants are on disk; [LOCAL] = safetensors model is cached. No prefix = it will download on first use."}),
+                "model": (MODEL_OPTIONS, {"default": _DEFAULT_MODEL, "tooltip": "What to run. The list is split into local models (on disk or in the HF cache, ready to use; [LOCAL Q4/Q8] names the GGUF quants present) and [DOWNLOAD] catalog models that fetch on first use."}),
                 "quantization": (QUANT_OPTIONS, {"default": "auto", "tooltip": "Quantization. auto picks the best local option for this GPU."}),
                 "context_size": ("INT", {"default": 0, "min": 0, "max": 262144, "step": 512, "tooltip": "GGUF context length. 0 = auto (largest that fits, 16k first)."}),
                 "local_model_path": ("STRING", {"default": "", "multiline": True, "tooltip": "Optional local safetensors dir/file or GGUF file; overrides the picker."}),
@@ -1315,6 +1347,7 @@ class PROMPTFORGE_Model:
         }
 
     def build(self, model, quantization, context_size, local_model_path, mmproj_path, clip=None, **kwargs):
+        _check_not_header(model)
         source, safetensors_model, gguf_model = _parse_model_option(model)
         local = (local_model_path or "").strip()
         if local:
