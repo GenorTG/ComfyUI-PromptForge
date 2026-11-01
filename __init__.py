@@ -1925,12 +1925,15 @@ class PROMPTFORGE_PromptEnhancer:
                     bnb_4bit_compute_dtype=hf_dtype,
                     llm_int8_enable_fp32_cpu_offload=True,
                 )
+            device_map = "auto"
+            if quant in ("q8", "q4") and torch.cuda.is_available():
+                device_map = {"": torch.cuda.current_device()}
             load_kwargs = {
                 "quantization_config": quant_cfg,
-                "device_map": "auto",
+                "device_map": device_map,
                 **_hf_dtype_kwargs(hf_dtype),
             }
-            if torch.cuda.is_available():
+            if torch.cuda.is_available() and device_map == "auto":
                 max_memory = _hf_max_memory()
                 if max_memory is not None:
                     load_kwargs["max_memory"] = max_memory
