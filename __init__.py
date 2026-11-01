@@ -446,6 +446,7 @@ def _scan_local_text_models():
 
 
 LOCAL_TEXT_MODELS = _scan_local_text_models()
+_SCANNED_GGUF_NAMES = {Path(m.get("path") or "").name for m in LOCAL_TEXT_MODELS if str(m.get("path") or "").lower().endswith(".gguf")}
 
 def _catalog_entry(item, kind):
     return {
@@ -454,6 +455,10 @@ def _catalog_entry(item, kind):
         "key": item.get("key"),
         "params_b": item.get("params_b"),
         "avail_match": item.get("avail_match") or [],
+        "repo_id": item.get("repo_id"),
+        "base_dir": item.get("base_dir"),
+        "quant_files": item.get("quant_files") or {},
+        "local_path": item.get("local_path") or "",
     }
 
 
@@ -463,7 +468,39 @@ HERETIC_MODEL_ENTRIES = (
 )
 
 
+def _cache_has(repo_id, filename):
+    import os
+    if not repo_id or not filename:
+        return False
+    cache = os.environ.get("HF_HUB_CACHE") or os.environ.get("HUGGINGFACE_HUB_CACHE")
+    hub = Path(cache) if cache else Path(os.environ.get("HF_HOME") or Path.home() / ".cache" / "huggingface") / "hub"
+    snapshots = hub / f"models--{repo_id.replace('/', '--')}" / "snapshots"
+    if not snapshots.is_dir():
+        return False
+    return any((snapshot / filename).is_file() for snapshot in snapshots.iterdir())
+
+
+def _gguf_local_quants(entry):
+    quant_files = entry.get("quant_files") or {}
+    if not quant_files:
+        return []
+    base_dir = Path(entry.get("base_dir") or "LLM/GGUF")
+    if folder_paths is not None:
+        models_dir = getattr(folder_paths, "models_dir", "") or ""
+        if models_dir:
+            base_dir = Path(models_dir) / base_dir
+    scanned = _SCANNED_GGUF_NAMES
+    repo_id = entry.get("repo_id")
+    return [
+        quant for quant, filename in quant_files.items()
+        if (base_dir / filename).is_file() or filename in scanned or _cache_has(repo_id, filename)
+    ]
+
+
 def _entry_local_path(entry):
+    direct = entry.get("local_path") or ""
+    if direct and Path(direct).exists():
+        return direct
     matches = entry.get("avail_match") or []
     if isinstance(matches, str):
         matches = [matches]
@@ -489,8 +526,14 @@ def _entry_local(entry):
 
 def _entry_label(entry):
     label = entry["option"]
-    if _entry_local(entry):
-        label = "[AVAILABLE] " + label
+    if entry.get("kind") == "gguf":
+        quants = _gguf_local_quants(entry)
+        if quants:
+            ordered = [q for q in ("q4", "q5", "q6", "q8") if q in quants]
+            return f"[LOCAL {'/'.join(q.upper() for q in ordered)}] {label}"
+        return label
+    if _entry_local(entry) or _cache_has(entry.get("repo_id"), "config.json"):
+        return "[LOCAL] " + label
     return label
 
 
@@ -537,9 +580,7 @@ def _resolve_model_entry(option):
         ent = HERETIC_MODELS[0] if HERETIC_MODELS else {}
         first = HERETIC_MODEL_ENTRIES[0] if HERETIC_MODEL_ENTRIES else {}
         return {"kind": "hf", "key": (ent or {}).get("key") or "heretic_qwen35_9b", "params_b": (ent or {}).get("params_b") or 9, "repo_id": (ent or {}).get("repo_id"), "local_path": _entry_local_path(first) if first else ""}
-    label = str(option)
-    if label.startswith("[AVAILABLE] "):
-        label = label[len("[AVAILABLE] "):]
+    label = re.sub(r"^\[(?:AVAILABLE|LOCAL)[^\]]*\]\s*", "", str(option), flags=re.I)
     for e in HERETIC_MODEL_ENTRIES:
         if e["option"] == label:
             if e["kind"] == "hf":
@@ -770,9 +811,16 @@ def _auto_gguf_settings(entry, quantization, mmproj_path=None):
             if path is not None:
                 candidates.append((q, path))
     else:
-        path = _find_gguf(entry, quantization, download=False)
+        path = _find_gguf(entry, quantization, download=False, exact=True)
         if path is not None:
             candidates.append((quantization, path))
+        else:
+            for q in ("q8", "q6", "q5", "q4"):
+                local = _find_gguf(entry, q, download=False, exact=True)
+                if local is not None:
+                    candidates.append((q, local))
+            if candidates:
+                print(f"[PromptForge] {quantization} is not local; using local {candidates[0][0]}.")
     chosen = None
     for q, path in candidates:
         fit = _auto_gguf_fit(path, mmproj_path, budget)
@@ -1207,7 +1255,7 @@ class PROMPTFORGE_Model:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "model": (MODEL_OPTIONS, {"default": _DEFAULT_MODEL, "tooltip": "What to run: connected clip, a safetensors model, or a GGUF file."}),
+                "model": (MODEL_OPTIONS, {"default": _DEFAULT_MODEL, "tooltip": "What to run. [LOCAL Q4/Q8] = those GGUF quants are on disk; [LOCAL] = safetensors model is cached. No prefix = it will download on first use."}),
                 "quantization": (QUANT_OPTIONS, {"default": "auto", "tooltip": "Quantization. auto picks the best local option for this GPU."}),
                 "context_size": ("INT", {"default": 0, "min": 0, "max": 262144, "step": 512, "tooltip": "GGUF context length. 0 = auto (largest that fits, 16k first)."}),
                 "local_model_path": ("STRING", {"default": "", "multiline": True, "tooltip": "Optional local safetensors dir/file or GGUF file; overrides the picker."}),
@@ -1252,6 +1300,17 @@ class PROMPTFORGE_Model:
             settings.setdefault(key, value)
         if int(context_size) > 0:
             settings["context_size"] = int(context_size)
+        if source == "GGUF":
+            entry, _ = _gguf_target(gguf_model, settings.get("quantization", quantization))
+            chosen = settings.get("quantization", quantization)
+            if entry is not None and _find_gguf(entry, chosen, download=False, exact=True) is None:
+                print(f"[PromptForge] {gguf_model} ({chosen}) is not local; it will download on first use.")
+        elif source == "safetensors":
+            resolved = _resolve_model_entry(safetensors_model)
+            repo = (resolved or {}).get("repo_id") or ""
+            local = (resolved or {}).get("local_path") or ""
+            if repo and not local and not _cache_has(repo, "config.json"):
+                print(f"[PromptForge] {safetensors_model} is not local; it will download on first use.")
         if source == "connected clip":
             if clip is None:
                 raise ValueError("[PromptForge] model is 'connected clip' but no CLIP input is connected.")
@@ -1554,7 +1613,16 @@ class PROMPTFORGE_PromptEnhancer:
             if entry is None and GGUF_MODELS:
                 entry = GGUF_MODELS[0]
             if entry is not None:
-                gguf_path = _find_gguf(entry, quantization)
+                exact = _find_gguf(entry, quantization, download=False, exact=True)
+                if exact is not None:
+                    gguf_path = exact
+                else:
+                    local_any = _find_gguf(entry, "auto", download=False)
+                    if local_any is not None:
+                        print(f"[PromptForge] {quantization} is not local; using {local_any.name}.")
+                        gguf_path = local_any
+                    else:
+                        gguf_path = _find_gguf(entry, quantization)
         if gguf_path is None:
             raise ValueError("[PromptForge] No GGUF model selected / available. Put the .gguf in a scanned models dir (text_encoders / LLM / gguf) or set local_model_path.")
 
