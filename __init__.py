@@ -1071,9 +1071,11 @@ def _parse_model_option(option):
     return "safetensors", text, "auto"
 
 
+_KV_TYPE_VALUES = {"f16": 1, "q8_0": 8, "q5_1": 7, "q5_0": 6, "q4_1": 3, "q4_0": 2}
+
+
 def _kv_type_value(name):
-    from llama_cpp._ggml import GGMLType
-    return int(getattr(GGMLType, f"GGML_TYPE_{str(name).upper()}", GGMLType.GGML_TYPE_F16))
+    return _KV_TYPE_VALUES.get(str(name).lower(), 1)
 
 
 def _display_model(name, source):
@@ -1603,6 +1605,9 @@ class PROMPTFORGE_PromptEnhancer:
                 llm.close()
             except Exception:
                 pass
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     # ------------------------------------------------------------------ #
     # Generation dispatch
@@ -1909,6 +1914,7 @@ class PROMPTFORGE_PromptEnhancer:
             load_kwargs = {
                 "quantization_config": quant_cfg,
                 "device_map": device_map,
+                "attn_implementation": "sdpa",
                 **_hf_dtype_kwargs(hf_dtype),
             }
             if torch.cuda.is_available() and device_map == "auto":
@@ -1916,12 +1922,23 @@ class PROMPTFORGE_PromptEnhancer:
                 if max_memory is not None:
                     load_kwargs["max_memory"] = max_memory
             model = processor = tokenizer = None
+
+            def _load(model_cls):
+                try:
+                    return model_cls.from_pretrained(src, **load_kwargs)
+                except (TypeError, ValueError) as exc:
+                    message = str(exc).lower()
+                    if "attn_implementation" in message or "sdpa" in message:
+                        load_kwargs.pop("attn_implementation", None)
+                        return model_cls.from_pretrained(src, **load_kwargs)
+                    raise
+
             try:
                 if mode != "text_only":
-                    model = AutoVision.from_pretrained(src, **load_kwargs)
+                    model = _load(AutoVision)
                 else:
                     from transformers import AutoModelForCausalLM
-                    model = AutoModelForCausalLM.from_pretrained(src, **load_kwargs)
+                    model = _load(AutoModelForCausalLM)
                 device_map = getattr(model, "hf_device_map", None) or {}
                 if any(str(device) in ("cpu", "disk") for device in device_map.values()):
                     print("[PromptForge] model is partly on CPU/disk; generation will be slower (use q4 or a smaller model).")
@@ -2013,9 +2030,18 @@ class PROMPTFORGE_PromptEnhancer:
                     print(f"[PromptForge] output rejected ({reason}); retrying with a new seed.")
                     enhanced = attempt(_next_seed(seed))
                 return enhanced
+            except RuntimeError as exc:
+                if "out of memory" in str(exc).lower():
+                    raise ValueError(
+                        "[PromptForge] not enough free VRAM for this safetensors quantization. "
+                        "Use q4, a smaller model, or the GGUF version."
+                    ) from exc
+                raise
             finally:
                 del model, processor, tokenizer
                 gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
 
         import comfy.sd
         try:
