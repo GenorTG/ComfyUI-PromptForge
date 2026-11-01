@@ -1613,30 +1613,35 @@ class PROMPTFORGE_PromptEnhancer:
     # Generation dispatch
     # ------------------------------------------------------------------ #
     def _generate(self, full_prompt, system_prompt, user_prompt, mode, engine, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded, min_chars=20):
-        if engine == "gguf":
-            return self._generate_gguf(
+        try:
+            if engine == "gguf":
+                return self._generate_gguf(
+                    full_prompt=full_prompt, system_prompt=system_prompt, user_prompt=user_prompt,
+                    mode=mode, model_name=model_name, quantization=quantization,
+                    context_size=context_size, gpu_layers=gpu_layers, batch_size=batch_size, ubatch_size=ubatch_size,
+                    kv_cache_type=kv_cache_type, offload_kqv=offload_kqv, swa_full=swa_full,
+                    flash_attn=flash_attn,
+                    max_tokens=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k,
+                    num_beams=num_beams, repetition_penalty=repetition_penalty, seed=seed,
+                    image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
+                    custom_repo_id=custom_repo_id, local_model_path=local_model_path, mmproj_path=mmproj_path,
+                    disable_thinking=disable_thinking, use_default_sampling=use_default_sampling,
+                    auto_retry=auto_retry, keep_model_loaded=keep_model_loaded, min_chars=min_chars,
+                )
+            return self._generate_text_encoder(
                 full_prompt=full_prompt, system_prompt=system_prompt, user_prompt=user_prompt,
                 mode=mode, model_name=model_name, quantization=quantization,
-                context_size=context_size, gpu_layers=gpu_layers, batch_size=batch_size, ubatch_size=ubatch_size,
-                kv_cache_type=kv_cache_type, offload_kqv=offload_kqv, swa_full=swa_full,
-                flash_attn=flash_attn,
                 max_tokens=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k,
-                num_beams=num_beams, repetition_penalty=repetition_penalty, seed=seed,
+                num_beams=num_beams, repetition_penalty=repetition_penalty,
                 image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
-                custom_repo_id=custom_repo_id, local_model_path=local_model_path, mmproj_path=mmproj_path,
+                seed=seed, clip=clip, custom_repo_id=custom_repo_id, local_model_path=local_model_path,
                 disable_thinking=disable_thinking, use_default_sampling=use_default_sampling,
                 auto_retry=auto_retry, keep_model_loaded=keep_model_loaded, min_chars=min_chars,
             )
-        return self._generate_text_encoder(
-            full_prompt=full_prompt, system_prompt=system_prompt, user_prompt=user_prompt,
-            mode=mode, model_name=model_name, quantization=quantization,
-            max_tokens=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k,
-            num_beams=num_beams, repetition_penalty=repetition_penalty,
-            image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
-            seed=seed, clip=clip, custom_repo_id=custom_repo_id, local_model_path=local_model_path,
-            disable_thinking=disable_thinking, use_default_sampling=use_default_sampling,
-            auto_retry=auto_retry, keep_model_loaded=keep_model_loaded, min_chars=min_chars,
-        )
+        finally:
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
     # ------------------------------------------------------------------ #
     # GGUF / llama.cpp engine
@@ -2039,9 +2044,6 @@ class PROMPTFORGE_PromptEnhancer:
                 raise
             finally:
                 del model, processor, tokenizer
-                gc.collect()
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
 
         import comfy.sd
         try:
