@@ -1334,6 +1334,8 @@ class PROMPTFORGE_Model:
         if source == "connected clip":
             if clip is None:
                 raise ValueError("[PromptForge] model is 'connected clip' but no CLIP input is connected.")
+            if not hasattr(clip, "generate"):
+                raise ValueError("[PromptForge] this CLIP text encoder has no generation support. Connect a generative Qwen/Gemma encoder, or use a safetensors/GGUF model.")
             try:
                 clip.tokenize("test")
             except Exception as exc:
@@ -1864,6 +1866,7 @@ class PROMPTFORGE_PromptEnhancer:
                 if free_bytes and float(params_b) * 1.35 * 1024 ** 3 > free_bytes:
                     print("[PromptForge] q8 does not fit free VRAM; using q4 instead.")
                     quant = "q4"
+            quant_cfg = None
             if quant in ("q8", "q4"):
                 quant_cfg = BitsAndBytesConfig(
                     load_in_8bit=(quant == "q8"),
@@ -1973,7 +1976,10 @@ class PROMPTFORGE_PromptEnhancer:
                 gc.collect()
 
         import comfy.sd
-        clip_obj = comfy.sd.load_clip(ckpt_paths=[src], clip_type=comfy.sd.CLIPType.STABLE_DIFFUSION, model_options={"dtype": torch.float16})
+        try:
+            clip_obj = comfy.sd.load_clip(ckpt_paths=[src], clip_type=comfy.sd.CLIPType.STABLE_DIFFUSION, model_options={"dtype": torch.float16})
+        except Exception as exc:
+            raise ValueError(f"[PromptForge] ComfyUI could not load this text encoder: {exc}") from exc
         enhanced = self._generate_with_clip(
             full_prompt=full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
             top_p=top_p, top_k=top_k, repetition_penalty=repetition_penalty,
@@ -1991,6 +1997,8 @@ class PROMPTFORGE_PromptEnhancer:
         tokenize_kwargs = {"images": images} if images else {}
         if disable_thinking:
             tokenize_kwargs["thinking"] = False
+        if not hasattr(clip, "generate"):
+            raise ValueError("[PromptForge] this CLIP text encoder has no generation support. Connect a generative Qwen/Gemma encoder, or use a safetensors/GGUF model.")
         tokens = clip.tokenize(full_prompt, **tokenize_kwargs)
         if images and not _tokens_have_images(tokens):
             raise ValueError("[PromptForge] The selected text encoder has no vision support; the provided image/video would be ignored. Connect a vision-capable encoder or use text_only.")
