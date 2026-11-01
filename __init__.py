@@ -1,26 +1,31 @@
-"""ComfyUI PromptForge - unified prompt enhancement node.
+"""ComfyUI PromptForge - prompt enhancement nodes.
 
-Single ComfyUI node that combines:
-  - preset catalog (Krea 2, MOSS Image, Qwen Image, generic styles)
-  - custom system-prompt override + save mechanism
-  - text encoder engines: native ComfyUI CLIP route (fp16 / live-quantized),
-    GGUF route via llama.cpp
-  - heretic model catalog (HF + GGUF) with local availability markers
-  - media-aware modes (text / image / video)
-  - hardcore sampling options
+  - PromptForge Model: picks a connected CLIP, a safetensors model or a GGUF
+    and plans quant / context / GPU layers for the current GPU
+  - PromptForge Enhancer: writes the prompt with a preset system prompt,
+    optional images / video frames, and output cleanup
+  - PromptForge Config Finder: reports the planned settings for local models
 """
 
+import base64
+import io
 import json
 import gc
+import importlib.util
 import inspect
+import os
 import re
 import struct
 import time
+from collections import Counter
 from pathlib import Path
 
+import psutil
 import torch
 import transformers
-from transformers import AutoProcessor, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoProcessor, AutoTokenizer, BitsAndBytesConfig
+from transformers import LogitsProcessor, LogitsProcessorList, StoppingCriteria, StoppingCriteriaList
+from transformers.utils.chat_template_utils import render_jinja_template
 
 try:
     from transformers import AutoModelForImageTextToText as AutoVision
@@ -140,13 +145,12 @@ def _strip_chat_tokens(text):
     return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
 _NEGATIVE_PROMPT_TERMS = (
-    "blur", "blurry", "watermark", "text", "logo", "extra fingers", "extra limbs",
-    "bad anatomy", "low quality", "worst quality", "deformed", "nsfw", "sweat",
-    "wet", "wetness", "moisture", "droplets", "people", "person", "humans",
-    "characters", "clutter", "noise",
+    "blur", "blurry", "watermark", "logo", "extra fingers", "extra limbs",
+    "bad anatomy", "low quality", "worst quality", "deformed", "sweat",
+    "wetness", "moisture", "droplets",
 )
 _NEGATIVE_PROMPT_RE = re.compile(
-    r"\b(no|without|avoid|free of|not|don't|do not|must not|should not)\b[^.!?]{0,50}\b("
+    r"\b(no|without|avoid|free of|don't|do not|must not|should not)\b[^.!?]{0,50}\b("
     + "|".join(re.escape(term) for term in _NEGATIVE_PROMPT_TERMS)
     + r")\b",
     re.I,
@@ -188,9 +192,6 @@ THINK_TAGS = (
     ("<thinking>", "</thinking>"),
 )
 
-SAMPLING_KEYS = ("temperature", "top_p", "top_k", "repetition_penalty")
-
-
 REFUSAL_MARKERS = (
     "i cannot fulfill", "i can't fulfill", "i cannot comply", "i can't comply",
     "i cannot assist", "i can't assist", "i cannot help", "i can't help",
@@ -206,7 +207,6 @@ REFUSAL_MARKERS = (
 def _is_repetitive_text(text):
     if not text or len(text) < 60:
         return False
-    from collections import Counter
     normalized = re.sub(r"\s+", " ", text.lower()).strip()[:8000]
     sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", normalized) if len(s.strip()) >= 30]
     if sentences:
@@ -271,9 +271,18 @@ def _clip_top_p_supported():
         return True
 
 
+_REASONING_OPENER_RE = re.compile(
+    r"^\W*(?:okay|ok|alright|let me|let's|first,|the user (?:wants|asked|is asking|provided)|i need to|we need to|i should|"
+    r"breaking (?:this|it) down|to (?:start|begin) with|so,? the)\b",
+    re.I,
+)
+
+
 def _bad_output_reason(text, min_chars=20):
-    """Return a short reason when output is empty, short, degenerate or a refusal."""
+    """Return a short reason when output is empty, short, degenerate, leaked reasoning or a refusal."""
     answer, _ = _split_thinking(text or "")
+    if _REASONING_OPENER_RE.match(answer):
+        return "reasoning leak"
     clean = _clean_prompt_output(answer)
     if len(clean) < min_chars:
         return "too short"
@@ -287,12 +296,10 @@ def _bad_output_reason(text, min_chars=20):
         return "low variety"
     words = re.findall(r"\w+", clean.lower())
     if len(words) > 30:
-        from collections import Counter
         if Counter(words).most_common(1)[0][1] / len(words) > 0.45:
             return "repeated words"
     lines = [line.strip() for line in clean.splitlines() if line.strip()]
     if len(lines) >= 4:
-        from collections import Counter
         if Counter(lines).most_common(1)[0][1] >= 4:
             return "repeated lines"
     lowered = clean.lower()
@@ -303,8 +310,9 @@ def _bad_output_reason(text, min_chars=20):
     return ""
 
 
-def _is_bad_output(text, min_chars=20):
-    return bool(_bad_output_reason(text, min_chars))
+def _tokens_text(clip, tokens):
+    batch = next(iter(tokens.values())) if isinstance(tokens, dict) else tokens
+    return clip.decode([t[0] for row in batch for t in row if isinstance(t[0], int)], skip_special_tokens=False)
 
 
 def _tokens_have_images(tokens):
@@ -371,93 +379,70 @@ def _split_thinking(text):
     return answer.strip(), "\n\n".join(thoughts).strip()
 
 
-def _generation_defaults_from_files(src):
-    """Read sampling defaults that actually exist in a model's generation_config.json."""
-    if not src:
-        return {}
-    path = Path(src)
-    if path.is_dir():
-        config_path = path / "generation_config.json"
-    elif path.suffix.lower() in (".safetensors", ".bin", ".gguf"):
-        config_path = path.parent / "generation_config.json"
-    else:
-        return {}
-    if not config_path.is_file():
-        return {}
-    try:
-        config = json.loads(config_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    return {key: config[key] for key in SAMPLING_KEYS if isinstance(config.get(key), (int, float)) and not isinstance(config.get(key), bool)}
-
-
-def _generation_defaults_from_gguf(llm):
-    """Read llama.cpp metadata sampling defaults when the GGUF carries them."""
-    metadata = getattr(llm, "metadata", None) or {}
-    defaults = {}
-    for meta_key, key in (
-        ("general.sampling.temperature", "temperature"),
-        ("general.sampling.top_p", "top_p"),
-        ("general.sampling.top_k", "top_k"),
-        ("general.sampling.repetition_penalty", "repetition_penalty"),
-        ("general.sampling.repeat_penalty", "repetition_penalty"),
-    ):
-        value = metadata.get(meta_key)
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            defaults[key] = value
-    return defaults
-
-
-def _apply_sampling_defaults(defaults, temperature, top_p, top_k, repetition_penalty):
-    return (
-        defaults.get("temperature", temperature),
-        defaults.get("top_p", top_p),
-        defaults.get("top_k", top_k),
-        defaults.get("repetition_penalty", repetition_penalty),
-    )
-
 DEFAULT_PRESET = "Enhance"
 
 HERETIC_MODELS = PROMPTFORGE_MODELS.get("heretic_hf_models") or []
 GGUF_MODELS = PROMPTFORGE_MODELS.get("gguf_models") or []
 LOCAL_SCAN_DIRS = PROMPTFORGE_MODELS.get("local_scan_dirs") or []
 
+def _safetensors_is_decoder(path):
+    """True when a single safetensors file holds a decoder LLM (has token embeddings)."""
+    try:
+        with open(path, "rb") as f:
+            header = json.loads(f.read(struct.unpack("<Q", f.read(8))[0]))
+    except (OSError, ValueError, struct.error):
+        return False
+    return any(key.endswith("embed_tokens.weight") for key in header)
+
+
+def _scan_roots():
+    """Directories to scan: every registered text_encoders folder plus the catalog subdirs of models_dir."""
+    roots = []
+    if folder_paths is not None:
+        for folder in folder_paths.get_folder_paths("text_encoders"):
+            roots.append(Path(folder))
+        models_dir = Path(folder_paths.models_dir)
+        roots.extend(models_dir / sub for sub in LOCAL_SCAN_DIRS)
+    seen = set()
+    unique = []
+    for root in roots:
+        if root.is_dir() and str(root) not in seen:
+            seen.add(str(root))
+            unique.append(root)
+    return unique
+
+
 def _scan_local_text_models():
     """Scan ComfyUI text-model directories for local LLM / text encoder models.
 
-    Multi-part checkpoints collapse to their containing HF directory and mmproj
-    vision sidecars are skipped, so the picker shows one entry per model.
+    Multi-part checkpoints collapse to their containing HF directory, mmproj
+    vision sidecars and non-generative encoders (CLIP, T5, projections) are
+    skipped. The picker option is the path relative to models_dir so a
+    workflow saved on one machine resolves on another with the same layout.
     """
-    roots = []
-    if folder_paths is not None:
-        models_dir = getattr(folder_paths, "models_dir", "") or ""
-        if models_dir:
-            roots.append(Path(models_dir))
-    roots.append(Path("/home/genortg/ComfyUI/Comfy/models"))
-    roots.append(Path("/home/genortg/1TB-SAMSUNG/Comfy/ComfyUI/models"))
-
     found = []
     seen_paths = set()
-    for root in roots:
-        for sub in LOCAL_SCAN_DIRS:
-            c = root / sub
-            if not c.is_dir():
+    models_dir = Path(folder_paths.models_dir) if folder_paths is not None else None
+    for root in _scan_roots():
+        for p in sorted(root.rglob("*")):
+            if not p.is_file() or p.suffix.lower() not in (".safetensors", ".gguf", ".bin"):
                 continue
-            for p in sorted(c.rglob("*")):
-                if not p.is_file() or p.suffix.lower() not in (".safetensors", ".gguf", ".bin"):
-                    continue
-                name = p.name.lower()
-                if p.suffix.lower() == ".gguf" and "mmproj" in name:
-                    continue
-                if p.suffix.lower() in (".safetensors", ".bin") and (p.parent / "config.json").is_file():
-                    model_path = p.parent
-                else:
-                    model_path = p
-                key = str(model_path)
-                if key in seen_paths:
-                    continue
-                seen_paths.add(key)
-                found.append({"path": key, "name": model_path.name, "kind": "gguf" if p.suffix.lower() == ".gguf" else "safetensors"})
+            if p.suffix.lower() == ".gguf" and "mmproj" in p.name.lower():
+                continue
+            if p.suffix.lower() in (".safetensors", ".bin") and (p.parent / "config.json").is_file():
+                model_path = p.parent
+            elif p.suffix.lower() == ".safetensors" and not _safetensors_is_decoder(p):
+                continue
+            else:
+                model_path = p
+            key = str(model_path)
+            if key in seen_paths:
+                continue
+            seen_paths.add(key)
+            option = key
+            if models_dir is not None and model_path.is_relative_to(models_dir):
+                option = str(model_path.relative_to(models_dir))
+            found.append({"path": key, "option": option, "name": model_path.name, "kind": "gguf" if p.suffix.lower() == ".gguf" else "safetensors"})
     return found
 
 
@@ -485,7 +470,6 @@ HERETIC_MODEL_ENTRIES = (
 
 
 def _cache_has(repo_id, filename):
-    import os
     if not repo_id or not filename:
         return False
     cache = os.environ.get("HF_HUB_CACHE") or os.environ.get("HUGGINGFACE_HUB_CACHE")
@@ -536,10 +520,6 @@ def _entry_local_path(entry):
     return ""
 
 
-def _entry_local(entry):
-    return bool(_entry_local_path(entry))
-
-
 def _entry_label(entry):
     label = entry["option"]
     if entry.get("kind") == "gguf":
@@ -548,24 +528,20 @@ def _entry_label(entry):
             ordered = [q for q in ("q4", "q5", "q6", "q8") if q in quants]
             return f"[LOCAL {'/'.join(q.upper() for q in ordered)}] {label}"
         return label
-    if _entry_local(entry) or _cache_has(entry.get("repo_id"), "config.json"):
+    if _entry_local_path(entry) or _cache_has(entry.get("repo_id"), "config.json"):
         return "[LOCAL] " + label
     return label
 
 
 SAFETENSORS_MODEL_OPTIONS = (
     [_entry_label(e) for e in HERETIC_MODEL_ENTRIES if e["kind"] == "hf"]
-    + [e["path"] for e in LOCAL_TEXT_MODELS if (e.get("path") or "") and not e["path"].lower().endswith(".gguf")]
+    + [e["option"] for e in LOCAL_TEXT_MODELS if e["kind"] == "safetensors"]
 ) or ["none"]
 
 GGUF_MODEL_OPTIONS = (
     [_entry_label(e) for e in HERETIC_MODEL_ENTRIES if e["kind"] == "gguf"]
-    + [e["path"] for e in LOCAL_TEXT_MODELS if (e.get("path") or "").lower().endswith(".gguf")]
+    + [e["option"] for e in LOCAL_TEXT_MODELS if e["kind"] == "gguf"]
 ) or ["none"]
-
-
-def _preferred_option(options):
-    return options[0] if options else "none"
 
 PRESET_OPTIONS = ["auto"] + sorted(
     k for k, v in PROMPTFORGE_PRESETS.items()
@@ -588,10 +564,7 @@ def _gguf_quant_order(quantization, quant_files):
 
 
 def _resolve_model_entry(option):
-    """Map a friendly model option to a runtime descriptor.
-
-    '[AVAILABLE] ' prefixes mark locally downloaded models and are stripped here.
-    """
+    """Map a friendly model option to a runtime descriptor; the '[LOCAL ...] ' prefix is stripped first."""
     if not option or option == "auto":
         ent = HERETIC_MODELS[0] if HERETIC_MODELS else {}
         first = HERETIC_MODEL_ENTRIES[0] if HERETIC_MODEL_ENTRIES else {}
@@ -608,24 +581,14 @@ def _resolve_model_entry(option):
 
 
 def _local_model_option(option):
-    """Return the path when the picker option is a scanned local model file."""
-    if not option:
+    """Return the absolute path when the picker option is a scanned local model (relative label or old absolute path)."""
+    opt = str(option or "")
+    if not opt or opt == "auto":
         return ""
-    opt = str(option)
-    if opt == "auto":
-        return ""
-    return opt if any(opt == e.get("path") for e in LOCAL_TEXT_MODELS) else ""
-
-
-def _model_kind(model_name, local_model_path):
-    """Return 'gguf' or 'text_encoder' for the effective model."""
-    src = (local_model_path or "").strip() or _local_model_option(model_name)
-    if src:
-        return "gguf" if str(src).lower().endswith(".gguf") else "text_encoder"
-    entry = _resolve_model_entry(model_name if model_name and model_name != "auto" else "auto")
-    if not entry:
-        return "text_encoder"
-    return entry.get("kind") or "text_encoder"
+    for e in LOCAL_TEXT_MODELS:
+        if opt in (e["option"], e["path"]):
+            return e["path"]
+    return ""
 
 
 def _hf_dtype_kwargs(dtype):
@@ -648,7 +611,6 @@ def _hf_compute_dtype():
 
 def _hf_max_memory(reserve=3 * 1024 ** 3):
     """GPU budget for device_map='auto', leaving headroom for activations and KV cache."""
-    import psutil
     try:
         free_bytes = torch.cuda.mem_get_info()[0]
     except Exception:
@@ -780,6 +742,22 @@ def _gguf_memory_estimate(path, n_ctx, layers, mmproj_path=None):
     return (weights + kv_bytes) * fraction + extra + 768 * 1024 ** 2
 
 
+def _gguf_layers_that_fit(path, n_ctx, mmproj_path=None):
+    """GPU layer count for the VRAM that is free right now (other processes included)."""
+    try:
+        free_bytes = torch.cuda.mem_get_info()[0]
+    except Exception:
+        return 0
+    profile = _gguf_kv_profile(path)
+    if profile is None:
+        return 0
+    n_layers, kv_per_token, swa = profile
+    kv = kv_per_token * (min(n_ctx, swa) * 0.95 + n_ctx * 0.05) if swa is not None else kv_per_token * n_ctx
+    extra = mmproj_path.stat().st_size if mmproj_path is not None else 0
+    cost = (path.stat().st_size + kv) / n_layers
+    return max(0, min(n_layers, int((free_bytes - extra - 768 * 1024 ** 2) / cost)))
+
+
 def _gpu_budget_bytes():
     try:
         total = torch.cuda.get_device_properties(0).total_memory
@@ -858,17 +836,31 @@ def _auto_gguf_settings(entry, quantization, mmproj_path=None):
 def _auto_gguf_path_settings(path, quantization, mmproj=None):
     budget = _gpu_budget_bytes()
     batch, ubatch = _auto_batch(budget)
+    file_quant = re.search(r"[-_.](q[2-8])_", path.name.lower())
     settings = {
-        "quantization": "q4" if quantization in ("auto", "fp16", "") else quantization,
+        "quantization": file_quant.group(1) if file_quant else quantization,
         "batch_size": batch, "ubatch_size": ubatch, "swa_full": False, "flash_attn": "auto",
     }
     settings.update(_auto_gguf_fit(path, mmproj, budget) or {})
     return settings
 
 
-def _auto_safetensors_settings(resolved):
+def _dir_params_b(path):
+    """Parameter count in billions from the safetensors bytes of an HF model directory (bf16 weights)."""
+    path = Path(str(path or ""))
+    if not path.is_dir():
+        return None
+    total = sum(f.stat().st_size for f in path.glob("*.safetensors") if "mtp" not in f.name.lower())
+    return round(total / 2 / 1e9, 1) if total else None
+
+
+def _safetensors_params_b(resolved, src=""):
+    return (resolved or {}).get("params_b") or _dir_params_b((resolved or {}).get("local_path") or src)
+
+
+def _auto_safetensors_settings(resolved, src=""):
     budget = _gpu_budget_bytes()
-    params_b = (resolved or {}).get("params_b")
+    params_b = _safetensors_params_b(resolved, src)
     if not params_b or budget <= 0:
         return {}
     if params_b * 2.0 * 1024 ** 3 <= budget * 0.85:
@@ -1036,9 +1028,11 @@ def _resolve_mmproj(gguf_path, entry, override=""):
 
 
 def _gguf_target(option, quantization):
+    """(catalog entry, gguf path) for a picker option: scanned local file (relative label or absolute path) or catalog model."""
     text = str(option or "")
-    if text.lower().endswith(".gguf") and Path(text).is_file():
-        return None, Path(text)
+    local = _local_model_option(text) or (text if text.lower().endswith(".gguf") and Path(text).is_file() else "")
+    if local:
+        return None, Path(local)
     resolved = _resolve_model_entry(text)
     entry = resolved.get("entry") if resolved else None
     path = _find_gguf(entry, quantization, download=False) if entry else None
@@ -1057,7 +1051,18 @@ MODEL_OPTIONS = (
     + [f"[safetensors] {option}" for option in SAFETENSORS_MODEL_OPTIONS]
     + [f"[gguf] {option}" for option in GGUF_MODEL_OPTIONS]
 )
-_DEFAULT_MODEL = next((option for option in MODEL_OPTIONS if option.startswith("[safetensors] ")), MODEL_OPTIONS[0])
+
+
+def _default_model_option():
+    """A local GGUF is the fastest path, so prefer one when llama.cpp is installed; else the first safetensors entry."""
+    if importlib.util.find_spec("llama_cpp") is not None:
+        for option in MODEL_OPTIONS:
+            if option.startswith("[gguf] [LOCAL"):
+                return option
+    return next((option for option in MODEL_OPTIONS if option.startswith("[safetensors] ")), MODEL_OPTIONS[0])
+
+
+_DEFAULT_MODEL = _default_model_option()
 
 
 def _parse_model_option(option):
@@ -1116,13 +1121,14 @@ def _recommend_settings(data):
         "quantization": quantization,
     }
     if source == "GGUF":
-        resolved = _resolve_model_entry(gguf_model)
-        entry = resolved.get("entry") if resolved else None
-        path = _find_gguf(entry, quantization, download=False) if entry else None
+        entry, path = _gguf_target(gguf_model, quantization)
         mmproj = _local_mmproj(path, entry) if path is not None else None
-        settings.update(_auto_gguf_settings(entry, quantization, mmproj))
+        if entry is None and path is not None:
+            settings.update(_auto_gguf_path_settings(path, quantization, mmproj))
+        else:
+            settings.update(_auto_gguf_settings(entry, quantization, mmproj))
     elif source == "safetensors":
-        settings.update(_auto_safetensors_settings(_resolve_model_entry(safetensors_model)))
+        settings.update(_auto_safetensors_settings(_resolve_model_entry(safetensors_model), _local_model_option(safetensors_model)))
     for key, value in (
         ("context_size", 16384), ("gpu_layers", -1), ("batch_size", 2048), ("ubatch_size", 512),
         ("kv_cache_type", "f16"), ("offload_kqv", True), ("swa_full", False), ("flash_attn", "auto"),
@@ -1142,13 +1148,11 @@ def _test_settings(data):
 
 
 def _test_gguf(option, quantization):
-    resolved = _resolve_model_entry(option)
-    entry = resolved.get("entry") if resolved else None
-    path = _find_gguf(entry, quantization, download=False) if entry else None
+    entry, path = _gguf_target(option, quantization)
     if path is None:
         return {"ok": False, "message": "model is not downloaded yet; run it once, then test."}
     mmproj = _local_mmproj(path, entry)
-    plan = _auto_gguf_settings(entry, quantization, mmproj)
+    plan = _auto_gguf_path_settings(path, quantization, mmproj) if entry is None else _auto_gguf_settings(entry, quantization, mmproj)
     ctx = int(plan.get("context_size", 16384))
     kv = plan.get("kv_cache_type", "f16")
     layers = int(plan.get("gpu_layers", -1))
@@ -1209,15 +1213,25 @@ def _test_gguf(option, quantization):
     return {"ok": False, "message": last_error or "context creation failed"}
 
 
+def _load_hf_model(src, load_kwargs):
+    """Load with the vision class when the config has one (text-only prompts work there too), else as a causal LM."""
+    try:
+        return AutoVision.from_pretrained(src, **load_kwargs)
+    except ValueError as exc:
+        if "Unrecognized configuration class" not in str(exc):
+            raise
+    return AutoModelForCausalLM.from_pretrained(src, **load_kwargs)
+
+
 def _test_safetensors(option, quantization):
     resolved = _resolve_model_entry(option)
-    src = (resolved or {}).get("local_path") or (resolved or {}).get("repo_id") or ""
+    src = (resolved or {}).get("local_path") or (resolved or {}).get("repo_id") or _local_model_option(option)
     path = Path(src) if src else None
     if path is None or not path.exists():
         return {"ok": False, "message": "model is not downloaded yet; run it once, then test."}
     if not path.is_dir():
         return {"ok": False, "message": "single-file encoders are verified on first generation."}
-    plan = _auto_safetensors_settings(resolved)
+    plan = _auto_safetensors_settings(resolved, src)
     quant = plan.get("quantization") or ("q4" if quantization in ("auto", "fp16", "") else quantization)
     dtype = _hf_compute_dtype()
     quant_cfg = None
@@ -1234,10 +1248,9 @@ def _test_safetensors(option, quantization):
     max_memory = _hf_max_memory()
     if max_memory is not None:
         kwargs["max_memory"] = max_memory
-    from transformers import AutoModelForCausalLM
     _free_vram()
     try:
-        model = AutoModelForCausalLM.from_pretrained(str(path), **kwargs)
+        model = _load_hf_model(str(path), kwargs)
         del model
         gc.collect()
         torch.cuda.empty_cache()
@@ -1262,11 +1275,12 @@ def _scan_configs(data):
             configs[key] = cfg
             lines.append(f"{key}: {_settings_report(cfg)}")
         for option in SAFETENSORS_MODEL_OPTIONS:
-            if not option.startswith("[AVAILABLE] "):
+            local = _local_model_option(option)
+            if not option.startswith("[LOCAL] ") and not (local and Path(local).is_dir()):
                 continue
-            cfg = _auto_safetensors_settings(_resolve_model_entry(option))
+            cfg = _auto_safetensors_settings(_resolve_model_entry(option), local)
             cfg.update({"source": "safetensors", "safetensors_model": option, "gguf_model": "auto"})
-            key = option[len("[AVAILABLE] "):]
+            key = option[len("[LOCAL] "):] if option.startswith("[LOCAL] ") else option
             configs[key] = cfg
             lines.append(f"{key}: {_settings_report(cfg)}")
     else:
@@ -1304,6 +1318,8 @@ class PROMPTFORGE_Model:
         source, safetensors_model, gguf_model = _parse_model_option(model)
         local = (local_model_path or "").strip()
         if local:
+            if not Path(local).exists():
+                raise ValueError(f"[PromptForge] local_model_path does not exist on this machine: {local}")
             source = "GGUF" if local.lower().endswith(".gguf") else "safetensors"
             if source == "GGUF":
                 gguf_model = local
@@ -1326,7 +1342,7 @@ class PROMPTFORGE_Model:
             else:
                 settings.update(_auto_gguf_settings(entry, quantization, mmproj))
         elif source == "safetensors":
-            settings.update(_auto_safetensors_settings(_resolve_model_entry(safetensors_model)))
+            settings.update(_auto_safetensors_settings(_resolve_model_entry(safetensors_model), _local_model_option(safetensors_model) or local))
         for key, value in (
             ("context_size", 16384), ("gpu_layers", -1), ("batch_size", 2048), ("ubatch_size", 512),
             ("kv_cache_type", "f16"), ("offload_kqv", True), ("swa_full", False), ("flash_attn", "auto"),
@@ -1348,8 +1364,6 @@ class PROMPTFORGE_Model:
         if source == "connected clip":
             if clip is None:
                 raise ValueError("[PromptForge] model is 'connected clip' but no CLIP input is connected.")
-            if not hasattr(clip, "generate"):
-                raise ValueError("[PromptForge] this CLIP text encoder has no generation support. Connect a generative Qwen/Gemma encoder, or use a safetensors/GGUF model.")
             try:
                 clip.tokenize("test")
             except Exception as exc:
@@ -1460,7 +1474,6 @@ class PROMPTFORGE_PromptEnhancer:
         video=None,
         frame_count=16,
         negative_prompt="",
-        clip=None,
         **kwargs,
     ):
         print("[PromptForge] request received.")
@@ -1477,10 +1490,9 @@ class PROMPTFORGE_PromptEnhancer:
         offload_kqv = cfg.get("offload_kqv", True)
         swa_full = cfg.get("swa_full", False)
         flash_attn = cfg.get("flash_attn", "auto")
-        custom_repo_id = cfg.get("custom_repo_id", "")
         local_model_path = cfg.get("local_model_path", "")
         mmproj_path = cfg.get("mmproj_path", "")
-        clip = cfg.get("clip") or clip
+        clip = cfg.get("clip")
         override_text = (system_prompt_override or "").strip()
         sys_text = override_text
         if not sys_text:
@@ -1574,13 +1586,10 @@ class PROMPTFORGE_PromptEnhancer:
             frame_count=frame_count,
             seed=seed,
             clip=clip_for_generate,
-            custom_repo_id=custom_repo_id,
             local_model_path=local_model_path,
             mmproj_path=mmproj_path,
             disable_thinking=True,
-            use_default_sampling=False,
             auto_retry=True,
-            keep_model_loaded=False,
             min_chars=min_chars,
         )
         answer, thinking = _split_thinking(enhanced)
@@ -1612,7 +1621,7 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Generation dispatch
     # ------------------------------------------------------------------ #
-    def _generate(self, full_prompt, system_prompt, user_prompt, mode, engine, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded, min_chars=20):
+    def _generate(self, full_prompt, system_prompt, user_prompt, mode, engine, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, local_model_path, mmproj_path, disable_thinking, auto_retry, min_chars=20):
         try:
             if engine == "gguf":
                 return self._generate_gguf(
@@ -1624,9 +1633,8 @@ class PROMPTFORGE_PromptEnhancer:
                     max_tokens=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k,
                     num_beams=num_beams, repetition_penalty=repetition_penalty, seed=seed,
                     image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
-                    custom_repo_id=custom_repo_id, local_model_path=local_model_path, mmproj_path=mmproj_path,
-                    disable_thinking=disable_thinking, use_default_sampling=use_default_sampling,
-                    auto_retry=auto_retry, keep_model_loaded=keep_model_loaded, min_chars=min_chars,
+                    local_model_path=local_model_path, mmproj_path=mmproj_path,
+                    disable_thinking=disable_thinking, auto_retry=auto_retry, min_chars=min_chars,
                 )
             return self._generate_text_encoder(
                 full_prompt=full_prompt, system_prompt=system_prompt, user_prompt=user_prompt,
@@ -1634,9 +1642,8 @@ class PROMPTFORGE_PromptEnhancer:
                 max_tokens=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k,
                 num_beams=num_beams, repetition_penalty=repetition_penalty,
                 image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
-                seed=seed, clip=clip, custom_repo_id=custom_repo_id, local_model_path=local_model_path,
-                disable_thinking=disable_thinking, use_default_sampling=use_default_sampling,
-                auto_retry=auto_retry, keep_model_loaded=keep_model_loaded, min_chars=min_chars,
+                seed=seed, clip=clip, local_model_path=local_model_path,
+                disable_thinking=disable_thinking, auto_retry=auto_retry, min_chars=min_chars,
             )
         finally:
             gc.collect()
@@ -1646,22 +1653,21 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # GGUF / llama.cpp engine
     # ------------------------------------------------------------------ #
-    def _generate_gguf(self, full_prompt, system_prompt, user_prompt, mode, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, image, image2, image3, video, frame_count, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded, min_chars=20):
+    def _generate_gguf(self, full_prompt, system_prompt, user_prompt, mode, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, image, image2, image3, video, frame_count, local_model_path, mmproj_path, disable_thinking, auto_retry, min_chars=20):
         entry = None
         gguf_path = None
         eff_local = (local_model_path or "").strip() or _local_model_option(model_name)
-        if not eff_local and str(model_name).lower().endswith(".gguf"):
+        if not eff_local and str(model_name).lower().endswith(".gguf") and Path(str(model_name)).is_file():
             eff_local = str(model_name)
         if eff_local and str(eff_local).lower().endswith(".gguf"):
             gguf_path = Path(str(eff_local))
         if gguf_path is None:
             resolved = _resolve_model_entry(model_name) if (model_name and model_name != "auto") else _resolve_model_entry("auto")
-            if resolved is not None and resolved.get("kind") == "gguf":
-                entry = resolved.get("entry")
-            if entry is None and resolved is not None:
-                entry = next((g for g in GGUF_MODELS if g.get("key") == resolved.get("key")), None)
-            if entry is None and GGUF_MODELS:
-                entry = GGUF_MODELS[0]
+            if resolved is None:
+                raise ValueError(f"[PromptForge] GGUF model '{model_name}' is not in the catalog and was not found in the model folders on this machine.")
+            entry = resolved.get("entry") if resolved.get("kind") == "gguf" else None
+            if entry is None:
+                raise ValueError(f"[PromptForge] '{model_name}' is a safetensors catalog entry; pick a [gguf] option for the GGUF engine.")
             if entry is not None:
                 exact = _find_gguf(entry, quantization, download=False, exact=True)
                 if exact is not None:
@@ -1742,18 +1748,27 @@ class PROMPTFORGE_PromptEnhancer:
 
         llm = None
         last_error = None
-        for index in range(len(fallbacks) + 1):
+        retried_layers = False
+        index = 0
+        while index <= len(fallbacks):
             try:
                 llm = Llama(**llama_kwargs)
                 break
-            except RuntimeError as exc:
+            except (RuntimeError, ValueError) as exc:
                 message = str(exc)
+                if "Failed to load model" in message and llama_kwargs["n_gpu_layers"] != 0 and not retried_layers:
+                    retried_layers = True
+                    llama_kwargs["n_gpu_layers"] = _gguf_layers_that_fit(gguf_path, n_ctx, mmproj)
+                    print(f"[PromptForge] not enough free VRAM for the whole GGUF; retrying with {llama_kwargs['n_gpu_layers']} GPU layers.")
+                    gc.collect()
+                    continue
                 if "Failed to create llama context" not in message:
                     raise
                 last_error = message
                 if index >= len(fallbacks):
                     break
                 label, overrides = fallbacks[index]
+                index += 1
                 print(f"[PromptForge] llama.cpp rejected {label}; retrying with the safer setting.")
                 llama_kwargs.update(overrides)
                 gc.collect()
@@ -1765,53 +1780,59 @@ class PROMPTFORGE_PromptEnhancer:
             )
         print(f"[PromptForge] GGUF ready: ctx {n_ctx}, gpu_layers {llama_kwargs['n_gpu_layers']}, kv {kv_cache_type}.")
 
-        if use_default_sampling:
-            temperature, top_p, top_k, repetition_penalty = _apply_sampling_defaults(
-                _generation_defaults_from_gguf(llm), temperature, top_p, top_k, repetition_penalty
-            )
         model_label_lower = f"{gguf_path.name} {(entry or {}).get('name', '')}".lower()
         gemma4 = "gemma-4" in model_label_lower or "gemma4" in model_label_lower
+        chat_template = llm.metadata.get("tokenizer.chat_template") if not images else None
         user_text_value = user_prompt or full_prompt
-        if gemma4 and (system_prompt or "").strip():
-            user_text_value = f"{system_prompt.strip()}\n\n{user_text_value}".strip()
-        if gemma4:
-            user_text_value = (
-                user_text_value
-                + "\n\nIMPORTANT: Return the final prompt directly. Do not use a thought channel. Do not write reasoning."
-            )
+        if images and gemma4:
+            # the vision chat handler renders its own template: fold the system turn into the user turn and ask for no thought channel
+            if (system_prompt or "").strip():
+                user_text_value = f"{system_prompt.strip()}\n\n{user_text_value}".strip()
+            user_text_value += "\n\nIMPORTANT: Return the final prompt directly. Do not use a thought channel. Do not write reasoning."
         if images:
             content = [{"type": "text", "text": user_text_value}]
             content.extend({"type": "image_url", "image_url": {"url": self._pil_data_url(p)}} for p in images)
         else:
             content = user_text_value
         messages = []
-        if (system_prompt or "").strip() and not gemma4:
+        if (system_prompt or "").strip() and not (images and gemma4):
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": content})
         completion_kwargs = {
-            "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
             "top_p": top_p,
             "repeat_penalty": repetition_penalty,
+            "frequency_penalty": 0.1,
+            "penalty_last_n": 256,
             "seed": seed,
         }
         if top_k:
             completion_kwargs["top_k"] = top_k
-        completion_params = inspect.signature(llm.create_chat_completion).parameters
-        if "frequency_penalty" in completion_params:
-            completion_kwargs["frequency_penalty"] = 0.1
-        if "penalty_last_n" in completion_params:
-            completion_kwargs["penalty_last_n"] = 256
-        if disable_thinking and "reasoning_budget" in completion_params:
-            completion_kwargs["reasoning_budget"] = 0
+        if chat_template:
+            # The model's own template with thinking disabled (empty think block / primed thought channel) is the
+            # reliable non-thinking mode; llama.cpp adds BOS itself, so the template gets an empty bos_token.
+            prompt_text = render_jinja_template(
+                [messages], chat_template=chat_template, add_generation_prompt=True, bos_token="", eos_token="",
+                enable_thinking=not disable_thinking,
+            )[0][0]
+            completion_kwargs["prompt"] = prompt_text
+            completion_kwargs["stop"] = ["<|im_end|>", "<turn|>", "<end_of_turn>", "<|eot_id|>", "<|end|>"]
+        else:
+            completion_kwargs["messages"] = messages
+            if disable_thinking:
+                completion_kwargs["reasoning_budget"] = 0
 
         def attempt(seed_value):
             kwargs = dict(completion_kwargs)
             kwargs["seed"] = seed_value
             started = time.time()
-            out = llm.create_chat_completion(**kwargs)
-            text = out.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            if chat_template:
+                out = llm.create_completion(**kwargs)
+                text = out.get("choices", [{}])[0].get("text", "").strip()
+            else:
+                out = llm.create_chat_completion(**kwargs)
+                text = out.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
             tokens = (out.get("usage") or {}).get("completion_tokens")
             if tokens:
                 print(f"[PromptForge] GGUF generated {tokens} tokens in {time.time() - started:.1f}s.")
@@ -1835,10 +1856,10 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Text encoder engines (native ComfyUI CLIP route / bitsandbytes route)
     # ------------------------------------------------------------------ #
-    def _generate_text_encoder(self, full_prompt, system_prompt, user_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded, min_chars=20):
+    def _generate_text_encoder(self, full_prompt, system_prompt, user_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, local_model_path, disable_thinking, auto_retry, min_chars=20):
         if clip is not None:
             enhanced = self._generate_with_clip(
-                full_prompt=full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
+                system_prompt=system_prompt, user_prompt=user_prompt or full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
                 top_p=top_p, top_k=top_k, repetition_penalty=repetition_penalty,
                 seed=seed, image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
                 clip=clip, disable_thinking=disable_thinking, auto_retry=auto_retry, min_chars=min_chars,
@@ -1849,20 +1870,12 @@ class PROMPTFORGE_PromptEnhancer:
         if not eff_local and Path(str(model_name)).exists():
             eff_local = str(model_name)
         src = eff_local or ""
-        params_b = None
         resolved = _resolve_model_entry(model_name) if (model_name and model_name != "auto") else _resolve_model_entry("auto")
-        if not src and resolved is not None:
-            if resolved.get("kind") == "hf":
-                src = resolved.get("local_path") or resolved.get("repo_id") or ""
-                params_b = resolved.get("params_b")
-            elif resolved.get("kind") == "gguf":
-                first = HERETIC_MODELS[0] if HERETIC_MODELS else {}
-                src = (first or {}).get("repo_id") or ""
-                params_b = (first or {}).get("params_b") or 9
-        if not src and custom_repo_id:
-            src = custom_repo_id
+        if not src and resolved is not None and resolved.get("kind") == "hf":
+            src = resolved.get("local_path") or resolved.get("repo_id") or ""
         if not src:
-            raise ValueError("[PromptForge] No text encoder selected.")
+            raise ValueError(f"[PromptForge] safetensors model '{model_name}' is not in the catalog and was not found in the model folders on this machine.")
+        params_b = _safetensors_params_b(resolved, src)
 
         quant = {"8bit": "q8", "4bit": "q4"}.get(quantization or "auto", quantization or "auto")
         if quant in ("q5", "q6"):
@@ -1882,11 +1895,6 @@ class PROMPTFORGE_PromptEnhancer:
             src = snapshot_download(repo_id=src, local_dir=None)
             src_path = Path(src)
 
-        if use_default_sampling:
-            temperature, top_p, top_k, repetition_penalty = _apply_sampling_defaults(
-                _generation_defaults_from_files(src), temperature, top_p, top_k, repetition_penalty
-            )
-
         if quant in ("q8", "q4") and not src_path.is_dir():
             print(f"[PromptForge] {quant} quantization needs an HF model directory; loading this single file in fp16 instead.")
             quant = "auto"
@@ -1895,13 +1903,14 @@ class PROMPTFORGE_PromptEnhancer:
             if torch.cuda.is_available():
                 _free_vram()
             hf_dtype = torch.float16 if quant == "fp16" else _hf_compute_dtype()
-            if quant == "q8" and params_b:
+            if quant in ("auto", "q8") and params_b:
                 try:
                     free_bytes = torch.cuda.mem_get_info()[0]
                 except Exception:
                     free_bytes = 0
-                if free_bytes and float(params_b) * 1.35 * 1024 ** 3 + 1.5 * 1024 ** 3 > free_bytes:
-                    print("[PromptForge] q8 does not fit free VRAM; using q4 instead.")
+                per_param = 2.0 if quant == "auto" else 1.35
+                if free_bytes and float(params_b) * per_param * 1024 ** 3 + 1.5 * 1024 ** 3 > free_bytes:
+                    print(f"[PromptForge] {'bf16' if quant == 'auto' else quant} does not fit the free VRAM; using q4 instead.")
                     quant = "q4"
             quant_cfg = None
             if quant in ("q8", "q4"):
@@ -1928,22 +1937,18 @@ class PROMPTFORGE_PromptEnhancer:
                     load_kwargs["max_memory"] = max_memory
             model = processor = tokenizer = None
 
-            def _load(model_cls):
+            def _load():
                 try:
-                    return model_cls.from_pretrained(src, **load_kwargs)
+                    return _load_hf_model(src, load_kwargs)
                 except (TypeError, ValueError) as exc:
                     message = str(exc).lower()
                     if "attn_implementation" in message or "sdpa" in message:
                         load_kwargs.pop("attn_implementation", None)
-                        return model_cls.from_pretrained(src, **load_kwargs)
+                        return _load_hf_model(src, load_kwargs)
                     raise
 
             try:
-                if mode != "text_only":
-                    model = _load(AutoVision)
-                else:
-                    from transformers import AutoModelForCausalLM
-                    model = _load(AutoModelForCausalLM)
+                model = _load()
                 device_map = getattr(model, "hf_device_map", None) or {}
                 if any(str(device) in ("cpu", "disk") for device in device_map.values()):
                     print("[PromptForge] model is partly on CPU/disk; generation will be slower (use q4 or a smaller model).")
@@ -1999,7 +2004,6 @@ class PROMPTFORGE_PromptEnhancer:
                     if params_b is not None and params_b >= 3.5:
                         kwargs["top_k"] = top_k or 20
 
-                from transformers import LogitsProcessor, LogitsProcessorList, StoppingCriteria, StoppingCriteriaList
                 input_len = model_inputs["input_ids"].shape[-1]
 
                 class _FiniteLogits(LogitsProcessor):
@@ -2047,11 +2051,11 @@ class PROMPTFORGE_PromptEnhancer:
 
         import comfy.sd
         try:
-            clip_obj = comfy.sd.load_clip(ckpt_paths=[src], clip_type=comfy.sd.CLIPType.STABLE_DIFFUSION, model_options={"dtype": torch.float16})
+            clip_obj = comfy.sd.load_clip(ckpt_paths=[src])
         except Exception as exc:
             raise ValueError(f"[PromptForge] ComfyUI could not load this text encoder: {exc}") from exc
         enhanced = self._generate_with_clip(
-            full_prompt=full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
+            system_prompt=system_prompt, user_prompt=user_prompt or full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
             top_p=top_p, top_k=top_k, repetition_penalty=repetition_penalty,
             seed=seed, image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
             clip=clip_obj, disable_thinking=disable_thinking, auto_retry=auto_retry, min_chars=min_chars,
@@ -2061,15 +2065,23 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Native ComfyUI CLIP generation (connected clip or locally loaded clip)
     # ------------------------------------------------------------------ #
-    def _generate_with_clip(self, full_prompt, mode, max_tokens, temperature, top_p, top_k, repetition_penalty, seed, image, image2, image3, video, frame_count, clip, disable_thinking, auto_retry, min_chars=20):
+    def _generate_with_clip(self, system_prompt, user_prompt, mode, max_tokens, temperature, top_p, top_k, repetition_penalty, seed, image, image2, image3, video, frame_count, clip, disable_thinking, auto_retry, min_chars=20):
         global _TOP_P_WARNED
         images = self._clip_images(mode, image, image2, image3, video, frame_count)
-        tokenize_kwargs = {"images": images} if images else {}
-        if disable_thinking:
-            tokenize_kwargs["thinking"] = False
-        if not hasattr(clip, "generate"):
-            raise ValueError("[PromptForge] this CLIP text encoder has no generation support. Connect a generative Qwen/Gemma encoder, or use a safetensors/GGUF model.")
-        tokens = clip.tokenize(full_prompt, **tokenize_kwargs)
+        # Gemma/LTX tokenizers take one [B, H, W, C] batch as `image`; Qwen tokenizers also accept an `images` list.
+        tokenize_kwargs = {"min_length": 1, "thinking": not disable_thinking, "system_prompt": system_prompt or ""}
+        if images:
+            if all(t.shape == images[0].shape for t in images):
+                tokenize_kwargs["image"] = torch.cat(images, dim=0)
+            else:
+                tokenize_kwargs["images"] = images
+        tokens = clip.tokenize(user_prompt, **tokenize_kwargs)
+        if system_prompt and system_prompt[:40] not in _tokens_text(clip, tokens):
+            # this encoder's tokenizer has no chat template (Anima / ACE Qwen encoders): wrap the turns in ChatML ourselves
+            chat = f"<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{user_prompt}<|im_end|>\n<|im_start|>assistant\n"
+            if disable_thinking:
+                chat += "<think>\n\n</think>\n\n"
+            tokens = clip.tokenize(chat, **tokenize_kwargs)
         if images and not _tokens_have_images(tokens):
             raise ValueError("[PromptForge] The selected text encoder has no vision support; the provided image/video would be ignored. Connect a vision-capable encoder or use text_only.")
 
@@ -2104,6 +2116,8 @@ class PROMPTFORGE_PromptEnhancer:
         def attempt(seed_value):
             try:
                 return run(effective_top_p, seed_value)
+            except AttributeError as exc:
+                raise ValueError("[PromptForge] this text encoder cannot generate text (CLIP/T5-style encoder). Use a Qwen / Gemma LLM encoder, or a safetensors/GGUF model.") from exc
             except RuntimeError as exc:
                 if effective_top_p < 1.0 and "single memory location" in str(exc):
                     print("[PromptForge] ComfyUI's CLIP sampler hit a torch overlap error on top_p; retrying with top_p=1.0 (temperature, top_k, repetition and seed still apply).")
@@ -2222,8 +2236,6 @@ class PROMPTFORGE_PromptEnhancer:
         return im
 
     def _pil_data_url(self, image):
-        import base64
-        import io
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")

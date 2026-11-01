@@ -49,8 +49,6 @@ app.registerExtension({
             showReport("Loading the selected model to verify the settings...");
             const result = await post("/promptforge/test", body);
             if (result.ok) {
-              const auto = (this.widgets || []).find((item) => item.name === "auto_config");
-              if (auto) auto.value = false;
               setWidgets(this, result.settings || {});
             }
             showReport((result.ok ? "Verified. " : "Failed. ") + (result.message || ""));
