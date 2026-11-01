@@ -45,8 +45,11 @@ with open(MODELS_PATH, "r", encoding="utf-8") as _f:
 OUTPUT_GUARD = (
     "Output rules that override all style preferences: return only the final usable prompt text. "
     "Do not include analysis, planning, bullet points, headings, markdown, JSON, explanations, alternatives, "
-    "self-corrections, or notes. Do not write phrases such as Final Plan, Final Check, Wait, Okay, First, Next, "
-    "Then, I will, or I need. Start directly with the required prompt text. "
+    "self-corrections, notes, apologies, or messages to the user. Do not write phrases such as Final Plan, Final Check, "
+    "Wait, Okay, First, Next, Then, I will, or I need. "
+    "Never write in first person and never comment on your own work: do not say you followed the instructions, "
+    "did a good job, respected the rules, avoided something, or met the request. Never add a closing note, "
+    "self-assessment, or summary about what you wrote. Start directly with the required prompt text. "
     "Never repeat, quote, paraphrase, or answer any instruction, rule, constraint, policy, or note from this system prompt; "
     "the output must contain only the prompt text for the target model."
 )
@@ -55,12 +58,23 @@ _META_PATTERNS = (
     r"^#{1,6}\s",
     r"^(note|remember|important|rule|constraint|instruction|instructions|output|response)\b\s*[:\-]",
     r"^(here is|here's|this is)\b[^.!?]{0,40}\bprompt\b",
+    r"^(okay|ok|sure|certainly|alright|absolutely|great|perfect)\s*[,!:.]\s*",
     r"\b(explicitly stated|as requested|as instructed|anything other than)\b",
     r"\b(the user's (request|text|wording|prompt)|system prompt|this prompt|the generated prompt|output contract|content policy|negative constraints?)\b",
     r"\b(output only|only output|in the output)\b",
     r"\b(the prompt|the response|the answer)\s+(should|must|is|will|needs to)\b",
     r"\b(do not|don't|never|avoid|must not|should not)\b[^.!?]{0,80}\b(add|include|mention|name|output|write|describe|use|state|say|deviate|copy|repeat|paraphrase)\b",
     r"\b(I will|I'll|we need to|we should|the goal is|my task|the task is)\b",
+    r"\b(here is|here's|below is)\s+(the|your|an?)\s+(enhanced|final|generated|resulting)?\s*(prompt|output|response)\b",
+    r"\b(i'?ve|i have|we'?ve|we have)\b[^.!?]{0,90}\b(done|followed|listened|obeyed|applied|respected|honou?red|ensured|made sure|crafted|created|generated|written|wrote|included|avoided|kept|used|focused|paid attention)\b",
+    r"\b(i|we)\b[^.!?]{0,90}\b(followed|listened|obeyed|applied|respected|honou?red|ensured|made sure|crafted|generated|avoided|paid attention)\b[^.!?]{0,60}\b(instruction|instructions|rules?|constraints?|guidelines?|request|prompt)\b",
+    r"\b(i|we)\s+(made sure|ensured)\b",
+    r"\b(done a good job|did a good job|good job|well done|task complete|successfully completed)\b",
+    r"\b(the|this|your)\s+(enhanced|final|generated|resulting)?\s*(prompt|output|response)\s+(now\s+)?(is|includes|contains|follows|respects|meets|has been|was|will)\b",
+    r"\b(the user|user'?s)\s+(asked|requested|wants|wanted|instructions?)\b",
+    r"\b(i hope|hope (this|that) helps|let me know|feel free|if you (want|need|would like))\b",
+    r"\b(note|disclaimer|warning)\s*[:\-]",
+    r"\b(i|we)\s+(will|would|can|am going to|are going to)\s+(now\s+)?(write|create|generate|provide|describe)\b",
 )
 _META_RE = re.compile("|".join(f"(?:{p})" for p in _META_PATTERNS), re.I)
 
@@ -140,11 +154,10 @@ _NEGATIVE_PROMPT_RE = re.compile(
 
 
 def _clean_prompt_output(text):
-    """Remove leaked instructions/meta lines while keeping the prompt structure."""
+    """Remove leaked instructions, reasoning and self-commentary while keeping the prompt."""
     text = _strip_chat_tokens(text)
-    lines = text.splitlines()
     kept_lines = []
-    for line in lines:
+    for line in text.splitlines():
         stripped = line.strip()
         if not stripped:
             kept_lines.append("")
@@ -152,17 +165,19 @@ def _clean_prompt_output(text):
         if re.match(r"^negative prompt\s*[:\-]", stripped, re.I):
             continue
         stripped = re.sub(r"^(?:enhanced prompt|positive prompt|prompt)\s*[:\-]\s*", "", stripped, flags=re.I)
+        stripped = re.sub(r"^(?:okay|ok|sure|certainly|alright|absolutely|great|perfect)\s*[,!:.]\s*", "", stripped, flags=re.I)
+        stripped = re.sub(r"^(?:here is|here's|below is)\s+(?:the|your|an?)\s+(?:enhanced|final|generated|resulting)?\s*(?:prompt|output|response)\s*[:\-]?\s*", "", stripped, flags=re.I)
         if not stripped:
             continue
-        if _META_RE.search(stripped):
-            parts = re.split(r"(?<=[.!?])\s+", stripped)
-            kept = [part for part in parts if not _META_RE.search(part)]
-            if kept:
-                kept_lines.append(" ".join(kept).strip())
-            continue
-        kept_lines.append(stripped)
+        sentences = re.split(r"(?<=[.!?])\s+", stripped)
+        kept = [sentence.strip() for sentence in sentences if sentence.strip() and not _META_RE.search(sentence)]
+        if kept:
+            kept_lines.append(" ".join(kept))
     cleaned = "\n".join(kept_lines)
+    cleaned = "\n".join(line for line in cleaned.splitlines() if not line.strip() or re.search(r"[A-Za-z0-9]", line))
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    if not re.search(r"[A-Za-z0-9]", cleaned):
+        return ""
     return cleaned.strip('"').strip("`").strip()
 
 THINK_TAGS = (
