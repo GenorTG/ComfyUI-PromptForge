@@ -1959,7 +1959,15 @@ class PROMPTFORGE_PromptEnhancer:
                 conversation.append({"role": "user", "content": user_content})
                 chat = processor.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True, enable_thinking=not disable_thinking)
                 processed = processor(text=chat, images=[r for r in refs if r is not None] or None, return_tensors="pt")
-                model_device = next(model.parameters()).device
+                try:
+                    model_device = model.get_input_embeddings().weight.device
+                except Exception:
+                    model_device = next(
+                        (param.device for param in model.parameters() if param.device.type != "meta"),
+                        torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+                    )
+                if model_device.type == "meta":
+                    model_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
                 allowed_inputs = set(inspect.signature(model.forward).parameters)
                 prepare = getattr(model, "prepare_inputs_for_generation", None)
                 if prepare is not None:
