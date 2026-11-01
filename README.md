@@ -8,10 +8,9 @@ Prompt enhancement split into three focused nodes: model/config, prompt generati
 
 Owns model choice and runtime configuration; outputs a `MODEL` bundle and a `REPORT` string.
 
-- **Source**: `safetensors`, `GGUF`, or `connected clip`.
-- **Models**: separate `safetensors_model` / `gguf_model` pickers. The catalog covers Qwen3, Qwen3.5, Qwen3.6, Qwen3.8, Qwen2.5, Qwen3-VL, Qwen2.5-VL, Gemma 3/4, Llama 3, Mistral/Ministral and Phi-4 heretic/abliterated models; GGUF entries offer q4/q5/q6/q8 and download automatically on first use. `custom_repo_id`, `local_model_path` and `mmproj_path` cover anything outside the lists.
+- **Model picker**: one list for everything — `connected clip`, `[safetensors] …` and `[gguf] …`. The catalog covers Qwen3, Qwen3.5, Qwen3.6, Qwen3.8, Qwen2.5, Qwen3-VL, Qwen2.5-VL, Gemma 3/4, Llama 3, Mistral/Ministral and Phi-4 heretic/abliterated models; GGUF entries offer q4/q5/q6/q8 and download automatically on first use. `custom_repo_id`, `local_model_path` and `mmproj_path` cover anything outside the lists. The `clip` input lives here and is passed to the enhancer in the model bundle.
 - **Auto config** (default on): reads total VRAM and the selected model, then picks the best **local** GGUF quant that fits, the largest context (16k first), KV precision (`f16` → `q8_0` → `q4_0`), GPU layers, batch sizes, windowed SWA and flash attention. For safetensors it picks bf16/fp16, q8 or q4 from the model size and VRAM.
-- **Manual**: turn `auto_config` off and set `context_size`, `gpu_layers`, `batch_size`, `ubatch_size`, `kv_cache_type`, `offload_kqv`, `swa_full`, `flash_attn` and `auto_fit` yourself.
+- **Manual**: turn `auto_config` off and set `context_size`, `gpu_layers`, `batch_size`, `ubatch_size`, `kv_cache_type`, `offload_kqv`, `swa_full` and `flash_attn` yourself.
 - **Profiles**: `profile_name` + `load_profile` / `save_profile` store the effective bundle in `user/promptforge_profiles.json`.
 - **Quant fallback**: unsupported combinations warn and use a working option — q5/q6 on safetensors load as q8, q8/q4 on a single-file encoder load in fp16, a q8 model that cannot fit switches to q4, CPU-offloaded layers are allowed (slower) instead of raising, a missing GGUF quant falls through the available files, and an incompatible KV/flash/SWA choice is retried with the safe value.
 
@@ -49,7 +48,7 @@ Standalone output node; it never generates a prompt.
 
 The front-end extension adds a button to both nodes:
 
-- **Find best config** on `PromptForge Model` calls `/promptforge/recommend`, fills `context_size`, `gpu_layers`, `batch_size`, `ubatch_size`, `kv_cache_type`, `offload_kqv`, `swa_full`, `flash_attn` and `quantization`, and turns `auto_config` off so you see exactly what will run.
+- **Test load & apply** on `PromptForge Model` calls `/promptforge/test`: it actually loads the selected model (llama.cpp context, or the transformers model) with the planned settings, falls back through smaller contexts/KV types on failure, then fills `context_size`, `gpu_layers`, `batch_size`, `ubatch_size`, `kv_cache_type`, `offload_kqv`, `swa_full` and `quantization` and turns `auto_config` off. A failed test reports the real error instead of guessing.
 - **Scan local models** on `PromptForge Config Finder` calls `/promptforge/scan` and shows the report without queueing the rest of the workflow.
 
 ## Profiles
@@ -73,11 +72,9 @@ that keeps headroom for activations while offloading overflow to CPU instead of
 failing with an OOM. GGUF models unload ComfyUI's models (GPU and CPU) only
 when the model plus its KV cache does not fit in free VRAM. `context_size`,
 `gpu_layers`, `batch_size`, `ubatch_size`, `kv_cache_type`, `offload_kqv`,
-`swa_full` and `flash_attn` are used exactly as set; `auto_fit` computes a
-GPU/CPU layer split from free VRAM when enabled. Set `keep_model_loaded` to true
-to keep ComfyUI's models
-resident. A native ComfyUI `CLIP` socket (`clip`) can be connected to
-generate from an already-loaded encoder instead of loading its own model.
+`swa_full` and `flash_attn` are used exactly as set. Set `keep_model_loaded` to
+true to keep ComfyUI's models resident. The `clip` input on the Model node uses
+already-loaded encoders instead of loading its own model.
 
 ## Presets
 

@@ -741,9 +741,20 @@ def _auto_gguf_settings(entry, quantization, mmproj_path=None):
     batch, ubatch = _auto_batch(budget)
     settings = {
         "quantization": q, "batch_size": batch, "ubatch_size": ubatch,
-        "swa_full": False, "flash_attn": "auto", "auto_fit": False,
+        "swa_full": False, "flash_attn": "auto",
     }
     settings.update(fit)
+    return settings
+
+
+def _auto_gguf_path_settings(path, quantization, mmproj=None):
+    budget = _gpu_budget_bytes()
+    batch, ubatch = _auto_batch(budget)
+    settings = {
+        "quantization": "q4" if quantization in ("auto", "fp16", "") else quantization,
+        "batch_size": batch, "ubatch_size": ubatch, "swa_full": False, "flash_attn": "auto",
+    }
+    settings.update(_auto_gguf_fit(path, mmproj, budget) or {})
     return settings
 
 
@@ -757,29 +768,6 @@ def _auto_safetensors_settings(resolved):
     if params_b * 1.1 * 1024 ** 3 <= budget * 0.85:
         return {"quantization": "q8"}
     return {"quantization": "q4"}
-
-
-def _gguf_layer_budget(path, n_ctx, mmproj_path=None):
-    """Layers that fit on the GPU alongside their KV cache; the rest go to CPU."""
-    profile = _gguf_kv_profile(path)
-    if profile is None:
-        return None
-    n_layers, kv_per_token, swa = profile
-    if swa is not None:
-        kv_bytes = kv_per_token * (min(n_ctx, swa) * 0.95 + n_ctx * 0.05)
-    else:
-        kv_bytes = kv_per_token * n_ctx
-    weights = path.stat().st_size
-    extra = mmproj_path.stat().st_size if mmproj_path is not None else 0
-    try:
-        free = torch.cuda.mem_get_info()[0]
-    except Exception:
-        return None
-    budget = free - 1536 * 1024 ** 2 - extra
-    if budget <= 0:
-        return 0, n_layers
-    per_layer = (weights + kv_bytes) / n_layers
-    return max(0, min(n_layers, int(budget / per_layer))), n_layers
 
 
 def _gguf_vision_handler(name):
@@ -970,6 +958,40 @@ def _option_for_key(key):
     return None
 
 
+MODEL_OPTIONS = (
+    ["connected clip"]
+    + [f"[safetensors] {option}" for option in SAFETENSORS_MODEL_OPTIONS]
+    + [f"[gguf] {option}" for option in GGUF_MODEL_OPTIONS]
+)
+_DEFAULT_MODEL = next((option for option in MODEL_OPTIONS if option.startswith("[safetensors] ")), MODEL_OPTIONS[0])
+
+
+def _parse_model_option(option):
+    text = str(option or "")
+    if text == "connected clip":
+        return "connected clip", "auto", "auto"
+    if text.startswith("[safetensors] "):
+        return "safetensors", text[len("[safetensors] "):], "auto"
+    if text.startswith("[gguf] "):
+        return "GGUF", "auto", text[len("[gguf] "):]
+    return "safetensors", text, "auto"
+
+
+def _kv_type_value(name):
+    from llama_cpp._ggml import GGMLType
+    return int(getattr(GGMLType, f"GGML_TYPE_{str(name).upper()}", GGMLType.GGML_TYPE_F16))
+
+
+def _gguf_target(option, quantization):
+    text = str(option or "")
+    if text.lower().endswith(".gguf") and Path(text).is_file():
+        return None, Path(text)
+    resolved = _resolve_model_entry(text)
+    entry = resolved.get("entry") if resolved else None
+    path = _find_gguf(entry, quantization, download=False) if entry else None
+    return entry, path
+
+
 def _settings_report(settings):
     source = settings.get("source", "safetensors")
     if source == "GGUF":
@@ -984,24 +1006,142 @@ def _settings_report(settings):
 
 
 def _recommend_settings(data):
-    source = data.get("source", "safetensors")
+    source, safetensors_model, gguf_model = _parse_model_option(data.get("model", ""))
     quantization = data.get("quantization", "auto")
-    settings = {"source": source, "quantization": quantization}
+    settings = {
+        "source": source, "safetensors_model": safetensors_model, "gguf_model": gguf_model,
+        "quantization": quantization,
+    }
     if source == "GGUF":
-        resolved = _resolve_model_entry(data.get("gguf_model", "auto"))
-        entry = resolved.get("entry") if resolved else None
-        path = _find_gguf(entry, quantization, download=False) if entry else None
+        entry, path = _gguf_target(gguf_model, quantization)
         mmproj = _local_mmproj(path, entry) if path is not None else None
-        settings.update(_auto_gguf_settings(entry, quantization, mmproj))
+        if entry is None and path is not None:
+            settings.update(_auto_gguf_path_settings(path, quantization, mmproj))
+        else:
+            settings.update(_auto_gguf_settings(entry, quantization, mmproj))
     elif source == "safetensors":
-        settings.update(_auto_safetensors_settings(_resolve_model_entry(data.get("safetensors_model", "auto"))))
+        settings.update(_auto_safetensors_settings(_resolve_model_entry(safetensors_model)))
     for key, value in (
         ("context_size", 16384), ("gpu_layers", -1), ("batch_size", 2048), ("ubatch_size", 512),
-        ("kv_cache_type", "f16"), ("offload_kqv", True), ("swa_full", False),
-        ("flash_attn", "auto"), ("auto_fit", False),
+        ("kv_cache_type", "f16"), ("offload_kqv", True), ("swa_full", False), ("flash_attn", "auto"),
     ):
         settings.setdefault(key, value)
     return settings
+
+
+def _test_settings(data):
+    source, safetensors_model, gguf_model = _parse_model_option(data.get("model", ""))
+    quantization = data.get("quantization", "auto")
+    if source == "connected clip":
+        return {"ok": True, "message": "connected clip is verified when the Model node runs.", "settings": {}}
+    if source == "GGUF":
+        return _test_gguf(gguf_model, quantization)
+    return _test_safetensors(safetensors_model, quantization)
+
+
+def _test_gguf(option, quantization):
+    entry, path = _gguf_target(option, quantization)
+    if path is None:
+        return {"ok": False, "message": "model is not downloaded yet; run it once, then test."}
+    mmproj = _local_mmproj(path, entry)
+    plan = _auto_gguf_path_settings(path, quantization, mmproj) if entry is None else _auto_gguf_settings(entry, quantization, mmproj)
+    ctx = int(plan.get("context_size", 16384))
+    kv = plan.get("kv_cache_type", "f16")
+    layers = int(plan.get("gpu_layers", -1))
+    batch = int(plan.get("batch_size", 2048))
+    ubatch = int(plan.get("ubatch_size", 512))
+    candidates = [(ctx, kv)]
+    for fallback_ctx in (12288, 8192, 6144, 4096):
+        if fallback_ctx < ctx:
+            candidates.append((fallback_ctx, kv))
+    for fallback_kv in ("q8_0", "q4_0"):
+        if fallback_kv != kv:
+            candidates.append((ctx, fallback_kv))
+    handler = None
+    if mmproj is not None:
+        try:
+            from llama_cpp import llama_chat_format
+            handler_name = _gguf_vision_handler(f"{path.name} {(entry or {}).get('name', '')}")
+            handler_cls = getattr(llama_chat_format, handler_name, None)
+            if handler_cls is not None:
+                handler = handler_cls(clip_model_path=str(mmproj), verbose=False)
+        except Exception:
+            handler = None
+    from llama_cpp import Llama
+    _free_vram()
+    last_error = ""
+    for test_ctx, test_kv in candidates[:4]:
+        kwargs = {
+            "model_path": str(path),
+            "n_ctx": test_ctx,
+            "n_batch": min(batch, test_ctx),
+            "n_ubatch": min(ubatch, min(batch, test_ctx)),
+            "n_gpu_layers": layers,
+            "offload_kqv": True,
+            "swa_full": False,
+            "type_k": _kv_type_value(test_kv),
+            "type_v": _kv_type_value(test_kv),
+            "use_mmap": True,
+            "verbose": False,
+        }
+        if handler is not None:
+            kwargs["chat_handler"] = handler
+        try:
+            llm = Llama(**kwargs)
+            llm.close()
+            return {
+                "ok": True,
+                "message": f"loaded {path.name} at {test_ctx} tokens, kv {test_kv}, gpu_layers {layers}.",
+                "settings": {
+                    "quantization": plan.get("quantization", quantization),
+                    "context_size": test_ctx, "kv_cache_type": test_kv, "gpu_layers": layers,
+                    "batch_size": batch, "ubatch_size": ubatch, "offload_kqv": True,
+                    "swa_full": False, "flash_attn": "auto",
+                },
+            }
+        except Exception as exc:
+            last_error = str(exc)
+            gc.collect()
+    return {"ok": False, "message": last_error or "context creation failed"}
+
+
+def _test_safetensors(option, quantization):
+    resolved = _resolve_model_entry(option)
+    src = (resolved or {}).get("local_path") or (resolved or {}).get("repo_id") or ""
+    if not src and Path(str(option)).exists():
+        src = str(option)
+    path = Path(src) if src else None
+    if path is None or not path.exists():
+        return {"ok": False, "message": "model is not downloaded yet; run it once, then test."}
+    if not path.is_dir():
+        return {"ok": False, "message": "single-file encoders are verified on first generation."}
+    plan = _auto_safetensors_settings(resolved)
+    quant = plan.get("quantization") or ("q4" if quantization in ("auto", "fp16", "") else quantization)
+    dtype = _hf_compute_dtype()
+    quant_cfg = None
+    if quant in ("q8", "q4"):
+        quant_cfg = BitsAndBytesConfig(
+            load_in_8bit=(quant == "q8"),
+            load_in_4bit=(quant == "q4"),
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=dtype,
+            llm_int8_enable_fp32_cpu_offload=True,
+        )
+    kwargs = {"quantization_config": quant_cfg, "device_map": "auto", **_hf_dtype_kwargs(dtype)}
+    max_memory = _hf_max_memory()
+    if max_memory is not None:
+        kwargs["max_memory"] = max_memory
+    from transformers import AutoModelForCausalLM
+    _free_vram()
+    try:
+        model = AutoModelForCausalLM.from_pretrained(str(path), **kwargs)
+        del model
+        gc.collect()
+        torch.cuda.empty_cache()
+        return {"ok": True, "message": f"loaded {path.name} in {quant}.", "settings": {"quantization": quant}}
+    except Exception as exc:
+        return {"ok": False, "message": str(exc)}
 
 
 def _scan_configs(data):
@@ -1030,8 +1170,6 @@ def _scan_configs(data):
             lines.append(f"{key}: {_settings_report(cfg)}")
     else:
         cfg = _recommend_settings(data)
-        cfg["gguf_model"] = data.get("gguf_model", "auto")
-        cfg["safetensors_model"] = data.get("safetensors_model", "auto")
         configs[cfg["source"]] = cfg
         lines.append(_settings_report(cfg))
     if data.get("write_config", True):
@@ -1052,22 +1190,20 @@ class PROMPTFORGE_Model:
     RETURN_TYPES = ("PROMPTFORGE_MODEL", "STRING")
     RETURN_NAMES = ("MODEL", "REPORT")
     FUNCTION = "build"
-    DESCRIPTION = "PromptForge model and runtime settings. Auto-configures context, KV cache, batch and offload for this GPU."
+    DESCRIPTION = "PromptForge model and runtime settings. One picker for clip / safetensors / GGUF; auto-configures, and the button test-loads the model before applying settings."
 
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "source": (SOURCE_OPTIONS, {"default": "safetensors", "tooltip": "Model backend: safetensors (transformers), GGUF (llama.cpp) or connected clip (no model load)."}),
-                "safetensors_model": (SAFETENSORS_MODEL_OPTIONS, {"default": _preferred_option(SAFETENSORS_MODEL_OPTIONS), "tooltip": "Safetensors / HF model used when source is safetensors."}),
-                "gguf_model": (GGUF_MODEL_OPTIONS, {"default": _preferred_option(GGUF_MODEL_OPTIONS), "tooltip": "GGUF model used when source is GGUF."}),
+                "model": (MODEL_OPTIONS, {"default": _DEFAULT_MODEL, "tooltip": "What to run: connected clip, a safetensors model, or a GGUF file."}),
                 "quantization": (QUANT_OPTIONS, {"default": "auto", "tooltip": "Quantization. auto picks the best local option for this GPU."}),
                 "auto_config": ("BOOLEAN", {"default": True, "tooltip": "Compute context, KV cache, batch and offload from the GPU and the selected model."}),
                 "profile_name": ("STRING", {"default": "", "tooltip": "Name used by load_profile / save_profile."}),
                 "load_profile": ("BOOLEAN", {"default": False, "tooltip": "Load profile_name and use it instead of auto/manual settings."}),
                 "save_profile": ("BOOLEAN", {"default": False, "tooltip": "Save the effective settings under profile_name."}),
-                "custom_repo_id": ("STRING", {"default": "", "tooltip": "Optional custom HuggingFace repo id for the safetensors source."}),
-                "local_model_path": ("STRING", {"default": "", "multiline": True, "tooltip": "Optional local safetensors dir/file or GGUF file; overrides the model picker."}),
+                "custom_repo_id": ("STRING", {"default": "", "tooltip": "Optional custom HuggingFace repo id; overrides the picker."}),
+                "local_model_path": ("STRING", {"default": "", "multiline": True, "tooltip": "Optional local safetensors dir/file or GGUF file; overrides the picker."}),
                 "mmproj_path": ("STRING", {"default": "", "tooltip": "Optional mmproj (.gguf) for GGUF image/video mode."}),
                 "context_size": ("INT", {"default": 16384, "min": 512, "max": 262144, "step": 512, "tooltip": "GGUF context length when auto_config is off."}),
                 "gpu_layers": ("INT", {"default": -1, "min": -1, "max": 999, "tooltip": "GGUF layers on the GPU when auto_config is off: -1 = all, 0 = CPU."}),
@@ -1077,14 +1213,20 @@ class PROMPTFORGE_Model:
                 "offload_kqv": ("BOOLEAN", {"default": True, "tooltip": "Keep the GGUF KV cache on the GPU when auto_config is off."}),
                 "swa_full": ("BOOLEAN", {"default": False, "tooltip": "Full-size sliding-window cache when auto_config is off."}),
                 "flash_attn": (FLASH_ATTN_OPTIONS, {"default": "auto", "tooltip": "llama.cpp flash attention when auto_config is off."}),
-                "auto_fit": ("BOOLEAN", {"default": False, "tooltip": "Compute the layer split at generation time when auto_config is off."}),
+            },
+            "optional": {
+                "clip": ("CLIP", {"tooltip": "Connected ComfyUI text encoder. Required when model is 'connected clip'."}),
             },
         }
 
-    def build(self, source, safetensors_model, gguf_model, quantization, auto_config, profile_name,
-              load_profile, save_profile, custom_repo_id, local_model_path, mmproj_path,
-              context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv,
-              swa_full, flash_attn, auto_fit):
+    def build(self, model, quantization, auto_config, profile_name, load_profile, save_profile,
+              custom_repo_id, local_model_path, mmproj_path, context_size, gpu_layers,
+              batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, clip=None):
+        source, safetensors_model, gguf_model = _parse_model_option(model)
+        if (local_model_path or "").strip():
+            source = "GGUF" if str(local_model_path).strip().lower().endswith(".gguf") else "safetensors"
+        elif (custom_repo_id or "").strip():
+            source = "safetensors"
         name = (profile_name or "").strip()
         settings = {
             "source": source,
@@ -1102,12 +1244,13 @@ class PROMPTFORGE_Model:
             "offload_kqv": bool(offload_kqv),
             "swa_full": bool(swa_full),
             "flash_attn": flash_attn,
-            "auto_fit": bool(auto_fit),
             "profile_name": name,
+            "clip": clip,
         }
         loaded = False
         if load_profile and name:
-            saved = _load_profiles().get(name)
+            saved = dict(_load_profiles().get(name) or {})
+            saved.pop("clip", None)
             if saved:
                 settings.update(saved)
                 loaded = True
@@ -1116,19 +1259,27 @@ class PROMPTFORGE_Model:
                 print(f"[PromptForge] profile '{name}' not found; using auto/manual settings.")
         if not loaded and auto_config:
             if source == "GGUF":
-                resolved = _resolve_model_entry(gguf_model)
-                entry = resolved.get("entry") if resolved else None
-                path = _find_gguf(entry, quantization, download=False) if entry else None
+                entry, path = _gguf_target(gguf_model, quantization)
                 mmproj = _local_mmproj(path, entry) if path is not None else None
-                settings.update(_auto_gguf_settings(entry, quantization, mmproj))
+                if entry is None and path is not None:
+                    settings.update(_auto_gguf_path_settings(path, quantization, mmproj))
+                else:
+                    settings.update(_auto_gguf_settings(entry, quantization, mmproj))
             elif source == "safetensors":
                 settings.update(_auto_safetensors_settings(_resolve_model_entry(safetensors_model)))
             print("[PromptForge] model auto-config applied.")
+        if source == "connected clip":
+            if clip is None:
+                raise ValueError("[PromptForge] model is 'connected clip' but no CLIP input is connected.")
+            try:
+                clip.tokenize("test")
+            except Exception as exc:
+                raise ValueError(f"[PromptForge] connected CLIP failed to tokenize: {exc}") from exc
         if save_profile:
             if not name:
                 print("[PromptForge] set profile_name before saving a profile.")
             else:
-                _save_profile(name, settings)
+                _save_profile(name, {key: value for key, value in settings.items() if key != "clip"})
                 print(f"[PromptForge] profile '{name}' saved.")
         report = _settings_report(settings)
         print(f"[PromptForge] model: {report}")
@@ -1148,19 +1299,16 @@ class PROMPTFORGE_ConfigFinder:
         return {
             "required": {
                 "scope": (["all local", "selected"], {"default": "all local", "tooltip": "Scan every locally available model, or only the selected one."}),
-                "source": (SOURCE_OPTIONS, {"default": "GGUF", "tooltip": "Model backend for the selected scope."}),
-                "safetensors_model": (SAFETENSORS_MODEL_OPTIONS, {"default": _preferred_option(SAFETENSORS_MODEL_OPTIONS), "tooltip": "Safetensors model for the selected scope."}),
-                "gguf_model": (GGUF_MODEL_OPTIONS, {"default": _preferred_option(GGUF_MODEL_OPTIONS), "tooltip": "GGUF model for the selected scope."}),
+                "model": (MODEL_OPTIONS, {"default": _DEFAULT_MODEL, "tooltip": "Model to plan for when scope is 'selected'."}),
                 "quantization": (QUANT_OPTIONS, {"default": "auto", "tooltip": "Quantization to plan for; auto picks the best local quant."}),
                 "write_config": ("BOOLEAN", {"default": True, "tooltip": "Write the recommendations to user/promptforge_autoconfig.json."}),
                 "profile_prefix": ("STRING", {"default": "", "tooltip": "When set, also save every recommendation as a profile named <prefix><model>."}),
             },
         }
 
-    def scan(self, scope, source, safetensors_model, gguf_model, quantization, write_config, profile_prefix):
+    def scan(self, scope, model, quantization, write_config, profile_prefix):
         result = _scan_configs({
-            "scope": scope, "source": source, "safetensors_model": safetensors_model,
-            "gguf_model": gguf_model, "quantization": quantization,
+            "scope": scope, "model": model, "quantization": quantization,
             "write_config": write_config, "profile_prefix": profile_prefix,
         })
         for line in result["report"].splitlines():
@@ -1169,16 +1317,19 @@ class PROMPTFORGE_ConfigFinder:
 
 
 try:
+    import asyncio
     from aiohttp import web
     from server import PromptServer
 
-    @PromptServer.instance.routes.post("/promptforge/recommend")
-    async def _promptforge_recommend(request):
-        return web.json_response(_recommend_settings(await request.json()))
+    @PromptServer.instance.routes.post("/promptforge/test")
+    async def _promptforge_test(request):
+        data = await request.json()
+        return web.json_response(await asyncio.to_thread(_test_settings, data))
 
     @PromptServer.instance.routes.post("/promptforge/scan")
     async def _promptforge_scan(request):
-        return web.json_response(_scan_configs(await request.json()))
+        data = await request.json()
+        return web.json_response(await asyncio.to_thread(_scan_configs, data))
 except Exception:
     pass
 
@@ -1218,7 +1369,6 @@ class PROMPTFORGE_PromptEnhancer:
                 "image3": ("IMAGE", {"tooltip": "Third reference image / edit source."}),
                 "video": ("IMAGE", {"tooltip": "Video frames input. Use frame_count to control how many frames are sampled."}),
                 "frame_count": ("INT", {"default": 16, "min": 1, "max": 64, "tooltip": "Frames sampled from video input."}),
-                "clip": ("CLIP", {"tooltip": "Connected ComfyUI text encoder. Used when the MODEL source is connected clip."}),
                 "auto_retry": ("BOOLEAN", {"default": True, "tooltip": "Retry once with the next seed on empty, repetitive or refusal output."}),
                 "use_negative_prompt": ("BOOLEAN", {"default": True, "tooltip": "Apply the negative prompt text to the generation request."}),
                 "negative_prompt": ("STRING", {"default": "", "multiline": True, "tooltip": "What the generated prompt/scene must not contain."}),
@@ -1253,7 +1403,6 @@ class PROMPTFORGE_PromptEnhancer:
         image3=None,
         video=None,
         frame_count=16,
-        clip=None,
         auto_retry=True,
         use_negative_prompt=True,
         negative_prompt="",
@@ -1272,11 +1421,10 @@ class PROMPTFORGE_PromptEnhancer:
         offload_kqv = cfg.get("offload_kqv", True)
         swa_full = cfg.get("swa_full", False)
         flash_attn = cfg.get("flash_attn", "auto")
-        auto_fit = cfg.get("auto_fit", False)
         custom_repo_id = cfg.get("custom_repo_id", "")
         local_model_path = cfg.get("local_model_path", "")
         mmproj_path = cfg.get("mmproj_path", "")
-        override_text = (system_prompt_override or "").strip()
+        clip = cfg.get("clip")
         if save_system_prompt and override_text:
             self._save_custom_system_prompt(override_text)
 
@@ -1351,7 +1499,6 @@ class PROMPTFORGE_PromptEnhancer:
             offload_kqv=offload_kqv,
             swa_full=swa_full,
             flash_attn=flash_attn,
-            auto_fit=auto_fit,
             max_tokens=max_tokens,
             temperature=temperature,
             top_p=top_p,
@@ -1428,13 +1575,13 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Generation dispatch
     # ------------------------------------------------------------------ #
-    def _generate(self, full_prompt, mode, engine, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, auto_fit, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
+    def _generate(self, full_prompt, mode, engine, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
         if engine == "gguf":
             return self._generate_gguf(
                 full_prompt=full_prompt, mode=mode, model_name=model_name, quantization=quantization,
                 context_size=context_size, gpu_layers=gpu_layers, batch_size=batch_size, ubatch_size=ubatch_size,
                 kv_cache_type=kv_cache_type, offload_kqv=offload_kqv, swa_full=swa_full,
-                flash_attn=flash_attn, auto_fit=auto_fit,
+                flash_attn=flash_attn,
                 max_tokens=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k,
                 num_beams=num_beams, repetition_penalty=repetition_penalty, seed=seed,
                 image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
@@ -1455,7 +1602,7 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # GGUF / llama.cpp engine
     # ------------------------------------------------------------------ #
-    def _generate_gguf(self, full_prompt, mode, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, auto_fit, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, image, image2, image3, video, frame_count, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
+    def _generate_gguf(self, full_prompt, mode, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, image, image2, image3, video, frame_count, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
         entry = None
         gguf_path = None
         eff_local = (local_model_path or "").strip() or _local_model_option(model_name)
@@ -1524,15 +1671,7 @@ class PROMPTFORGE_PromptEnhancer:
             chat_format = _gguf_chat_format(f"{gguf_path.name} {(entry or {}).get('name', '')}")
             if chat_format:
                 llama_kwargs["chat_format"] = chat_format
-        if auto_fit and llama_kwargs["n_gpu_layers"] == -1:
-            _free_vram()
-            budget = _gguf_layer_budget(gguf_path, n_ctx, mmproj)
-            if budget is not None:
-                fitted, total = budget
-                if fitted < total:
-                    print(f"[PromptForge] auto_fit: {total - fitted}/{total} layers on CPU for a {n_ctx}-token context.")
-                llama_kwargs["n_gpu_layers"] = fitted
-        elif llama_kwargs["n_gpu_layers"] != 0:
+        if llama_kwargs["n_gpu_layers"] != 0:
             try:
                 free_bytes = torch.cuda.mem_get_info()[0]
             except Exception:

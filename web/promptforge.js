@@ -29,32 +29,31 @@ function setWidgets(node, values) {
 function showReport(text) {
   if (app.ui?.dialog?.show) {
     app.ui.dialog.show(text);
-    app.ui.dialog.element?.scrollTo?.(0, 0);
   } else {
     alert(text);
   }
 }
 
 app.registerExtension({
-  name: "PromptForge.AutoConfig",
+  name: "PromptForge.TestLoad",
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (!["PROMPTFORGE_Model", "PROMPTFORGE_ConfigFinder"].includes(nodeData.name)) return;
     const onCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
       onCreated?.apply(this, arguments);
       const isModel = nodeData.name === "PROMPTFORGE_Model";
-      this.addWidget("button", isModel ? "Find best config" : "Scan local models", null, async () => {
+      this.addWidget("button", isModel ? "Test load & apply" : "Scan local models", null, async () => {
         try {
           const body = widgetValues(this);
           if (isModel) {
-            const values = await post("/promptforge/recommend", body);
-            const auto = (this.widgets || []).find((item) => item.name === "auto_config");
-            if (auto) auto.value = false;
-            setWidgets(this, values);
-            showReport(
-              `Applied: ${values.source} | ${values.quantization} | ctx ${values.context_size}` +
-                ` | gpu_layers ${values.gpu_layers} | kv ${values.kv_cache_type}`,
-            );
+            showReport("Loading the selected model to verify the settings...");
+            const result = await post("/promptforge/test", body);
+            if (result.ok) {
+              const auto = (this.widgets || []).find((item) => item.name === "auto_config");
+              if (auto) auto.value = false;
+              setWidgets(this, result.settings || {});
+            }
+            showReport((result.ok ? "Verified. " : "Failed. ") + (result.message || ""));
           } else {
             const result = await post("/promptforge/scan", body);
             showReport(result.report);
