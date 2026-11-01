@@ -1430,6 +1430,7 @@ class PROMPTFORGE_PromptEnhancer:
         local_model_path = cfg.get("local_model_path", "")
         mmproj_path = cfg.get("mmproj_path", "")
         clip = cfg.get("clip") or clip
+        override_text = (system_prompt_override or "").strip()
         if save_system_prompt and override_text:
             self._save_custom_system_prompt(override_text)
 
