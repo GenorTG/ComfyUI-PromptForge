@@ -310,6 +310,105 @@ def _bad_output_reason(text, min_chars=20):
     return ""
 
 
+# MiniMax H3 modes: how many images the mode can use, whether a reference video is allowed, and each image's role.
+# Labels follow the H3 text encoder: <Picture i> / <Video k> are 1-based per type in connection order, gaps closed up.
+_MINIMAX_MODES = {
+    "fl2va": (2, False, ("the exact first frame", "the exact last frame")),
+    "i2va": (1, False, ("the exact first frame",)),
+    "l2va": (1, False, ("the exact last frame",)),
+    "ref2va": (None, True, ()),
+    "t2va": (0, False, ()),
+}
+_MINIMAX_MODE_RE = re.compile(r"minimax h3 (" + "|".join(_MINIMAX_MODES) + r")\b", re.I)
+
+
+def _minimax_mode(preset_name):
+    match = _MINIMAX_MODE_RE.search(preset_name or "")
+    return match.group(1).lower() if match else None
+
+
+def _minimax_alignment_line(mode_key, picture_count, seconds):
+    """The frame-alignment line the frame modes open with, limited to the pictures that are attached ('' = omit it)."""
+    if not picture_count:
+        return ""
+    head = "How the reference pictures align with the target video — "
+    if mode_key == "i2va":
+        return "For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced."
+    if mode_key == "l2va":
+        return head + f"<Picture 1> (from [Shot N]) aligns with the {seconds}-second mark of the target video."
+    if mode_key == "fl2va":
+        first = "Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video"
+        if picture_count == 1:
+            return head + first + "."
+        return head + first + f"; Picture 2 (from Shot N) aligns with the {seconds}-second mark of the target video."
+    return ""
+
+
+_MINIMAX_REF_RE = re.compile(r"\b(Picture|Video|Audio)\s+(\d+)\b")
+
+
+def _drop_absent_references(text, picture_count, has_video, user_text):
+    """Remove sentences citing a picture, video or audio label that is not attached (audio the user's own text names is allowed)."""
+    def absent(match):
+        kind, number = match.group(1), int(match.group(2))
+        if kind == "Picture":
+            return number > picture_count
+        if kind == "Video":
+            return number > (1 if has_video else 0)
+        return not re.search(rf"\bAudio\s+{number}\b", user_text)
+
+    removed = 0
+    lines = []
+    for line in text.splitlines():
+        kept = []
+        for sentence in re.split(r"(?<=[.!?])\s+", line):
+            if any(absent(m) for m in _MINIMAX_REF_RE.finditer(sentence)):
+                removed += 1
+            else:
+                kept.append(sentence)
+        lines.append(" ".join(kept))
+    if removed:
+        print(f"[PromptForge] removed {removed} sentence(s) that cited media which is not connected.")
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
+def _minimax_inputs_block(mode_key, picture_count, video_frames, dropped, seconds):
+    """Authoritative list of what exists for this MiniMax mode; everything else must never be mentioned."""
+    max_images, allows_video, roles = _MINIMAX_MODES[mode_key]
+    lines = ["# MiniMax inputs (authoritative)", f"Mode: {mode_key.upper()}."]
+    present = []
+    for index in range(picture_count):
+        role = f" ({roles[index]})" if index < len(roles) else ""
+        present.append(f"<Picture {index + 1}>{role}")
+    if video_frames:
+        present.append(f"<Video 1> (one reference video, {video_frames} frames sampled in time order)")
+    lines.append("Attached: " + (", ".join(present) if present else "nothing") + ".")
+    absent = []
+    if max_images is None:
+        absent.append(f"<Picture {picture_count + 1}> and any higher picture number")
+    else:
+        absent.extend(f"<Picture {index + 1}> ({roles[index]})" for index in range(picture_count, max_images))
+        if max_images == 0 or picture_count >= max_images:
+            absent.append(f"<Picture {max(picture_count, max_images) + 1}> and any higher picture number")
+    if not video_frames:
+        absent.append("<Video 1> and any other video")
+    absent.append("any <Audio N> that the user's text does not itself describe (this node attaches no audio)")
+    lines.append("Not attached, so never mention, cite or invent: " + "; ".join(absent) + ".")
+    lines.append(
+        "Where the instructions above refer to something that is not attached, ignore that part and work only from the user's text. "
+        "Use each attached label exactly as written and never renumber it."
+    )
+    if mode_key in ("fl2va", "i2va", "l2va"):
+        alignment = _minimax_alignment_line(mode_key, picture_count, seconds)
+        if alignment:
+            lines.append(f"Alignment line: write exactly this, replacing N with the number of the last shot, and name no other picture in it: {alignment}")
+        else:
+            lines.append("Alignment line: nothing is attached, so omit the alignment line entirely and start with the first field.")
+    if dropped:
+        lines.append("Connected but unused by this mode (do not mention): " + ", ".join(dropped) + ".")
+    return "\n".join(lines)
+
+
 def _tokens_text(clip, tokens):
     batch = next(iter(tokens.values())) if isinstance(tokens, dict) else tokens
     return clip.decode([t[0] for row in batch for t in row if isinstance(t[0], int)], skip_special_tokens=False)
@@ -1544,6 +1643,10 @@ class PROMPTFORGE_PromptEnhancer:
             duration_line = f"Target video duration: {duration_text} seconds."
         guard = OUTPUT_GUARD
         guard += " Do not output chain-of-thought or reasoning; start with the final prompt."
+        minimax_key = None if override_text else _minimax_mode(enhancement_preset)
+        minimax_block = ""
+        if minimax_key:
+            image, image2, image3, video, minimax_block = self._minimax_inputs(minimax_key, mode, image, image2, image3, video, frame_count, duration_text)
         media_line = self._media_inventory(mode, image, image2, image3, video, frame_count)
         negative_text = (negative_prompt or "").strip()
         negative_line = ""
@@ -1555,7 +1658,7 @@ class PROMPTFORGE_PromptEnhancer:
                 ". Write the scene so they are absent, converting each exclusion into a positive description "
                 "of the desired state; never name them inside the prompt itself."
             )
-        system_parts = [p for p in (sys_text, media_line, negative_line, guard) if p and p.strip()]
+        system_parts = [p for p in (sys_text, media_line, minimax_block, negative_line, guard) if p and p.strip()]
         user_parts = [p for p in (user_text, duration_line) if p and p.strip()]
         system_prompt = "\n\n".join(system_parts)
         user_prompt = "\n\n".join(user_parts)
@@ -1627,6 +1730,8 @@ class PROMPTFORGE_PromptEnhancer:
         )
         answer, thinking = _split_thinking(enhanced)
         answer = _clean_prompt_output(answer)
+        if minimax_key:
+            answer = _drop_absent_references(answer, sum(value is not None for value in (image, image2, image3)), video is not None, user_text)
         preset_lower = (enhancement_preset or "").lower()
         if not any(marker in preset_lower for marker in ("minimax", "wan", "ltx", "ace-step")):
             answer = _strip_video_meta(answer)
@@ -2227,6 +2332,28 @@ class PROMPTFORGE_PromptEnhancer:
             "Write the prompt for exactly these inputs. Never mention, imply, reference, or invent "
             "any other image, reference, video, frame, or media."
         )
+
+    def _minimax_inputs(self, mode_key, mode, image, image2, image3, video, frame_count, seconds):
+        """Trim the connected media to what the MiniMax mode can use and describe it with the H3 labels."""
+        max_images, allows_video, _ = _MINIMAX_MODES[mode_key]
+        pictures = [value for value in (image, image2, image3) if mode != "text_only" and self._has_media(value)]
+        has_video = mode != "text_only" and self._has_media(video)
+        dropped = []
+        if max_images is not None and len(pictures) > max_images:
+            dropped.extend(f"image {index + 1}" for index in range(max_images, len(pictures)))
+            pictures = pictures[:max_images]
+        if has_video and not allows_video:
+            dropped.append("video")
+            has_video = False
+        if dropped:
+            print(f"[PromptForge] MiniMax {mode_key.upper()} cannot use: {', '.join(dropped)}; ignoring.")
+        pictures += [None] * (3 - len(pictures))
+        video = video if has_video else None
+        frames = 0
+        if has_video:
+            frames = min(max(1, int(frame_count)), int(video.shape[0])) if torch.is_tensor(video) and video.ndim == 4 else 1
+        block = _minimax_inputs_block(mode_key, sum(value is not None for value in pictures), frames, dropped, seconds)
+        return pictures[0], pictures[1], pictures[2], video, block
 
     def _has_media(self, value):
         if value is None:
