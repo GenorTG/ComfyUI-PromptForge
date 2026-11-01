@@ -271,45 +271,39 @@ def _clip_top_p_supported():
         return True
 
 
-def _is_bad_output(text, min_chars=20):
-    """Detect empty, degenerate or refusal output. Content is never logged."""
+def _bad_output_reason(text, min_chars=20):
+    """Return a short reason when output is empty, short, degenerate or a refusal."""
     clean = _clean_prompt_output(text)
     if len(clean) < min_chars:
-        return True
+        return "too short"
     if _is_repetitive_text(clean):
-        return True
+        return "repetitive"
     if _NEGATIVE_PROMPT_RE.search(clean):
-        return True
+        return "negative-prompt wording"
     if re.search(r"(.)\1{15,}", clean):
-        return True
+        return "runaway repeat"
     if len(clean) > 200 and len(set(clean)) < 8:
-        return True
+        return "low variety"
     words = re.findall(r"\w+", clean.lower())
     if len(words) > 30:
         from collections import Counter
         if Counter(words).most_common(1)[0][1] / len(words) > 0.45:
-            return True
+            return "repeated words"
     lines = [line.strip() for line in clean.splitlines() if line.strip()]
     if len(lines) >= 4:
         from collections import Counter
         if Counter(lines).most_common(1)[0][1] >= 4:
-            return True
+            return "repeated lines"
     lowered = clean.lower()
     if len(clean) < 600 and any(marker in lowered for marker in REFUSAL_MARKERS):
-        return True
+        return "refusal"
     if any(lowered.startswith(marker) for marker in REFUSAL_MARKERS):
-        return True
-    return False
+        return "refusal"
+    return ""
 
 
-def _tokens_have_images(tokens):
-    if isinstance(tokens, dict):
-        if tokens.get("type") == "image":
-            return True
-        return any(_tokens_have_images(value) for value in tokens.values())
-    if isinstance(tokens, (list, tuple)):
-        return any(_tokens_have_images(value) for value in tokens)
-    return False
+def _is_bad_output(text, min_chars=20):
+    return bool(_bad_output_reason(text, min_chars))
 
 
 def _split_thinking(text):
@@ -1060,16 +1054,33 @@ def _kv_type_value(name):
     return int(getattr(GGMLType, f"GGML_TYPE_{str(name).upper()}", GGMLType.GGML_TYPE_F16))
 
 
+def _display_model(name, source):
+    bare = re.sub(r"^\[(?:AVAILABLE|LOCAL)[^\]]*\]\s*", "", str(name or ""))
+    resolved = _resolve_model_entry(bare)
+    if source == "GGUF":
+        entry = resolved.get("entry") if resolved else None
+        quants = _gguf_local_quants(entry) if entry else []
+        if quants:
+            ordered = [q for q in ("q4", "q5", "q6", "q8") if q in quants]
+            return f"[LOCAL {'/'.join(q.upper() for q in ordered)}] {bare}"
+        return bare
+    local = (resolved or {}).get("local_path") or ""
+    repo = (resolved or {}).get("repo_id") or ""
+    if local or (repo and _cache_has(repo, "config.json")):
+        return f"[LOCAL] {bare}"
+    return bare
+
+
 def _settings_report(settings):
     source = settings.get("source", "safetensors")
     if source == "GGUF":
         return (
-            f"GGUF {settings.get('gguf_model')} | quant {settings.get('quantization')} | "
+            f"GGUF {_display_model(settings.get('gguf_model'), 'GGUF')} | quant {settings.get('quantization')} | "
             f"ctx {settings.get('context_size')} | gpu_layers {settings.get('gpu_layers')} | "
             f"kv {settings.get('kv_cache_type')} | batch {settings.get('batch_size')}/{settings.get('ubatch_size')}"
         )
     if source == "safetensors":
-        return f"safetensors {settings.get('safetensors_model')} | quant {settings.get('quantization')}"
+        return f"safetensors {_display_model(settings.get('safetensors_model'), 'safetensors')} | quant {settings.get('quantization')}"
     return "connected clip | no model loaded"
 
 
@@ -1760,8 +1771,9 @@ class PROMPTFORGE_PromptEnhancer:
 
         try:
             enhanced = attempt(seed)
-            if auto_retry and _is_bad_output(_split_thinking(enhanced)[0], min_chars):
-                print("[PromptForge] output rejected (empty/repetitive/refusal); retrying with a new seed.")
+            reason = _bad_output_reason(_split_thinking(enhanced)[0], min_chars)
+            if auto_retry and reason:
+                print(f"[PromptForge] output rejected ({reason}); retrying with a new seed.")
                 enhanced = attempt(_next_seed(seed))
         except ValueError as exc:
             if images and "mmproj" in str(exc).lower():
@@ -1832,8 +1844,17 @@ class PROMPTFORGE_PromptEnhancer:
             quant = "auto"
 
         if src_path.is_dir():
-            quant_cfg = None
+            if torch.cuda.is_available():
+                _free_vram()
             hf_dtype = torch.float16 if quant == "fp16" else _hf_compute_dtype()
+            if quant == "q8" and params_b:
+                try:
+                    free_bytes = torch.cuda.mem_get_info()[0]
+                except Exception:
+                    free_bytes = 0
+                if free_bytes and float(params_b) * 1.35 * 1024 ** 3 > free_bytes:
+                    print("[PromptForge] q8 does not fit free VRAM; using q4 instead.")
+                    quant = "q4"
             if quant in ("q8", "q4"):
                 quant_cfg = BitsAndBytesConfig(
                     load_in_8bit=(quant == "q8"),
@@ -1849,7 +1870,6 @@ class PROMPTFORGE_PromptEnhancer:
                 **_hf_dtype_kwargs(hf_dtype),
             }
             if torch.cuda.is_available():
-                _free_vram()
                 max_memory = _hf_max_memory()
                 if max_memory is not None:
                     load_kwargs["max_memory"] = max_memory
@@ -1934,8 +1954,9 @@ class PROMPTFORGE_PromptEnhancer:
                     return tokenizer.decode(outputs[0, input_len:], skip_special_tokens=True)
 
                 enhanced = attempt(seed)
-                if auto_retry and _is_bad_output(_split_thinking(enhanced)[0], min_chars):
-                    print("[PromptForge] output rejected (empty/repetitive/refusal); retrying with a new seed.")
+                reason = _bad_output_reason(_split_thinking(enhanced)[0], min_chars)
+                if auto_retry and reason:
+                    print(f"[PromptForge] output rejected ({reason}); retrying with a new seed.")
                     enhanced = attempt(_next_seed(seed))
                 return enhanced
             finally:
@@ -2006,8 +2027,9 @@ class PROMPTFORGE_PromptEnhancer:
         for attempt_index in range(2):
             generated = attempt(seed_value)
             decoded = clip.decode(generated, skip_special_tokens=True)
-            if auto_retry and attempt_index == 0 and _is_bad_output(_split_thinking(decoded)[0], min_chars):
-                print("[PromptForge] output rejected (empty/repetitive/refusal); retrying with a new seed.")
+            reason = _bad_output_reason(_split_thinking(decoded)[0], min_chars) if attempt_index == 0 else ""
+            if auto_retry and reason:
+                print(f"[PromptForge] output rejected ({reason}); retrying with a new seed.")
                 seed_value = _next_seed(seed_value)
                 continue
             return decoded
