@@ -1408,6 +1408,8 @@ class PROMPTFORGE_PromptEnhancer:
         auto_retry=True,
         use_negative_prompt=True,
         negative_prompt="",
+        clip=None,
+        **kwargs,
     ):
         print("[PromptForge] request received.")
         cfg = model if isinstance(model, dict) else {}
@@ -1426,7 +1428,7 @@ class PROMPTFORGE_PromptEnhancer:
         custom_repo_id = cfg.get("custom_repo_id", "")
         local_model_path = cfg.get("local_model_path", "")
         mmproj_path = cfg.get("mmproj_path", "")
-        clip = cfg.get("clip")
+        clip = cfg.get("clip") or clip
         if save_system_prompt and override_text:
             self._save_custom_system_prompt(override_text)
 
