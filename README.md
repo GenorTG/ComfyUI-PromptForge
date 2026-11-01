@@ -24,7 +24,7 @@ Takes the `MODEL` bundle and writes the prompt. Only generation inputs live here
 - **Preset**: `auto` or any bundled preset (Krea 2 T2I, Krea 2 Identity Edit, MOSS Image T2I/I2I, Qwen Image T2I, MiniMax H3, Anima, ACE-Step, generic styles…).
 - **Video duration**: `video_seconds` sets the exact clip length; MiniMax H3 presets use it for shot budget, timestamps and the frame alignment line.
 - **Sampling**: seed, max_tokens (default 2048, up to 65536, not otherwise capped), temperature, top_p, top_k, num_beams, repetition_penalty, keep_model_loaded. `use_default_sampling` reads values from `generation_config.json` / GGUF metadata when available.
-- **Auto-retry**: rejects empty, too-short, degenerate/repetitive or refusal output and retries once with the next seed. Outputs under 120 chars (40 for tag/refine/technical presets) count as too short.
+- **Auto-retry**: rejects empty, too-short, degenerate/repetitive or refusal output and retries once with the next seed. Outputs under 400 chars (40 for tag/refine/technical presets, 120 when max_tokens is below 192) count as too short.
 - **Repetition guard**: repeated sentences and repeated 5–10 word phrases are rejected across the whole output. HF generation adds `no_repeat_ngram_size=4`; GGUF uses a mild frequency penalty and a longer repeat window. CLIP generation is capped at 2048 tokens and checked afterwards.
 - **Negative prompt**: `use_negative_prompt` + `negative_prompt` feed exclusions into the generation request so the model writes around them instead of naming them.
 - **No embellishment**: every preset forbids unrequested moisture (sweat, wetness, droplets, sheen) and forbids inventing subjects, actions or scene changes.

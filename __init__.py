@@ -1520,7 +1520,7 @@ class PROMPTFORGE_PromptEnhancer:
             raise ValueError("[PromptForge] No GGUF model available; add a .gguf to the model dirs or set local_model_path.")
 
         short_form = any(word in (enhancement_preset or "").lower() for word in ("tags", "refine", "technical"))
-        min_chars = 40 if short_form or max_tokens < 128 else 120
+        min_chars = 40 if short_form else (400 if max_tokens >= 192 else 120)
         enhanced = self._generate(
             full_prompt=full_prompt,
             system_prompt=system_prompt,
