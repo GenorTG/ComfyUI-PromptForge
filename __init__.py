@@ -1803,12 +1803,15 @@ class PROMPTFORGE_PromptEnhancer:
             "temperature": temperature,
             "top_p": top_p,
             "repeat_penalty": repetition_penalty,
-            "frequency_penalty": 0.1,
-            "penalty_last_n": 256,
             "seed": seed,
         }
         if top_k:
             completion_kwargs["top_k"] = top_k
+        # older llama-cpp-python builds lack penalty_last_n / reasoning_budget
+        supported = inspect.signature(llm.create_completion if chat_template else llm.create_chat_completion).parameters
+        for key, value in (("frequency_penalty", 0.1), ("penalty_last_n", 256)):
+            if key in supported:
+                completion_kwargs[key] = value
         if chat_template:
             # The model's own template with thinking disabled (empty think block / primed thought channel) is the
             # reliable non-thinking mode; llama.cpp adds BOS itself, so the template gets an empty bos_token.
@@ -1820,7 +1823,7 @@ class PROMPTFORGE_PromptEnhancer:
             completion_kwargs["stop"] = ["<|im_end|>", "<turn|>", "<end_of_turn>", "<|eot_id|>", "<|end|>"]
         else:
             completion_kwargs["messages"] = messages
-            if disable_thinking:
+            if disable_thinking and "reasoning_budget" in supported:
                 completion_kwargs["reasoning_budget"] = 0
 
         def attempt(seed_value):
