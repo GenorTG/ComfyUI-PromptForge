@@ -723,7 +723,7 @@ def _auto_gguf_settings(entry, quantization, mmproj_path=None):
     candidates = []
     if quantization in ("auto", "fp16", ""):
         for q in ("q8", "q6", "q5", "q4"):
-            path = _find_gguf(entry, q, download=False)
+            path = _find_gguf(entry, q, download=False, exact=True)
             if path is not None:
                 candidates.append((q, path))
     else:
@@ -809,12 +809,14 @@ def _scanned_ggufs():
     return [m["path"] for m in LOCAL_TEXT_MODELS if (m.get("path") or "").lower().endswith(".gguf")]
 
 
-def _find_gguf(entry, quantization, download=True):
+def _find_gguf(entry, quantization, download=True, exact=False):
     """Find or download a GGUF for a catalog entry, honouring the requested quant."""
     qf = (entry or {}).get("quant_files") or {}
     if not qf:
         return None
     order = _gguf_quant_order(quantization, qf) or list(qf)
+    if exact:
+        order = order[:1]
 
     base_dir = Path(entry.get("base_dir") or "LLM/GGUF")
     if folder_paths is not None:
@@ -863,6 +865,9 @@ def _find_gguf(entry, quantization, download=True):
         found = download_q(qf[key])
         if found is not None:
             return found
+
+    if exact:
+        return None
 
     tokens = _gguf_avail_tokens(entry)
     if tokens:
