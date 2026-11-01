@@ -175,6 +175,8 @@ def _clean_prompt_output(text):
             kept_lines.append(" ".join(kept))
     cleaned = "\n".join(kept_lines)
     cleaned = "\n".join(line for line in cleaned.splitlines() if not line.strip() or re.search(r"[A-Za-z0-9]", line))
+    cleaned = cleaned.replace("**", "").replace("__", "")
+    cleaned = re.sub(r"^\s*[-*•]\s+", "", cleaned, flags=re.M)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
     if not re.search(r"[A-Za-z0-9]", cleaned):
         return ""
@@ -204,23 +206,24 @@ REFUSAL_MARKERS = (
 def _is_repetitive_text(text):
     if not text or len(text) < 60:
         return False
-    tail = text[-1500:]
-    for size in (60, 40, 24):
-        block = tail[-size:]
-        if len(block) >= size and tail.count(block) >= 3:
-            return True
-    sentences = [s.strip() for s in re.split(r"[.!?]+", tail) if len(s.strip()) > 40]
+    from collections import Counter
+    normalized = re.sub(r"\s+", " ", text.lower()).strip()[:8000]
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", normalized) if len(s.strip()) >= 30]
     if sentences:
-        from collections import Counter
-        if Counter(sentences).most_common(1)[0][1] >= 3:
+        sentence, count = Counter(sentences).most_common(1)[0]
+        if count >= (2 if len(sentence) >= 80 else 3):
             return True
-    words = tail.split()
-    if len(words) >= 40:
-        from collections import Counter
-        n = 6
-        grams = [" ".join(words[i:i + n]) for i in range(0, len(words) - n, 3)]
-        if grams and Counter(grams).most_common(1)[0][1] >= 4:
+    words = re.findall(r"\w+", normalized)
+    for size in (10, 8, 6, 5):
+        if len(words) < size * 3:
+            continue
+        grams = Counter(" ".join(words[i:i + size]) for i in range(len(words) - size + 1))
+        gram, count = grams.most_common(1)[0]
+        if count >= 3 and len(gram) >= 35:
             return True
+    lines = [line.strip().lower() for line in text.splitlines() if len(line.strip()) >= 30]
+    if len(lines) >= 3 and Counter(lines).most_common(1)[0][1] >= 3:
+        return True
     return False
 
 
@@ -239,10 +242,10 @@ def _clip_top_p_supported():
         return True
 
 
-def _is_bad_output(text):
+def _is_bad_output(text, min_chars=20):
     """Detect empty, degenerate or refusal output. Content is never logged."""
     clean = _clean_prompt_output(text)
-    if len(clean) < 20:
+    if len(clean) < min_chars:
         return True
     if _is_repetitive_text(clean):
         return True
@@ -1372,7 +1375,7 @@ class PROMPTFORGE_PromptEnhancer:
                 "mode": (MODE_OPTIONS, {"default": "text_only", "tooltip": "text_only ignores all media; inputs uses every connected image (image / image2 / image3) and the sampled video frames."}),
                 "enhancement_preset": (PRESET_OPTIONS, {"default": "auto", "tooltip": "Preset system prompt: auto, or one of the PromptForge presets (Krea 2 T2I, MOSS Image T2I, Qwen Image T2I, generic styles...)."}),
                 "seed": ("INT", {"default": 1, "min": 1, "max": 2 ** 32 - 1, "tooltip": "Sampling seed."}),
-                "max_tokens": ("INT", {"default": 8192, "min": 32, "max": 65536, "tooltip": "Max new tokens for the enhanced prompt. Keep it below the model context for GGUF."}),
+                "max_tokens": ("INT", {"default": 2048, "min": 32, "max": 65536, "tooltip": "Max new tokens for the enhanced prompt. Keep it below the model context for GGUF."}),
                 "temperature": ("FLOAT", {"default": 0.7, "min": 0.1, "max": 1.0, "step": 0.01, "tooltip": "Sampling temperature."}),
                 "top_p": ("FLOAT", {"default": 0.9, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "Nucleus sampling cutoff."}),
                 "top_k": ("INT", {"default": 0, "min": 0, "max": 100, "tooltip": "Top-K. 0 = model default."}),
@@ -1516,6 +1519,8 @@ class PROMPTFORGE_PromptEnhancer:
         elif source == "GGUF" and model_name == "none":
             raise ValueError("[PromptForge] No GGUF model available; add a .gguf to the model dirs or set local_model_path.")
 
+        short_form = any(word in (enhancement_preset or "").lower() for word in ("tags", "refine", "technical"))
+        min_chars = 40 if short_form or max_tokens < 128 else 120
         enhanced = self._generate(
             full_prompt=full_prompt,
             system_prompt=system_prompt,
@@ -1552,6 +1557,7 @@ class PROMPTFORGE_PromptEnhancer:
             use_default_sampling=use_default_sampling,
             auto_retry=auto_retry,
             keep_model_loaded=keep_model_loaded,
+            min_chars=min_chars,
         )
         answer, thinking = _split_thinking(enhanced)
         answer = _clean_prompt_output(answer)
@@ -1608,7 +1614,7 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Generation dispatch
     # ------------------------------------------------------------------ #
-    def _generate(self, full_prompt, system_prompt, user_prompt, mode, engine, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
+    def _generate(self, full_prompt, system_prompt, user_prompt, mode, engine, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded, min_chars=20):
         if engine == "gguf":
             return self._generate_gguf(
                 full_prompt=full_prompt, system_prompt=system_prompt, user_prompt=user_prompt,
@@ -1621,7 +1627,7 @@ class PROMPTFORGE_PromptEnhancer:
                 image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
                 custom_repo_id=custom_repo_id, local_model_path=local_model_path, mmproj_path=mmproj_path,
                 disable_thinking=disable_thinking, use_default_sampling=use_default_sampling,
-                auto_retry=auto_retry, keep_model_loaded=keep_model_loaded,
+                auto_retry=auto_retry, keep_model_loaded=keep_model_loaded, min_chars=min_chars,
             )
         return self._generate_text_encoder(
             full_prompt=full_prompt, system_prompt=system_prompt, user_prompt=user_prompt,
@@ -1631,13 +1637,13 @@ class PROMPTFORGE_PromptEnhancer:
             image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
             seed=seed, clip=clip, custom_repo_id=custom_repo_id, local_model_path=local_model_path,
             disable_thinking=disable_thinking, use_default_sampling=use_default_sampling,
-            auto_retry=auto_retry, keep_model_loaded=keep_model_loaded,
+            auto_retry=auto_retry, keep_model_loaded=keep_model_loaded, min_chars=min_chars,
         )
 
     # ------------------------------------------------------------------ #
     # GGUF / llama.cpp engine
     # ------------------------------------------------------------------ #
-    def _generate_gguf(self, full_prompt, system_prompt, user_prompt, mode, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, image, image2, image3, video, frame_count, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
+    def _generate_gguf(self, full_prompt, system_prompt, user_prompt, mode, model_name, quantization, context_size, gpu_layers, batch_size, ubatch_size, kv_cache_type, offload_kqv, swa_full, flash_attn, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, seed, image, image2, image3, video, frame_count, custom_repo_id, local_model_path, mmproj_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded, min_chars=20):
         entry = None
         gguf_path = None
         eff_local = (local_model_path or "").strip() or _local_model_option(model_name)
@@ -1771,7 +1777,12 @@ class PROMPTFORGE_PromptEnhancer:
         }
         if top_k:
             completion_kwargs["top_k"] = top_k
-        if disable_thinking and "reasoning_budget" in inspect.signature(llm.create_chat_completion).parameters:
+        completion_params = inspect.signature(llm.create_chat_completion).parameters
+        if "frequency_penalty" in completion_params:
+            completion_kwargs["frequency_penalty"] = 0.1
+        if "penalty_last_n" in completion_params:
+            completion_kwargs["penalty_last_n"] = 256
+        if disable_thinking and "reasoning_budget" in completion_params:
             completion_kwargs["reasoning_budget"] = 0
 
         def attempt(seed_value):
@@ -1787,7 +1798,7 @@ class PROMPTFORGE_PromptEnhancer:
 
         try:
             enhanced = attempt(seed)
-            if auto_retry and _is_bad_output(_split_thinking(enhanced)[0]):
+            if auto_retry and _is_bad_output(_split_thinking(enhanced)[0], min_chars):
                 print("[PromptForge] output rejected (empty/repetitive/refusal); retrying with a new seed.")
                 enhanced = attempt(_next_seed(seed))
         except ValueError as exc:
@@ -1802,13 +1813,13 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Text encoder engines (native ComfyUI CLIP route / bitsandbytes route)
     # ------------------------------------------------------------------ #
-    def _generate_text_encoder(self, full_prompt, system_prompt, user_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded):
+    def _generate_text_encoder(self, full_prompt, system_prompt, user_prompt, mode, model_name, quantization, max_tokens, temperature, top_p, top_k, num_beams, repetition_penalty, image, image2, image3, video, frame_count, seed, clip, custom_repo_id, local_model_path, disable_thinking, use_default_sampling, auto_retry, keep_model_loaded, min_chars=20):
         if clip is not None:
             enhanced = self._generate_with_clip(
                 full_prompt=full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
                 top_p=top_p, top_k=top_k, repetition_penalty=repetition_penalty,
                 seed=seed, image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
-                clip=clip, disable_thinking=disable_thinking, auto_retry=auto_retry,
+                clip=clip, disable_thinking=disable_thinking, auto_retry=auto_retry, min_chars=min_chars,
             )
             self._release(keep_model_loaded=keep_model_loaded)
             return enhanced
@@ -1928,6 +1939,8 @@ class PROMPTFORGE_PromptEnhancer:
                     "eos_token_id": stop_tokens,
                     "pad_token_id": tokenizer.pad_token_id,
                 }
+                if max_tokens >= 8:
+                    kwargs["no_repeat_ngram_size"] = 4
                 if num_beams == 1:
                     kwargs.update({"do_sample": True, "temperature": temperature, "top_p": top_p})
                     if params_b is not None and params_b >= 3.5:
@@ -1960,7 +1973,7 @@ class PROMPTFORGE_PromptEnhancer:
                     return tokenizer.decode(outputs[0, input_len:], skip_special_tokens=True)
 
                 enhanced = attempt(seed)
-                if auto_retry and _is_bad_output(_split_thinking(enhanced)[0]):
+                if auto_retry and _is_bad_output(_split_thinking(enhanced)[0], min_chars):
                     print("[PromptForge] output rejected (empty/repetitive/refusal); retrying with a new seed.")
                     enhanced = attempt(_next_seed(seed))
                 return enhanced
@@ -1974,7 +1987,7 @@ class PROMPTFORGE_PromptEnhancer:
             full_prompt=full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
             top_p=top_p, top_k=top_k, repetition_penalty=repetition_penalty,
             seed=seed, image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
-            clip=clip_obj, disable_thinking=disable_thinking, auto_retry=auto_retry,
+            clip=clip_obj, disable_thinking=disable_thinking, auto_retry=auto_retry, min_chars=min_chars,
         )
         self._release(keep_model_loaded=keep_model_loaded)
         return enhanced
@@ -1982,7 +1995,7 @@ class PROMPTFORGE_PromptEnhancer:
     # ------------------------------------------------------------------ #
     # Native ComfyUI CLIP generation (connected clip or locally loaded clip)
     # ------------------------------------------------------------------ #
-    def _generate_with_clip(self, full_prompt, mode, max_tokens, temperature, top_p, top_k, repetition_penalty, seed, image, image2, image3, video, frame_count, clip, disable_thinking, auto_retry):
+    def _generate_with_clip(self, full_prompt, mode, max_tokens, temperature, top_p, top_k, repetition_penalty, seed, image, image2, image3, video, frame_count, clip, disable_thinking, auto_retry, min_chars=20):
         global _TOP_P_WARNED
         images = self._clip_images(mode, image, image2, image3, video, frame_count)
         tokenize_kwargs = {"images": images} if images else {}
@@ -2033,7 +2046,7 @@ class PROMPTFORGE_PromptEnhancer:
         for attempt_index in range(2):
             generated = attempt(seed_value)
             decoded = clip.decode(generated, skip_special_tokens=True)
-            if auto_retry and attempt_index == 0 and _is_bad_output(_split_thinking(decoded)[0]):
+            if auto_retry and attempt_index == 0 and _is_bad_output(_split_thinking(decoded)[0], min_chars):
                 print("[PromptForge] output rejected (empty/repetitive/refusal); retrying with a new seed.")
                 seed_value = _next_seed(seed_value)
                 continue
