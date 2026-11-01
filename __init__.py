@@ -227,6 +227,35 @@ def _is_repetitive_text(text):
     return False
 
 
+_VIDEO_FIELD_RE = re.compile(
+    r"^(?:integrated_multimodal_description|overall_soundscape|non_diegetic_music|soundscape|audio(?:_design)?|sound_effects?|music)\s*:",
+    re.I,
+)
+_VIDEO_SENTENCE_RE = re.compile(
+    r"\b(?:non-diegetic music|soundscape|sound effects?|audio cue|voice-?over|background music|diegetic sound)\b",
+    re.I,
+)
+_SHOT_LINE_RE = re.compile(r"^\s*(?:\[\s*)?shot\s+\d+", re.I)
+
+
+def _strip_video_meta(text):
+    """Remove video/audio fields from image-only presets."""
+    lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            lines.append("")
+            continue
+        if _VIDEO_FIELD_RE.match(stripped) or _SHOT_LINE_RE.match(stripped):
+            continue
+        sentences = re.split(r"(?<=[.!?])\s+", stripped)
+        kept = [sentence for sentence in sentences if not _VIDEO_SENTENCE_RE.search(sentence)]
+        if kept:
+            lines.append(" ".join(kept))
+    cleaned = "\n".join(lines)
+    return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+
+
 def _next_seed(seed):
     return (int(seed) + 1) % (2 ** 32 - 1) or 1
 
@@ -1461,6 +1490,9 @@ class PROMPTFORGE_PromptEnhancer:
         )
         answer, thinking = _split_thinking(enhanced)
         answer = _clean_prompt_output(answer)
+        preset_lower = (enhancement_preset or "").lower()
+        if not any(marker in preset_lower for marker in ("minimax", "wan", "ltx", "ace-step")):
+            answer = _strip_video_meta(answer)
         return (answer, thinking)
 
     # ------------------------------------------------------------------ #

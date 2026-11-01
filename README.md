@@ -70,6 +70,8 @@ its own model.
 
 `presets/promptforge_presets.json` — the crafted prompt templates (from the QwenVL-Mod custom presets plus the generic style set), including the refactored **Krea 2** prompts and the new **MOSS Image** prompts.
 
+Every preset has an `NSFW › …` variant with explicit adult writing instructions for nudity, anatomy, positions and choreography; no safety boilerplate is added. Image presets also carry an image-only guard, and the node strips any leaked audio/soundscape/music/shot fields from image outputs.
+
 ## Models catalog
 
 `catalog/models.json` — heretic VL-capable HF models (4B / 9B / 27B, free, image-capable or text-only) and GGUF variants, plus local scan dirs for text models.
