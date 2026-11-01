@@ -1892,12 +1892,16 @@ class PROMPTFORGE_PromptEnhancer:
                 chat = processor.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True, enable_thinking=not disable_thinking)
                 processed = processor(text=chat, images=[r for r in refs if r is not None] or None, return_tensors="pt")
                 model_device = next(model.parameters()).device
-                forward_params = inspect.signature(model.forward).parameters
-                accepts_extra = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in forward_params.values())
+                allowed_inputs = set(inspect.signature(model.forward).parameters)
+                prepare = getattr(model, "prepare_inputs_for_generation", None)
+                if prepare is not None:
+                    allowed_inputs |= set(inspect.signature(prepare).parameters)
+                allowed_inputs.discard("kwargs")
+                allowed_inputs.discard("model_kwargs")
                 model_inputs = {
                     k: (v.to(model_device, non_blocking=True) if torch.is_tensor(v) else v)
                     for k, v in processed.items()
-                    if accepts_extra or k in forward_params
+                    if k in allowed_inputs
                 }
                 stop_tokens = [tokenizer.eos_token_id]
                 if getattr(tokenizer, "eot_id", None) is not None:
