@@ -769,15 +769,16 @@ def _hf_max_memory(reserve=3 * 1024 ** 3):
     return {torch.cuda.current_device(): budget, "cpu": psutil.virtual_memory().available}
 
 
-def _free_vram(keep=None):
-    """Unload ComfyUI's models so a separately loaded transformers model has room."""
+def _free_vram(keep=None, needed=10 ** 30):
+    """Unload ComfyUI's models (least recently used first) until `needed` bytes are free."""
     try:
         import comfy.model_management as model_management
         keep_loaded = []
         if keep is not None:
             keep_loaded = [m for m in model_management.current_loaded_models if m.model is keep]
-        model_management.free_memory(10 ** 30, model_management.get_torch_device(), keep_loaded=keep_loaded)
-        model_management.free_memory(10 ** 30, torch.device("cpu"))
+        model_management.free_memory(needed, model_management.get_torch_device(), keep_loaded=keep_loaded)
+        if needed >= 10 ** 30:
+            model_management.free_memory(needed, torch.device("cpu"))
         model_management.soft_empty_cache()
     except Exception:
         pass
@@ -877,7 +878,7 @@ def _gguf_kv_profile(path):
 def _gguf_memory_estimate(path, n_ctx, layers, mmproj_path=None):
     """Approximate VRAM needed for the GPU-resident part of a GGUF model."""
     weights = path.stat().st_size
-    extra = mmproj_path.stat().st_size if mmproj_path is not None else 0
+    extra = mmproj_path.stat().st_size + 1024 ** 3 if mmproj_path is not None else 0  # + image encoder compute buffers
     profile = _gguf_kv_profile(path)
     if profile is None:
         return weights + extra + 768 * 1024 ** 2
@@ -1912,8 +1913,9 @@ class PROMPTFORGE_PromptEnhancer:
                 free_bytes = torch.cuda.mem_get_info()[0]
             except Exception:
                 free_bytes = 0
-            if free_bytes < _gguf_memory_estimate(gguf_path, n_ctx, llama_kwargs["n_gpu_layers"], mmproj):
-                _free_vram()
+            required = _gguf_memory_estimate(gguf_path, n_ctx, llama_kwargs["n_gpu_layers"], mmproj)
+            if free_bytes < required:
+                _free_vram(needed=int(required))
 
         fallbacks = []
         if kv_type != _kv_type_value("f16"):
@@ -2392,7 +2394,15 @@ class PROMPTFORGE_PromptEnhancer:
         images = [p for p in images if p is not None]
         if video is not None:
             images.extend(self._frames_from_input(video, frame_count))
-        return images
+        return [self._fit_for_vision(p) for p in images]
+
+    def _fit_for_vision(self, im, max_pixels=1024 * 1024):
+        """Vision encoders cost per pixel: about 1k tokens per megapixel, so full-size references are only slow."""
+        if im.width * im.height <= max_pixels:
+            return im
+        from PIL import Image
+        scale = (max_pixels / (im.width * im.height)) ** 0.5
+        return im.resize((max(32, round(im.width * scale)), max(32, round(im.height * scale))), Image.LANCZOS)
 
     def _pil_from_input(self, img):
         from PIL import Image
@@ -2421,8 +2431,8 @@ class PROMPTFORGE_PromptEnhancer:
 
     def _pil_data_url(self, image):
         buffer = io.BytesIO()
-        image.save(buffer, format="PNG")
-        return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+        image.save(buffer, format="JPEG", quality=92)
+        return "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
 
     def _frames_from_input(self, video, frame_count):
         from PIL import Image
