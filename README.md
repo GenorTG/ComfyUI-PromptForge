@@ -44,6 +44,13 @@ Standalone output node; it never generates a prompt.
 - Scans every locally available GGUF/safetensors model (or one selected model) and prints the recommended settings for this GPU.
 - `OUTPUT_NODE`-only: queue it on its own (or use its button) to inspect configs without running the image workflow.
 
+### PromptForge Frame Interpolate (`PROMPTFORGE_FrameInterpolate`)
+
+RIFE frame interpolation for large frames (for example the 2x-upscaled MiniMax output) that backs off by itself instead of crashing ComfyUI. Inputs: `frames`, `multiplier` (2–8), `ckpt_name` (rife47/49/417/426 found in `models/frame_interpolation` or the frame-interpolation pack's `ckpts/rife`). It reuses the network of the `comfyui-frame-interpolation` pack, which must be installed.
+
+- Frames stay on the CPU and the output is written into one preallocated tensor, so RAM peaks at input plus output with no list/`cat` copies.
+- One frame pair at a time runs on the GPU in fp16. On an out-of-memory error it unloads ComfyUI's models and retries, then estimates flow at 1/2 and 1/4 resolution (the output is still warped at full resolution), and finally runs on the CPU. No settings to tune.
+
 ## One-click config
 
 The front-end extension adds a button to both nodes:
