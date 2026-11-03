@@ -7,6 +7,7 @@ free ComfyUI's loaded models, then estimate flow at 1/2 and 1/4 resolution, then
 import gc
 import importlib.util
 import re
+import time
 from pathlib import Path
 
 import psutil
@@ -182,6 +183,7 @@ class PROMPTFORGE_FrameInterpolate:
         device, dtype, scale = place()
         progress = comfy.utils.ProgressBar(count - 1)
         print(f"[PromptForge] RIFE {ckpt_name}: {count} frames of {width}x{height} -> {output.shape[0]}.")
+        started = time.time()
         try:
             with torch.inference_mode():
                 for index in range(count - 1):
@@ -207,6 +209,7 @@ class PROMPTFORGE_FrameInterpolate:
                                 device, dtype, scale = place()
                     progress.update(1)
             output[-1] = frames[-1]
+            print(f"[PromptForge] RIFE done in {time.time() - started:.1f}s ({(count - 1) / max(time.time() - started, 1e-6):.1f} pairs/s).")
         finally:
             network.to("cpu")
             arch.backwarp_tenGrid.clear()
