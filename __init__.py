@@ -213,8 +213,9 @@ def _is_repetitive_text(text):
     normalized = re.sub(r"\s+", " ", text.lower()).strip()[:8000]
     sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", normalized) if len(s.strip()) >= 30]
     if sentences:
-        sentence, count = Counter(sentences).most_common(1)[0]
-        if count >= (2 if len(sentence) >= 120 else 3):
+        counts = Counter(sentences)
+        # a long prompt may reuse a sentence or two; a loop is mostly copies
+        if max(counts.values()) >= 5 or sum(len(s) * (c - 1) for s, c in counts.items()) > 0.3 * len(normalized):
             return True
     words = re.findall(r"\w+", normalized)
     for size, min_count, share in ((8, 3, 0.5), (5, 4, 0.75)):
@@ -229,8 +230,10 @@ def _is_repetitive_text(text):
         if len(covered) > share * len(words):
             return True
     lines = [line.strip().lower() for line in text.splitlines() if len(line.strip()) >= 30]
-    if len(lines) >= 3 and Counter(lines).most_common(1)[0][1] >= 3:
-        return True
+    if lines:
+        counts = Counter(lines)
+        if max(counts.values()) >= 5 or sum(len(l) * (c - 1) for l, c in counts.items()) > 0.3 * len(text):
+            return True
     return False
 
 
