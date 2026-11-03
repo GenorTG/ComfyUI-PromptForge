@@ -205,26 +205,48 @@ REFUSAL_MARKERS = (
 
 
 def _is_repetitive_text(text):
+    """True for degenerate loops; structured prompts that reuse a few phrases are fine."""
     if not text or len(text) < 60:
         return False
     normalized = re.sub(r"\s+", " ", text.lower()).strip()[:8000]
     sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", normalized) if len(s.strip()) >= 30]
     if sentences:
         sentence, count = Counter(sentences).most_common(1)[0]
-        if count >= (2 if len(sentence) >= 80 else 3):
+        if count >= (2 if len(sentence) >= 120 else 3):
             return True
     words = re.findall(r"\w+", normalized)
-    for size in (10, 8, 6, 5):
-        if len(words) < size * 3:
+    for size, min_count, share in ((8, 3, 0.5), (5, 4, 0.75)):
+        if len(words) < size * 4:
             continue
-        grams = Counter(" ".join(words[i:i + size]) for i in range(len(words) - size + 1))
-        gram, count = grams.most_common(1)[0]
-        if count >= 3 and len(gram) >= 35:
+        grams = [" ".join(words[i:i + size]) for i in range(len(words) - size + 1)]
+        counts = Counter(grams)
+        covered = set()
+        for i, gram in enumerate(grams):
+            if counts[gram] >= min_count:
+                covered.update(range(i, i + size))
+        if len(covered) > share * len(words):
             return True
     lines = [line.strip().lower() for line in text.splitlines() if len(line.strip()) >= 30]
     if len(lines) >= 3 and Counter(lines).most_common(1)[0][1] >= 3:
         return True
     return False
+
+
+def _dedupe_repeats(text):
+    """Drop repeated sentences and lines, keeping the first occurrence."""
+    seen = set()
+    lines = []
+    for line in text.splitlines():
+        kept = []
+        for sentence in re.split(r"(?<=[.!?])\s+", line.strip()):
+            key = re.sub(r"\s+", " ", sentence.lower()).strip()
+            if len(key) >= 30:
+                if key in seen:
+                    continue
+                seen.add(key)
+            kept.append(sentence)
+        lines.append(" ".join(kept))
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 
 _VIDEO_FIELD_RE = re.compile(
@@ -308,6 +330,23 @@ def _bad_output_reason(text, min_chars=20):
     if any(lowered.startswith(marker) for marker in REFUSAL_MARKERS):
         return "refusal"
     return ""
+
+
+def _generate_checked(attempt, seed, min_chars, auto_retry, tries=3):
+    """Run attempt(seed) until the output passes the checks, up to `tries` seeds; keep the best on failure."""
+    texts = []
+    for index in range(tries if auto_retry else 1):
+        text = attempt(seed)
+        reason = _bad_output_reason(_split_thinking(text)[0], min_chars)
+        if not reason:
+            return text
+        texts.append(text)
+        seed = _next_seed(seed)
+        if index + 1 < tries and auto_retry:
+            print(f"[PromptForge] output rejected ({reason}); retrying with a new seed ({index + 2}/{tries}).")
+    if reason == "repetitive":
+        return _dedupe_repeats(max(texts, key=len))
+    return texts[-1]
 
 
 # MiniMax H3 modes: how many images the mode can use, whether a reference video is allowed, and each image's role.
@@ -1980,11 +2019,7 @@ class PROMPTFORGE_PromptEnhancer:
             return text
 
         try:
-            enhanced = attempt(seed)
-            reason = _bad_output_reason(_split_thinking(enhanced)[0], min_chars)
-            if auto_retry and reason:
-                print(f"[PromptForge] output rejected ({reason}); retrying with a new seed.")
-                enhanced = attempt(_next_seed(seed))
+            enhanced = _generate_checked(attempt, seed, min_chars, auto_retry)
         except ValueError as exc:
             if images and "mmproj" in str(exc).lower():
                 expected = (entry or {}).get("mmproj_file") or "mmproj-*.gguf"
@@ -2174,12 +2209,7 @@ class PROMPTFORGE_PromptEnhancer:
                         print(f"[PromptForge] safetensors generated {tokens} tokens in {time.time() - started:.1f}s.")
                     return tokenizer.decode(outputs[0, input_len:], skip_special_tokens=True)
 
-                enhanced = attempt(seed)
-                reason = _bad_output_reason(_split_thinking(enhanced)[0], min_chars)
-                if auto_retry and reason:
-                    print(f"[PromptForge] output rejected ({reason}); retrying with a new seed.")
-                    enhanced = attempt(_next_seed(seed))
-                return enhanced
+                return _generate_checked(attempt, seed, min_chars, auto_retry)
             except RuntimeError as exc:
                 if "out of memory" in str(exc).lower():
                     raise ValueError(
@@ -2256,25 +2286,16 @@ class PROMPTFORGE_PromptEnhancer:
 
         def attempt(seed_value):
             try:
-                return run(effective_top_p, seed_value)
+                return clip.decode(run(effective_top_p, seed_value), skip_special_tokens=True)
             except AttributeError as exc:
                 raise ValueError("[PromptForge] this text encoder cannot generate text (CLIP/T5-style encoder). Use a Qwen / Gemma LLM encoder, or a safetensors/GGUF model.") from exc
             except RuntimeError as exc:
                 if effective_top_p < 1.0 and "single memory location" in str(exc):
                     print("[PromptForge] ComfyUI's CLIP sampler hit a torch overlap error on top_p; retrying with top_p=1.0 (temperature, top_k, repetition and seed still apply).")
-                    return run(1.0, seed_value)
+                    return clip.decode(run(1.0, seed_value), skip_special_tokens=True)
                 raise
 
-        seed_value = seed
-        for attempt_index in range(2):
-            generated = attempt(seed_value)
-            decoded = clip.decode(generated, skip_special_tokens=True)
-            reason = _bad_output_reason(_split_thinking(decoded)[0], min_chars) if attempt_index == 0 else ""
-            if auto_retry and reason:
-                print(f"[PromptForge] output rejected ({reason}); retrying with a new seed.")
-                seed_value = _next_seed(seed_value)
-                continue
-            return decoded
+        return _generate_checked(attempt, seed, min_chars, auto_retry)
 
     # ------------------------------------------------------------------ #
     # Input adapters
