@@ -22,6 +22,7 @@ from pathlib import Path
 
 import psutil
 import torch
+import torch.nn.functional as F
 import transformers
 from transformers import AutoModelForCausalLM, AutoProcessor, AutoTokenizer, BitsAndBytesConfig
 from transformers import LogitsProcessor, LogitsProcessorList, StoppingCriteria, StoppingCriteriaList
@@ -767,6 +768,14 @@ def _hf_max_memory(reserve=3 * 1024 ** 3):
         return None
     budget = max(int(free_bytes) - reserve, 768 * 1024 ** 2)
     return {torch.cuda.current_device(): budget, "cpu": psutil.virtual_memory().available}
+
+
+def _vision_size(width, height, max_pixels=1024 * 1024):
+    """Target (w, h) for references above ~1 megapixel, else None. Vision encoders cost about 1k tokens per megapixel, and every token also slows each generated token."""
+    if width * height <= max_pixels:
+        return None
+    scale = (max_pixels / (width * height)) ** 0.5
+    return max(32, round(width * scale)), max(32, round(height * scale))
 
 
 def _free_vram(keep=None, needed=10 ** 30):
@@ -2316,7 +2325,14 @@ class PROMPTFORGE_PromptEnhancer:
             steps = min(max(1, frame_count), video.shape[0])
             idx = torch.linspace(0, video.shape[0] - 1, steps=steps).round().long()
             images.extend(video[i:i + 1] for i in idx)
-        return [t.detach().float().cpu().clamp(0.0, 1.0) for t in images]
+        fitted = []
+        for t in images:
+            t = t.detach().float().cpu().clamp(0.0, 1.0)
+            size = _vision_size(t.shape[2], t.shape[1])
+            if size is not None:
+                t = F.interpolate(t.permute(0, 3, 1, 2), size=(size[1], size[0]), mode="area").permute(0, 2, 3, 1)
+            fitted.append(t)
+        return fitted
 
     def _media_inventory(self, mode, image, image2, image3, video, frame_count):
         """Describe only the media that actually reached the node."""
@@ -2396,13 +2412,12 @@ class PROMPTFORGE_PromptEnhancer:
             images.extend(self._frames_from_input(video, frame_count))
         return [self._fit_for_vision(p) for p in images]
 
-    def _fit_for_vision(self, im, max_pixels=1024 * 1024):
-        """Vision encoders cost per pixel: about 1k tokens per megapixel, so full-size references are only slow."""
-        if im.width * im.height <= max_pixels:
+    def _fit_for_vision(self, im):
+        size = _vision_size(im.width, im.height)
+        if size is None:
             return im
         from PIL import Image
-        scale = (max_pixels / (im.width * im.height)) ** 0.5
-        return im.resize((max(32, round(im.width * scale)), max(32, round(im.height * scale))), Image.LANCZOS)
+        return im.resize(size, Image.LANCZOS)
 
     def _pil_from_input(self, img):
         from PIL import Image
