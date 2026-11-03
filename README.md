@@ -46,10 +46,13 @@ Standalone output node; it never generates a prompt.
 
 ### PromptForge Frame Interpolate (`PROMPTFORGE_FrameInterpolate`)
 
-RIFE frame interpolation for large frames (for example the 2x-upscaled MiniMax output) that backs off by itself instead of crashing ComfyUI. Inputs: `frames`, `multiplier` (2–8), `ckpt_name` (rife47/49/417/426 found in `models/frame_interpolation` or the frame-interpolation pack's `ckpts/rife`). It reuses the network of the `comfyui-frame-interpolation` pack, which must be installed.
+RIFE frame interpolation for large frames (for example the 2x-upscaled MiniMax output) that backs off by itself instead of crashing ComfyUI. It reuses the network of the `comfyui-frame-interpolation` pack, which must be installed.
 
-- Frames stay on the CPU and the output is written into one preallocated tensor, so RAM peaks at input plus output with no list/`cat` copies.
-- One frame pair at a time runs on the GPU in fp16. On an out-of-memory error it unloads ComfyUI's models and retries, then estimates flow at 1/2 and 1/4 resolution (the output is still warped at full resolution), and finally runs on the CPU. No settings to tune.
+- **`ckpt_name`**: every RIFE checkpoint found in `models/frame_interpolation`, `models/rife` or the pack's `ckpts/rife` (4.7/4.9, 4.17, 4.26; `.pth` or `.safetensors`), plus `blend`, a plain cross-fade that needs no model and is instant (ghosts on motion).
+- **`mode`**: `balanced` (full-resolution flow), `fast` (flow at half resolution), `best` (ensemble, 4.7/4.9/4.17 only). **`output_precision`**: float16 halves the RAM of the result.
+- **Memory**: frames stay on the CPU and the output is one preallocated tensor. Before running, the node checks free RAM; if float32 does not fit it switches to float16, and if that does not fit either it raises a clear error instead of letting the OS kill ComfyUI.
+- **VRAM**: one frame pair at a time in fp16. On an out-of-memory error it unloads ComfyUI's models and retries, then estimates flow at 1/2 and 1/4 resolution (the result is still warped at full resolution), and finally runs on the CPU.
+- About 25–30 frame pairs per second at 1920x1088 on an RTX 5080 (rife49).
 
 ## One-click config
 

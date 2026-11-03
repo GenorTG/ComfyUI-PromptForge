@@ -6,22 +6,28 @@ free ComfyUI's loaded models, then estimate flow at 1/2 and 1/4 resolution, then
 """
 import gc
 import importlib.util
+import re
 from pathlib import Path
 
+import psutil
 import torch
 import torch.nn.functional as F
+from safetensors.torch import load_file
 
 import comfy.model_management as model_management
 import comfy.utils
 import folder_paths
 
-ARCH_VERSIONS = {
-    "rife47.pth": "4.7",
-    "rife49.pth": "4.7",
-    "rife417.pth": "4.17",
-    "rife426.pth": "4.26",
-}
+# digits of the checkpoint name -> IFNet architecture of the frame-interpolation pack
+ARCH_BY_DIGITS = {"47": "4.7", "49": "4.7", "417": "4.17", "426": "4.26"}
 NO_CKPT = "(no RIFE checkpoint found)"
+BLEND = "blend (no model, instant)"
+# mode -> (flow scale of the first rung, ensemble); the backoff only ever lowers the scale
+MODES = {
+    "balanced": (1.0, False),
+    "best": (1.0, True),
+    "fast": (0.5, False),
+}
 # flow-estimation scale per rung; the final image is always warped at full resolution
 GPU_SCALES = (1.0, 0.5, 0.25)
 CPU_SCALE = 0.5
@@ -37,20 +43,34 @@ def _vfi_pack_dir():
 
 
 def _checkpoint_dirs():
-    dirs = [Path(folder_paths.models_dir) / "frame_interpolation"]
+    dirs = [Path(folder_paths.models_dir) / "frame_interpolation", Path(folder_paths.models_dir) / "rife"]
     pack = _vfi_pack_dir()
     if pack is not None:
         dirs.append(pack / "ckpts" / "rife")
     return dirs
 
 
+def _arch_version(name):
+    match = re.match(r"rife[_-]?v?([\d.]+)", name.lower())
+    return ARCH_BY_DIGITS.get(match.group(1).replace(".", "")) if match else None
+
+
 def _checkpoints():
     found = {}
     for directory in _checkpoint_dirs():
-        for name in ARCH_VERSIONS:
-            if (directory / name).is_file():
-                found.setdefault(name, directory / name)
+        if directory.is_dir():
+            for path in sorted(directory.iterdir()):
+                if path.suffix in (".pth", ".safetensors") and _arch_version(path.name):
+                    found.setdefault(path.name, path)
     return found
+
+
+def _load_weights(path):
+    if path.suffix == ".safetensors":
+        state = load_file(str(path))
+        # some conversions name the stages blocks.N instead of blockN
+        return {re.sub(r"^blocks\.(\d+)\.", r"block\1.", key): value for key, value in state.items()}
+    return torch.load(path, map_location="cpu", weights_only=True)
 
 
 def _rife_arch():
@@ -82,7 +102,9 @@ class PROMPTFORGE_FrameInterpolate:
             "required": {
                 "frames": ("IMAGE",),
                 "multiplier": ("INT", {"default": 2, "min": 2, "max": 8, "tooltip": "2 doubles the frame count, 3 triples it, and so on."}),
-                "ckpt_name": (names, {"default": "rife49.pth" if "rife49.pth" in names else names[0]}),
+                "ckpt_name": (names + [BLEND], {"default": "rife49.pth" if "rife49.pth" in names else names[0], "tooltip": "RIFE version to use. blend is a plain cross-fade: instant, no model, ghosting on motion."}),
+                "mode": (list(MODES), {"default": "balanced", "tooltip": "balanced: full-resolution flow. fast: flow at half resolution, a little quicker and lighter on VRAM. best: adds ensemble (RIFE 4.7/4.9/4.17 only), slower. Out-of-memory errors lower the flow resolution on their own."}),
+                "output_precision": (["float32", "float16"], {"default": "float32", "tooltip": "float16 halves the RAM of the result. Switched on automatically when float32 would not fit in free RAM."}),
             }
         }
 
@@ -91,24 +113,44 @@ class PROMPTFORGE_FrameInterpolate:
     CATEGORY = "PromptForge"
     DESCRIPTION = "RIFE frame interpolation that picks its own memory settings: slower but does not run out of VRAM or RAM on large frames."
 
-    def interpolate(self, frames, multiplier, ckpt_name):
-        path = _checkpoints().get(ckpt_name)
-        if path is None:
-            raise ValueError(f"[PromptForge] RIFE checkpoint '{ckpt_name}' not found. Put rife49.pth in models/frame_interpolation or the frame-interpolation pack's ckpts/rife folder.")
+    def interpolate(self, frames, multiplier, ckpt_name, mode="balanced", output_precision="float32"):
         count = int(frames.shape[0])
         if count < 2:
             return (frames,)
         frames = frames[..., :3]
-
-        arch = _rife_arch()
-        arch_ver = ARCH_VERSIONS[ckpt_name]
-        network = arch.IFNet(arch_ver=arch_ver)
-        network.load_state_dict(torch.load(path, map_location="cpu", weights_only=True))
-        network.eval()
-
         height, width = int(frames.shape[1]), int(frames.shape[2])
-        output = torch.empty((count - 1) * multiplier + 1, height, width, 3, dtype=torch.float32)
-        state = {"rung": 0, "freed": False, "cpu": False}
+        total = (count - 1) * multiplier + 1
+
+        # the result is allocated once up front: fail here with a clear message instead of dying in the OS OOM killer later
+        out_dtype = torch.float16 if output_precision == "float16" else torch.float32
+        available = psutil.virtual_memory().available
+        if total * height * width * 3 * out_dtype.itemsize > 0.9 * available:
+            out_dtype = torch.float16
+        needed = total * height * width * 3 * out_dtype.itemsize
+        if needed > 0.9 * available:
+            raise ValueError(f"[PromptForge] the interpolated clip needs {needed / 1024 ** 3:.1f} GB of RAM and only {available / 1024 ** 3:.1f} GB is free. Use a lower multiplier or fewer frames.")
+        output = torch.empty(total, height, width, 3, dtype=out_dtype)
+
+        if ckpt_name == BLEND:
+            for index in range(count - 1):
+                model_management.throw_exception_if_processing_interrupted()
+                output[index * multiplier] = frames[index]
+                for step in range(1, multiplier):
+                    output[index * multiplier + step] = torch.lerp(frames[index], frames[index + 1], step / multiplier)
+            output[-1] = frames[-1]
+            return (output,)
+
+        path = _checkpoints().get(ckpt_name)
+        if path is None:
+            raise ValueError(f"[PromptForge] RIFE checkpoint '{ckpt_name}' not found. Put it in models/frame_interpolation, models/rife or the frame-interpolation pack's ckpts/rife folder.")
+        arch = _rife_arch()
+        arch_ver = _arch_version(ckpt_name)
+        network = arch.IFNet(arch_ver=arch_ver)
+        network.load_state_dict(_load_weights(path))
+        network.eval()
+        first_scale, ensemble = MODES[mode]
+        ensemble = ensemble and arch_ver != "4.26"
+        state = {"rung": next(i for i, scale in enumerate(GPU_SCALES) if scale <= first_scale), "freed": False}
         gpu = model_management.get_torch_device()
         if gpu.type == "cpu":
             state["rung"] = len(GPU_SCALES)
@@ -144,18 +186,18 @@ class PROMPTFORGE_FrameInterpolate:
             with torch.inference_mode():
                 for index in range(count - 1):
                     model_management.throw_exception_if_processing_interrupted()
-                    output[index * multiplier] = frames[index].float().cpu()
+                    output[index * multiplier] = frames[index]
                     for step in range(1, multiplier):
                         while True:
                             try:
-                                # the flow blocks need sizes divisible by 128 / scale
-                                multiple = max(128, int(128 / scale))
+                                # the coarsest flow block downsamples by 4x its scale step, so sizes must divide by that
+                                multiple = max(64, int(4 * _scale_list(arch_ver, 1.0)[0] / scale))
                                 padding = (0, -width % multiple, 0, -height % multiple)
                                 first = F.pad(frames[index:index + 1].permute(0, 3, 1, 2).to(device, dtype), padding, mode="replicate")
                                 second = F.pad(frames[index + 1:index + 2].permute(0, 3, 1, 2).to(device, dtype), padding, mode="replicate")
                                 timestep = torch.full((1, 1, 1, 1), step / multiplier, device=device, dtype=dtype)
-                                middle = network(first, second, timestep, _scale_list(arch_ver, scale), training=False, fastmode=True, ensemble=False)
-                                output[index * multiplier + step] = middle[:, :, :height, :width].clamp(0, 1).permute(0, 2, 3, 1)[0].float().cpu()
+                                middle = network(first, second, timestep, _scale_list(arch_ver, scale), training=False, fastmode=True, ensemble=ensemble)
+                                output[index * multiplier + step] = middle[:, :, :height, :width].clamp(0, 1).permute(0, 2, 3, 1)[0].to(out_dtype).cpu()
                                 break
                             except (torch.OutOfMemoryError, RuntimeError) as exc:
                                 if not _is_oom(exc):
@@ -164,7 +206,7 @@ class PROMPTFORGE_FrameInterpolate:
                                 back_off(exc)
                                 device, dtype, scale = place()
                     progress.update(1)
-            output[-1] = frames[-1].float().cpu()
+            output[-1] = frames[-1]
         finally:
             network.to("cpu")
             arch.backwarp_tenGrid.clear()
