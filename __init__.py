@@ -1629,6 +1629,7 @@ class PROMPTFORGE_PromptEnhancer:
                 "video": ("IMAGE", {"tooltip": "Video frames input. Use frame_count to control how many frames are sampled."}),
                 "frame_count": ("INT", {"default": 16, "min": 1, "max": 64, "tooltip": "Frames sampled from video input."}),
                 "negative_prompt": ("STRING", {"default": "", "multiline": True, "tooltip": "What the generated prompt/scene must not contain."}),
+                "auto_retry": ("BOOLEAN", {"default": True, "tooltip": "Regenerate with a new seed (up to 3 tries) when the output looks empty, repetitive, leaked reasoning or a refusal. Turn off to always keep the first output."}),
             },
         }
 
@@ -1656,6 +1657,7 @@ class PROMPTFORGE_PromptEnhancer:
         video=None,
         frame_count=16,
         negative_prompt="",
+        auto_retry=True,
         **kwargs,
     ):
         print("[PromptForge] request received.")
@@ -1775,7 +1777,7 @@ class PROMPTFORGE_PromptEnhancer:
             local_model_path=local_model_path,
             mmproj_path=mmproj_path,
             disable_thinking=True,
-            auto_retry=True,
+            auto_retry=auto_retry,
             min_chars=min_chars,
         )
         answer, thinking = _split_thinking(enhanced)
