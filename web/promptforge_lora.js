@@ -84,7 +84,11 @@ function buildList(node, stateWidget) {
   let search = "";
   let activeOnly = false;
 
-  const root = el("div", { display: "flex", flexDirection: "column", gap: "4px", height: "100%", width: "100%", minWidth: "0", boxSizing: "border-box", overflow: "hidden", fontSize: "12px", color: "var(--input-text)" });
+  // the frontend sizes `frame`; `root` fills it without ever influencing its size
+  const frame = el("div", { position: "relative", width: "100%", height: "100%", minWidth: "0", overflow: "hidden", contain: "layout paint" });
+  const root = el("div", { position: "absolute", inset: "0", display: "flex", flexDirection: "column", gap: "4px", boxSizing: "border-box", overflow: "hidden", fontSize: "12px", color: "var(--input-text)" });
+  frame.append(root);
+  frame.addEventListener("pointerdown", (event) => event.stopPropagation());
   const bar = el("div", { display: "flex", gap: "4px" });
   const searchBox = el("input", { flex: "1", minWidth: "0", background: "var(--comfy-input-bg)", color: "var(--input-text)", border: "1px solid var(--border-color)", borderRadius: "3px", padding: "3px 6px" },
     { type: "search", placeholder: "Search LoRAs (name, folder, trigger words)..." });
@@ -171,8 +175,12 @@ function buildList(node, stateWidget) {
 
   function fillFamilies() {
     familyBox.replaceChildren(new Option("All families", "all"), new Option("Follow the connected loader", "pipe"), ...library.families.map((family) => new Option(family.label, family.key)));
-    familyBox.value = state.filter === "pipe" || library.families.some((family) => family.key === state.filter) ? state.filter : "all";
-    state.filter = familyBox.value;
+    if (!library.families.length && state.filter !== "all" && state.filter !== "pipe") familyBox.append(new Option(state.filter, state.filter));
+    familyBox.value = state.filter;
+    if (familyBox.value !== state.filter) {
+      familyBox.value = "all";
+      if (library.families.length) state.filter = "all";
+    }
   }
 
   async function reload(refreshIndex = false) {
@@ -187,7 +195,7 @@ function buildList(node, stateWidget) {
   onlyBox.addEventListener("change", () => { activeOnly = onlyBox.checked; render(); });
   refresh.addEventListener("click", () => reload(true));
 
-  const widget = node.addDOMWidget("lora_list", "promptforge_lora_list", root, { serialize: false, getMinHeight: () => 380 });
+  const widget = node.addDOMWidget("lora_list", "promptforge_lora_list", frame, { serialize: false, getMinHeight: () => 380 });
   widget.refreshFilter = () => { if (state.filter === "pipe") render(); };
   widget.restore = () => { state = parseState(stateWidget.value); fillFamilies(); render(); };
   reload();

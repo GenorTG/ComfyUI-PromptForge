@@ -372,6 +372,44 @@ _MINIMAX_MODES = {
 _MINIMAX_MODE_RE = re.compile(r"minimax h3 (" + "|".join(_MINIMAX_MODES) + r")\b", re.I)
 
 
+# languages a video family speaks reliably (third-party model cards; other languages work partially)
+DIALOGUE_LANGUAGES = ("Arabic", "Chinese", "English", "French", "German", "Italian", "Japanese", "Korean", "Portuguese", "Russian", "Spanish")
+DIALOGUE_AUTO = "auto (from the instructions)"
+DIALOGUE_OTHER = "other (type below)"
+# these are counted in characters; every other language in words
+CHARACTER_LANGUAGES = {"Chinese", "Japanese", "Korean"}
+
+
+def _dialogue_block(instructions, language, other, seconds):
+    """System prompt section asking for dialogue in the video prompt, sized to what fits in `seconds`; '' when off."""
+    instructions = (instructions or "").strip()
+    chosen = (other or "").strip() if language == DIALOGUE_OTHER else ("" if language == DIALOGUE_AUTO else language)
+    if not instructions and not chosen:
+        return ""
+    unit, rate = ("characters", 4.0) if chosen in CHARACTER_LANGUAGES else ("words", 2.3)
+    budget = max(3, round(max(seconds - 1.0, 1.0) * rate))
+    spoken = f"in {chosen}" if chosen else "in the language the dialogue instructions imply (English when they do not say)"
+    lines = [
+        "# Dialogue",
+        "The video contains spoken dialogue written by you, following the dialogue format described above (speaker IDs, voice description at first appearance, dialogue tags).",
+    ]
+    if instructions:
+        lines.append(f"Dialogue instructions from the user: {instructions}")
+    else:
+        lines.append("The user gave no dialogue instructions: invent short natural dialogue that fits the scene.")
+    lines.append(
+        f"Write every spoken line {spoken}. The dialogue tag carries the language name in English as its language tag"
+        + (f" ([{chosen}])" if chosen else "")
+        + f"; the words after it are natural, idiomatic {chosen or 'speech'} as a native speaker would really say them, not a translation. Everything else in the prompt stays in English."
+    )
+    lines.append(
+        f"Timing: the video lasts {seconds:g} seconds and people speak about {rate:g} {unit} per second. Keep a second before the first line and a short pause between speakers, "
+        f"so all speakers together say at most {budget} {unit}. Every line must end before the video does and belong to the shot it is written in. "
+        "Prefer short, natural exchanges to speeches, and say less when the topic needs more than fits."
+    )
+    return "\n".join(lines)
+
+
 FAMILY_PRESETS = {
     "krea2": "Krea 2 T2I",
     "moss_image": "MOSS Image T2I",
@@ -1655,6 +1693,9 @@ class PROMPTFORGE_PromptEnhancer:
                 "frame_count": ("INT", {"default": 16, "min": 1, "max": 64, "tooltip": "Frames sampled from video input."}),
                 "negative_prompt": ("STRING", {"default": "", "multiline": True, "tooltip": "What the generated prompt/scene must not contain."}),
                 "pipe": ("PROMPTFORGE_PIPE", {"tooltip": "From a PromptForge Loader. With enhancement_preset on auto, the preset for that model family is used."}),
+                "dialogue": ("STRING", {"default": "", "multiline": True, "tooltip": "Video presets only (MiniMax H3). What the dialogue should be about and how it should sound, in your own words. The enhancer writes the lines, speaker IDs and tags, sized to video_seconds. Empty (with language on auto) = no dialogue instructions."}),
+                "dialogue_language": ([DIALOGUE_AUTO, *DIALOGUE_LANGUAGES, DIALOGUE_OTHER], {"default": DIALOGUE_AUTO, "tooltip": "Language of the spoken lines. The list is what MiniMax H3 speaks reliably."}),
+                "dialogue_language_other": ("STRING", {"default": "", "tooltip": "Used when dialogue_language is 'other', for example Polish. Languages outside the list are only partially supported by the video model."}),
                 "auto_retry": ("BOOLEAN", {"default": True, "tooltip": "Regenerate with a new seed (up to 3 tries) when the output looks empty, repetitive, leaked reasoning or a refusal. Turn off to always keep the first output."}),
             },
         }
@@ -1685,6 +1726,9 @@ class PROMPTFORGE_PromptEnhancer:
         negative_prompt="",
         auto_retry=True,
         pipe=None,
+        dialogue="",
+        dialogue_language=DIALOGUE_AUTO,
+        dialogue_language_other="",
         **kwargs,
     ):
         if enhancement_preset == "auto" and pipe:
@@ -1729,6 +1773,7 @@ class PROMPTFORGE_PromptEnhancer:
         if minimax_key:
             image, image2, image3, video, minimax_block = self._minimax_inputs(minimax_key, mode, image, image2, image3, video, frame_count, duration_text)
         media_line = self._media_inventory(mode, image, image2, image3, video, frame_count)
+        dialogue_block = _dialogue_block(dialogue, dialogue_language, dialogue_language_other, float(video_seconds)) if minimax_key else ""
         negative_text = (negative_prompt or "").strip()
         negative_line = ""
         if negative_text:
@@ -1739,7 +1784,7 @@ class PROMPTFORGE_PromptEnhancer:
                 ". Write the scene so they are absent, converting each exclusion into a positive description "
                 "of the desired state; never name them inside the prompt itself."
             )
-        system_parts = [p for p in (sys_text, media_line, minimax_block, negative_line, guard) if p and p.strip()]
+        system_parts = [p for p in (sys_text, media_line, minimax_block, dialogue_block, negative_line, guard) if p and p.strip()]
         user_parts = [p for p in (user_text, duration_line) if p and p.strip()]
         system_prompt = "\n\n".join(system_parts)
         user_prompt = "\n\n".join(user_parts)

@@ -97,6 +97,10 @@ Converts a bf16 / fp16 diffusion model to **NVFP4** (about 3.5x smaller, native 
 - **Report**: file sizes and the relative weight error after dequantizing (mean and the worst layer). For reference, NVFP4 is about 0.095 and INT8 ConvRot about 0.009 on Anima.
 - Already quantized files are refused; start from the original bf16 / fp16 file. Output is the ComfyUI format (`.comfy_quant` per layer), so any ComfyUI loader reads it.
 
+### Dialogue in video prompts
+
+On the Prompt Enhancer, the MiniMax H3 presets accept `dialogue` (what the spoken lines should be about), `dialogue_language` and `dialogue_language_other` (for example Polish). The enhancer writes the lines in that language inside the dialogue tags with the language tag, keeps everything else in English, and sizes the dialogue to `video_seconds` (about 2.3 words or 4 characters per second after a one second lead-in, with pauses between speakers). The language list is what MiniMax H3 speaks reliably according to third-party model cards (Arabic, Chinese, English, French, German, Italian, Japanese, Korean, Portuguese, Russian, Spanish); other languages are partially supported.
+
 ### Wiring nodes together
 
 The Loader's PIPE output carries the model's family. Wire it to the LoRA Loader (the list switches to that family), the Empty Latent (family), the Sampler (recommended settings) and the Prompt Enhancer (`enhancement_preset = auto` picks the family's preset, for example Krea 2 T2I, MOSS Image T2I, Qwen Image T2I, Anima Tags, MiniMax H3 T2VA/Ref2VA).
