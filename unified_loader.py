@@ -121,8 +121,8 @@ class PROMPTFORGE_Loader:
             }
         }
 
-    RETURN_TYPES = ("MODEL", "CLIP", "VAE", "VAE", "VAE", "STRING")
-    RETURN_NAMES = ("MODEL", "CLIP", "VAE", "AUDIO_VAE", "EXTRA_VAE", "INFO")
+    RETURN_TYPES = ("MODEL", "CLIP", "VAE", "VAE", "VAE", "STRING", "PROMPTFORGE_PIPE")
+    RETURN_NAMES = ("MODEL", "CLIP", "VAE", "AUDIO_VAE", "EXTRA_VAE", "INFO", "PIPE")
     FUNCTION = "load"
     CATEGORY = "🔮 PromptForge"
     DESCRIPTION = "Loads a model, its text encoders and VAEs in one node, choosing the text encoder type and weight settings automatically."
@@ -174,7 +174,8 @@ class PROMPTFORGE_Loader:
             else:
                 vaes.append(nodes.VAELoader().load_vae(choice)[0])
         info.extend(f"{label}: {'loaded' if loaded is not None else 'none'}" for label, loaded in zip(("vae", "audio_vae", "extra_vae"), vaes))
-        return (unet, loaded_clip, *vaes, "\n".join(info))
+        pipe = {"family": chosen.key if chosen else "", "model": name, "folder": folder}
+        return (unet, loaded_clip, *vaes, "\n".join(info), pipe)
 
     @staticmethod
     def _weight_dtype(weight_dtype, optimize_for, path):

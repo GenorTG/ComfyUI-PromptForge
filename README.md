@@ -73,11 +73,30 @@ One node for the model, its text encoders and its VAEs. It calls ComfyUI's own l
 - **Weights**: `weight_dtype` auto picks per machine from `optimize_for`. `quality` keeps the stored precision. `balanced` uses fp8 storage only when the model does not fit in VRAM. `speed` also uses fp8 compute when a 0.3 s matmul benchmark (run once per GPU and torch version, kept in `autotune.json`) shows it is at least 1.2x faster than bf16. Already-quantized files are never changed.
 - **Outputs**: MODEL, CLIP, VAE, AUDIO_VAE, EXTRA_VAE and an INFO text saying what was loaded and why.
 
+### PromptForge Empty Latent (`PROMPTFORGE_EmptyLatent`)
+
+Empty latent for any family, image or video. Size is a custom width/height, a preset, or an aspect ratio plus megapixels, snapped to the family's multiple (16, 32 for LTX/MiniMax, 64 for SD/SDXL). `orientation` flips landscape/portrait. Video frames come from `frames` or `seconds` x `fps` and are snapped to the family's grid (Wan/Hunyuan 4n+1, LTX/Cosmos 8n+1, MiniMax H3 17k+5). The latent layout comes from the connected `model`, the `pipe` or the chosen family, using ComfyUI's own latent formats (MiniMax H3 goes through ComfyUI's own empty AV latent node). Outputs LATENT, WIDTH, HEIGHT, FRAMES and INFO.
+
+### PromptForge Sampler (`PROMPTFORGE_Sampler`)
+
+KSampler, KSampler (Advanced) and custom sigmas in one node, built on `comfy.sample.sample`, so all samplers, schedulers and model patches behave as in the stock nodes.
+
+- **Schedules**: `scheduler = auto` uses LTX Video's token-count dependent schedule (max_shift, base_shift, terminal exposed) for LTX models and `simple` otherwise. Sigmas can also come from a SIGMAS input or a typed list (`custom_sigmas`), and `denoise` works with all of them. The sigmas used are an output.
+- **runs**: samples seed, seed+1 ... in one node and returns one batch.
+- **Advanced**: `start_at_step`, `end_at_step`, `add_noise`.
+- **Recommended settings**: wiring a Loader's PIPE fills sampler, scheduler, steps and cfg. They come from the model's sidecar (the most common sampler, scheduler, steps and cfg of the author's example images; prompts are never read), then name hints (turbo / distilled -> 8 steps, cfg 1), then family defaults from community documentation (Krea 2: res_multistep/simple; MiniMax H3: euler/simple; LTX: the LTXV schedule). These are starting points, not official values.
+- **Presets**: save, apply and delete named presets (steps, cfg, sampler, scheduler, denoise, runs). They are stored in ComfyUI's user folder under `promptforge/sampler_presets.json`.
+
+### Wiring nodes together
+
+The Loader's PIPE output carries the model's family. Wire it to the LoRA Loader (the list switches to that family), the Empty Latent (family), the Sampler (recommended settings) and the Prompt Enhancer (`enhancement_preset = auto` picks the family's preset, for example Krea 2 T2I, MOSS Image T2I, Qwen Image T2I, Anima Tags, MiniMax H3 T2VA/Ref2VA).
+
 ### PromptForge LoRA Loader (`PROMPTFORGE_LoraLoader`)
 
 One node instead of a chain of LoRA loaders. The node shows every LoRA in your loras folders; nothing has to be added by hand.
 
 - **Search and filter**: full-text search over the path and trigger words, and a family filter (SDXL, Krea 2, MiniMax H3, Anima...). A LoRA's family comes from the LoRA Manager sidecar (`.metadata.json`), the training metadata in the file, its key names, then its folder and file name.
+- **Stable list**: rows stay where they are when toggled; `on only` shows just the enabled ones. Number fields change by 0.05 with the mouse wheel.
 - **Per LoRA**: on/off, model strength and clip strength (blank = same as model).
 - **Random strength** (dice button): draws a strength between min and max, seeded by the node `seed`.
 - **Random groups**: LoRAs sharing a group name are alternatives, and one of the enabled ones is picked per run.

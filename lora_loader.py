@@ -109,7 +109,10 @@ class PROMPTFORGE_LoraLoader:
                 "seed": ("INT", {"default": 0, "min": 0, "max": 2 ** 32 - 1, "tooltip": "Seeds random strengths and random group picks."}),
                 "skip_mismatched": ("BOOLEAN", {"default": True, "tooltip": "Skip LoRAs trained for a different model family than the connected model."}),
             },
-            "optional": {"clip": ("CLIP",)},
+            "optional": {
+                "clip": ("CLIP",),
+                "pipe": ("PROMPTFORGE_PIPE", {"tooltip": "From a PromptForge Loader: the list switches to that model's family."}),
+            },
         }
 
     RETURN_TYPES = ("MODEL", "CLIP", "STRING", "STRING")
@@ -118,7 +121,7 @@ class PROMPTFORGE_LoraLoader:
     CATEGORY = "🔮 PromptForge"
     DESCRIPTION = "Searchable LoRA list with per-LoRA strengths, random strengths and random groups."
 
-    def load(self, model, loras, seed, skip_mismatched, clip=None):
+    def load(self, model, loras, seed, skip_mismatched, clip=None, pipe=None):
         try:
             items = json.loads(loras or "{}").get("items", [])
         except ValueError as exc:

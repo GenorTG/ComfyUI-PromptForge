@@ -27,7 +27,24 @@ app.registerExtension({
       const familyOfModel = (value) => catalog?.models.find((entry) => entry.value === value)?.family || "";
       const familyByLabel = (label) => catalog?.families.find((entry) => entry.label === label);
 
-      function refresh(keepSize = false) {
+      node.promptforgeFamily = () => (familyByLabel(familyWidget.value) || catalog?.families.find((entry) => entry.key === familyOfModel(modelWidget.value)))?.key || "";
+
+      node.promptforgeFamilyLabel = () => catalog?.families.find((entry) => entry.key === node.promptforgeFamily())?.label ?? "";
+      const FOLDERS = { ckpt: "checkpoints", unet: "diffusion_models", gguf: "unet_gguf" };
+      node.promptforgeModelInfo = () => {
+        const match = /^\[(\w+)\] (.+)$/.exec(modelWidget.value);
+        return { family: node.promptforgeFamily(), model: match?.[2] ?? "", folder: FOLDERS[match?.[1]] ?? "" };
+      };
+
+      // tell nodes wired to PIPE what changed, so a LoRA list or sampler can follow the model
+      function notifyLinked() {
+        const slot = node.outputs?.find((output) => output.name === "PIPE");
+        for (const id of slot?.links ?? []) {
+          app.graph.getNodeById(app.graph.links[id]?.target_id)?.promptforgeOnPipe?.(node);
+        }
+      }
+
+      function refresh({ keepSize = false, notify = false } = {}) {
         if (!catalog) return;
         const chosen = familyByLabel(familyWidget.value);
         const family = chosen || catalog.families.find((entry) => entry.key === familyOfModel(modelWidget.value));
@@ -45,6 +62,7 @@ app.registerExtension({
           slot.label = family?.clips[index] ? `${name} (${family.clips[index]})` : name;
         });
         setHidden(widget("audio_vae"), !(family?.vaes.includes("audio")) && widget("audio_vae").value === "(none)");
+        if (notify) notifyLinked();
         if (!keepSize) node.setSize([node.size[0], node.computeSize()[1]]);
         node.setDirtyCanvas(true, true);
       }
@@ -53,7 +71,7 @@ app.registerExtension({
         const original = target.callback;
         target.callback = function () {
           const result = original?.apply(this, arguments);
-          refresh();
+          refresh({ notify: true });
           return result;
         };
       };
@@ -68,7 +86,7 @@ app.registerExtension({
     const onConfigure = nodeType.prototype.onConfigure;
     nodeType.prototype.onConfigure = function () {
       const result = onConfigure?.apply(this, arguments);
-      this.promptforgeRefresh?.(true);
+      this.promptforgeRefresh?.({ keepSize: true });
       return result;
     };
   },

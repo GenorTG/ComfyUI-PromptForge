@@ -27,10 +27,19 @@ function el(tag, style = {}, props = {}) {
   return element;
 }
 
-function numberInput(value, onChange, { step = 0.05, width = "52px", placeholder = "" } = {}) {
-  const input = el("input", { width, background: "var(--comfy-input-bg)", color: "var(--input-text)", border: "1px solid var(--border-color)", borderRadius: "3px", padding: "1px 3px" },
-    { type: "number", step, value: value ?? "", placeholder });
+const INPUT_STYLE = { background: "var(--comfy-input-bg)", color: "var(--input-text)", border: "1px solid var(--border-color)", borderRadius: "3px", padding: "1px 4px", boxSizing: "border-box" };
+
+function numberInput(value, onChange, { width = "68px", placeholder = "" } = {}) {
+  const input = el("input", { ...INPUT_STYLE, width }, { type: "number", step: 0.05, value: value ?? "", placeholder });
   input.addEventListener("change", () => onChange(input.value === "" ? null : Number(input.value)));
+  // the wheel nudges by 0.05 instead of zooming the canvas
+  input.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const next = Math.round(((Number(input.value) || 0) + (event.deltaY < 0 ? 0.05 : -0.05)) * 100) / 100;
+    input.value = next;
+    onChange(next);
+  }, { passive: false });
   return input;
 }
 
@@ -45,11 +54,12 @@ function buildList(node, stateWidget) {
   const searchBox = el("input", { flex: "1", minWidth: "0", background: "var(--comfy-input-bg)", color: "var(--input-text)", border: "1px solid var(--border-color)", borderRadius: "3px", padding: "3px 6px" },
     { type: "search", placeholder: "Search LoRAs (name, folder, trigger words)..." });
   const familyBox = el("select", { background: "var(--comfy-input-bg)", color: "var(--input-text)", border: "1px solid var(--border-color)", borderRadius: "3px", maxWidth: "140px" });
+  const counter = el("span", { opacity: "0.7", whiteSpace: "nowrap", alignSelf: "center" });
   const refresh = el("button", { cursor: "pointer" }, { textContent: "↻", title: "Rescan the loras folders" });
   const onlyLabel = el("label", { display: "flex", alignItems: "center", gap: "2px", whiteSpace: "nowrap" });
   const onlyBox = el("input", {}, { type: "checkbox" });
   onlyLabel.append(onlyBox, "on only");
-  bar.append(searchBox, familyBox, onlyLabel, refresh);
+  bar.append(searchBox, familyBox, onlyLabel, counter, refresh);
   const list = el("div", { flex: "1", overflowY: "auto", minHeight: "0", border: "1px solid var(--border-color)", borderRadius: "3px" });
   list.addEventListener("wheel", (event) => event.stopPropagation());
   root.append(bar, list);
@@ -70,10 +80,10 @@ function buildList(node, stateWidget) {
   };
 
   function row(entry, item) {
-    const line = el("div", { display: "flex", alignItems: "center", gap: "4px", padding: "2px 4px", borderBottom: "1px solid var(--border-color)", flexWrap: "wrap" });
+    const line = el("div", { display: "flex", alignItems: "center", gap: "4px", padding: "2px 4px", borderBottom: "1px solid var(--border-color)", flexWrap: "nowrap" });
     const box = el("input", {}, { type: "checkbox", checked: !!item?.on });
     box.addEventListener("change", () => { itemFor(entry.name).on = box.checked; commit(); render(); });
-    const label = el("span", { flex: "1", minWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: entry.missing ? "0.5" : "1" }, { textContent: entry.name.replace(/\.[^.]+$/, "") });
+    const label = el("span", { flex: "1", minWidth: "60px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: entry.missing ? "0.5" : "1" }, { textContent: entry.name.replace(/\.[^.]+$/, "") });
     label.title = entry.name + (entry.words?.length ? "\nTrigger: " + entry.words.join(", ") : "");
     line.append(box, label);
     if (entry.family) {
@@ -83,14 +93,14 @@ function buildList(node, stateWidget) {
     if (entry.missing) line.append(el("span", { color: "#e66" }, { textContent: "missing" }));
     if (item?.on) {
       const set = (key) => (value) => { item[key] = value; commit(); };
-      const group = el("input", { width: "46px", background: "var(--comfy-input-bg)", color: "var(--input-text)", border: "1px solid var(--border-color)", borderRadius: "3px", padding: "1px 3px" },
+      const group = el("input", { ...INPUT_STYLE, width: "90px" },
         { value: item.group || "", placeholder: "group", title: "Items sharing a group name are alternatives: one is picked per run" });
       group.addEventListener("change", () => { item.group = group.value.trim(); commit(); });
       const dice = el("button", { cursor: "pointer", opacity: item.random ? "1" : "0.4" }, { textContent: "🎲", title: "Random strength between min and max" });
       dice.addEventListener("click", () => { item.random = !item.random; commit(); render(); });
       line.append(group, dice);
       if (item.random) {
-        line.append(numberInput(item.min, (v) => set("min")(v ?? 0), { width: "46px" }), "–", numberInput(item.max, (v) => set("max")(v ?? 1), { width: "46px" }));
+        line.append(numberInput(item.min, (v) => set("min")(v ?? 0)), "–", numberInput(item.max, (v) => set("max")(v ?? 1)));
       } else {
         line.append(numberInput(item.model, (v) => set("model")(v ?? 1), { placeholder: "model" }), numberInput(item.clip, set("clip"), { placeholder: "= model" }));
       }
@@ -99,26 +109,23 @@ function buildList(node, stateWidget) {
   }
 
   function render() {
+    const scroll = list.scrollTop;
     const known = new Map(library.loras.map((entry) => [entry.name, entry]));
     const configured = byName();
     const query = search.toLowerCase().split(/\s+/).filter(Boolean);
     list.replaceChildren();
 
-    const active = state.items.filter((item) => item.on).map((item) => known.get(item.name) || { name: item.name, family: "", words: [], missing: true });
-    if (active.length) {
-      list.append(el("div", { padding: "2px 4px", fontWeight: "bold", background: "var(--comfy-menu-bg)" }, { textContent: `On (${active.length})` }));
-      active.forEach((entry) => list.append(row(entry, configured.get(entry.name))));
-    }
-    if (activeOnly) return;
     const matches = library.loras.filter((entry) => {
-      if (configured.get(entry.name)?.on) return false;
+      if (activeOnly && !configured.get(entry.name)?.on) return false;
       if (state.filter !== "all" && entry.family !== state.filter) return false;
       const haystack = (entry.name + " " + (entry.words || []).join(" ")).toLowerCase();
       return query.every((word) => haystack.includes(word));
     });
-    list.append(el("div", { padding: "2px 4px", fontWeight: "bold", background: "var(--comfy-menu-bg)" }, { textContent: `Library (${matches.length})` }));
-    matches.slice(0, MAX_ROWS).forEach((entry) => list.append(row(entry, configured.get(entry.name))));
+    const missing = state.items.filter((item) => item.on && !known.has(item.name)).map((item) => ({ name: item.name, family: "", words: [], missing: true }));
+    [...missing, ...matches.slice(0, MAX_ROWS)].forEach((entry) => list.append(row(entry, configured.get(entry.name))));
     if (matches.length > MAX_ROWS) list.append(el("div", { padding: "4px", opacity: "0.6" }, { textContent: `${matches.length - MAX_ROWS} more - narrow the search or pick a family` }));
+    counter.textContent = `${state.items.filter((item) => item.on).length} on · ${matches.length} shown`;
+    list.scrollTop = scroll;
   }
 
   function fillFamilies() {
@@ -140,6 +147,13 @@ function buildList(node, stateWidget) {
   refresh.addEventListener("click", () => reload(true));
 
   const widget = node.addDOMWidget("lora_list", "promptforge_lora_list", root, { serialize: false, getMinHeight: () => 380 });
+  widget.setFamily = (key) => {
+    if (!library.families.some((family) => family.key === key)) return;
+    state.filter = key;
+    familyBox.value = key;
+    commit();
+    render();
+  };
   widget.restore = () => { state = parseState(stateWidget.value); fillFamilies(); render(); };
   reload();
   return widget;
@@ -156,7 +170,8 @@ app.registerExtension({
       stateWidget.hidden = true;
       stateWidget.computeSize = () => [0, -4];
       this.promptforgeList = buildList(this, stateWidget);
-      this.setSize([Math.max(this.size[0], 460), Math.max(this.size[1], 560)]);
+      this.promptforgeOnPipe = (origin) => this.promptforgeList.setFamily(origin.promptforgeFamily());
+      this.setSize([Math.max(this.size[0], 620), Math.max(this.size[1], 560)]);
     };
     const onConfigure = nodeType.prototype.onConfigure;
     nodeType.prototype.onConfigure = function () {

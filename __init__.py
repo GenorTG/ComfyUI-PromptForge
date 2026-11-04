@@ -27,6 +27,8 @@ from .frame_interpolation import NODE_CLASS_MAPPINGS as VFI_CLASS_MAPPINGS, NODE
 from .video_save import NODE_CLASS_MAPPINGS as SAVE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as SAVE_DISPLAY_NAMES
 from .lora_loader import NODE_CLASS_MAPPINGS as LORA_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as LORA_DISPLAY_NAMES
 from .unified_loader import NODE_CLASS_MAPPINGS as LOADER_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as LOADER_DISPLAY_NAMES
+from .empty_latent import NODE_CLASS_MAPPINGS as LATENT_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as LATENT_DISPLAY_NAMES
+from .sampler import NODE_CLASS_MAPPINGS as SAMPLER_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as SAMPLER_DISPLAY_NAMES
 import transformers
 from transformers import AutoModelForCausalLM, AutoProcessor, AutoTokenizer, BitsAndBytesConfig
 from transformers import LogitsProcessor, LogitsProcessorList, StoppingCriteria, StoppingCriteriaList
@@ -367,6 +369,22 @@ _MINIMAX_MODES = {
     "t2va": (0, False, ()),
 }
 _MINIMAX_MODE_RE = re.compile(r"minimax h3 (" + "|".join(_MINIMAX_MODES) + r")\b", re.I)
+
+
+FAMILY_PRESETS = {
+    "krea2": "Krea 2 T2I",
+    "moss_image": "MOSS Image T2I",
+    "qwen_image": "Qwen Image T2I",
+    "anima": "Anima Tags",
+    "ace": "ACE-Step 1.5",
+}
+
+
+def _family_preset(family, has_images, has_video):
+    """Preset for a model family when the preset is on auto; MiniMax H3 follows the connected media."""
+    if family == "minimax_h3":
+        return "MiniMax H3 Ref2VA" if has_images or has_video else "MiniMax H3 T2VA"
+    return FAMILY_PRESETS.get(family, DEFAULT_PRESET)
 
 
 def _minimax_mode(preset_name):
@@ -1635,6 +1653,7 @@ class PROMPTFORGE_PromptEnhancer:
                 "video": ("IMAGE", {"tooltip": "Video frames input. Use frame_count to control how many frames are sampled."}),
                 "frame_count": ("INT", {"default": 16, "min": 1, "max": 64, "tooltip": "Frames sampled from video input."}),
                 "negative_prompt": ("STRING", {"default": "", "multiline": True, "tooltip": "What the generated prompt/scene must not contain."}),
+                "pipe": ("PROMPTFORGE_PIPE", {"tooltip": "From a PromptForge Loader. With enhancement_preset on auto, the preset for that model family is used."}),
                 "auto_retry": ("BOOLEAN", {"default": True, "tooltip": "Regenerate with a new seed (up to 3 tries) when the output looks empty, repetitive, leaked reasoning or a refusal. Turn off to always keep the first output."}),
             },
         }
@@ -1664,8 +1683,11 @@ class PROMPTFORGE_PromptEnhancer:
         frame_count=16,
         negative_prompt="",
         auto_retry=True,
+        pipe=None,
         **kwargs,
     ):
+        if enhancement_preset == "auto" and pipe:
+            enhancement_preset = _family_preset(pipe.get("family"), any(value is not None for value in (image, image2, image3)), video is not None)
         print("[PromptForge] request received.")
         cfg = model if isinstance(model, dict) else {}
         source = cfg.get("source", "safetensors")
@@ -2480,6 +2502,8 @@ NODE_CLASS_MAPPINGS = {
     **SAVE_CLASS_MAPPINGS,
     **LORA_CLASS_MAPPINGS,
     **LOADER_CLASS_MAPPINGS,
+    **LATENT_CLASS_MAPPINGS,
+    **SAMPLER_CLASS_MAPPINGS,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -2490,6 +2514,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **SAVE_DISPLAY_NAMES,
     **LORA_DISPLAY_NAMES,
     **LOADER_DISPLAY_NAMES,
+    **LATENT_DISPLAY_NAMES,
+    **SAMPLER_DISPLAY_NAMES,
 }
 
 WEB_DIRECTORY = "./web"
