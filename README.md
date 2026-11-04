@@ -63,6 +63,18 @@ A faster stand-in for VHS Video Combine. Frames are converted to BT.709 YUV on t
 - Odd sizes are padded by one pixel to an even size. Needs `ffmpeg` on PATH (or `VHS_FORCE_FFMPEG_PATH`). nvenc rejects very small frames (under about 150 px); use a CPU codec for those.
 - Keep the interpolation node's `output_precision` on float32 when feeding this node or VHS.
 
+### PromptForge LoRA Loader (`PROMPTFORGE_LoraLoader`)
+
+One node instead of a chain of LoRA loaders. The node shows every LoRA in your loras folders; nothing has to be added by hand.
+
+- **Search and filter**: full-text search over the path and trigger words, and a family filter (SDXL, Krea 2, MiniMax H3, Anima...). A LoRA's family comes from the LoRA Manager sidecar (`.metadata.json`), the training metadata in the file, its key names, then its folder and file name.
+- **Per LoRA**: on/off, model strength and clip strength (blank = same as model).
+- **Random strength** (dice button): draws a strength between min and max, seeded by the node `seed`.
+- **Random groups**: LoRAs sharing a group name are alternatives, and one of the enabled ones is picked per run.
+- **skip_mismatched**: skips LoRAs whose family differs from the connected model's.
+- **Outputs**: MODEL, CLIP, TRIGGER_WORDS (from the sidecars) and a REPORT of what was applied.
+- All LoRAs are applied in one pass: the key maps are built once instead of once per LoRA.
+
 ## One-click config
 
 The front-end extension adds a button to both nodes:
