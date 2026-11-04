@@ -103,7 +103,7 @@ def family_from_config(name):
     return best
 
 
-def _header(path):
+def read_header(path):
     """(tensor name -> (shape, dtype), metadata) from a safetensors header, without reading weights."""
     with safe_open(path, "pt") as handle:
         slices = {key: handle.get_slice(key) for key in handle.keys()}
@@ -119,7 +119,7 @@ def family_from_weights(path):
     """Ask ComfyUI's own model detection about a diffusion model or checkpoint file; None when it does not know it."""
     if not str(path).endswith(".safetensors"):
         return None
-    shapes, metadata = _header(path)
+    shapes, metadata = read_header(path)
     state = {key: torch.empty(shape, dtype=_DTYPES.get(dtype, torch.float16), device="meta") for key, (shape, dtype) in shapes.items()}
     prefix = comfy.model_detection.unet_prefix_from_state_dict(state)
     config = comfy.model_detection.model_config_from_unet(state, prefix, metadata=metadata)

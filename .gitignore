@@ -68,3 +68,4 @@ prompt_cache.json
 
 # Garage-synced preset mirror
 presets_remote/
+autotune.json

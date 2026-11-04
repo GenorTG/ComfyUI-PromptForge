@@ -26,6 +26,7 @@ import torch.nn.functional as F
 from .frame_interpolation import NODE_CLASS_MAPPINGS as VFI_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as VFI_DISPLAY_NAMES
 from .video_save import NODE_CLASS_MAPPINGS as SAVE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as SAVE_DISPLAY_NAMES
 from .lora_loader import NODE_CLASS_MAPPINGS as LORA_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as LORA_DISPLAY_NAMES
+from .unified_loader import NODE_CLASS_MAPPINGS as LOADER_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as LOADER_DISPLAY_NAMES
 import transformers
 from transformers import AutoModelForCausalLM, AutoProcessor, AutoTokenizer, BitsAndBytesConfig
 from transformers import LogitsProcessor, LogitsProcessorList, StoppingCriteria, StoppingCriteriaList
@@ -2478,6 +2479,7 @@ NODE_CLASS_MAPPINGS = {
     **VFI_CLASS_MAPPINGS,
     **SAVE_CLASS_MAPPINGS,
     **LORA_CLASS_MAPPINGS,
+    **LOADER_CLASS_MAPPINGS,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -2487,6 +2489,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **VFI_DISPLAY_NAMES,
     **SAVE_DISPLAY_NAMES,
     **LORA_DISPLAY_NAMES,
+    **LOADER_DISPLAY_NAMES,
 }
 
 WEB_DIRECTORY = "./web"

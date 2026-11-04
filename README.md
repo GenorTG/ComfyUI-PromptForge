@@ -63,6 +63,16 @@ A faster stand-in for VHS Video Combine. Frames are converted to BT.709 YUV on t
 - Odd sizes are padded by one pixel to an even size. Needs `ffmpeg` on PATH (or `VHS_FORCE_FFMPEG_PATH`). nvenc rejects very small frames (under about 150 px); use a CPU codec for those.
 - Keep the interpolation node's `output_precision` on float32 when feeding this node or VHS.
 
+### PromptForge Loader (`PROMPTFORGE_Loader`)
+
+One node for the model, its text encoders and its VAEs. It calls ComfyUI's own loaders (and ComfyUI-GGUF's, when installed), so new model types work as soon as ComfyUI supports them.
+
+- **Model**: one list with `[ckpt]` checkpoints, `[unet]` diffusion models and `[gguf]` models. `family` is auto-detected from the file (ComfyUI's own detection on the file header, then the folder and file name) or can be set to narrow the list.
+- **Text encoders**: `clip_1`..`clip_4` take safetensors (`[te]`) or GGUF files. The node shows as many slots as the family uses and names their roles. The encoder type is chosen from the family (`clip_type` overrides). `(baked-in)` uses the encoder inside a checkpoint.
+- **VAEs**: `vae` (image or video, `(baked-in)` for checkpoints), `audio_vae`, and an optional `extra_vae` (for example an upscaling VAE to switch to later).
+- **Weights**: `weight_dtype` auto picks per machine from `optimize_for`. `quality` keeps the stored precision. `balanced` uses fp8 storage only when the model does not fit in VRAM. `speed` also uses fp8 compute when a 0.3 s matmul benchmark (run once per GPU and torch version, kept in `autotune.json`) shows it is at least 1.2x faster than bf16. Already-quantized files are never changed.
+- **Outputs**: MODEL, CLIP, VAE, AUDIO_VAE, EXTRA_VAE and an INFO text saying what was loaded and why.
+
 ### PromptForge LoRA Loader (`PROMPTFORGE_LoraLoader`)
 
 One node instead of a chain of LoRA loaders. The node shows every LoRA in your loras folders; nothing has to be added by hand.
