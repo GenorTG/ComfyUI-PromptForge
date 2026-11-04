@@ -22,16 +22,25 @@ app.registerExtension({
       node.promptforgeLayout = () => {
         const mode = widget("res_mode").value;
         const video = widget("kind").value === "video";
-        setHidden(widget("aspect_ratio"), mode !== "aspect + megapixels");
-        setHidden(widget("megapixels"), mode !== "aspect + megapixels");
-        setHidden(widget("preset"), mode !== "preset");
-        setHidden(widget("width"), mode !== "custom");
-        setHidden(widget("height"), mode !== "custom");
+        const random = widget("randomize_ratio").value;
+        const byAspect = mode === "aspect + megapixels" || random;
+        setHidden(widget("aspect_ratio"), mode !== "aspect + megapixels" || random);
+        setHidden(widget("megapixels"), !byAspect);
+        setHidden(widget("ratio_pool"), !random);
+        setHidden(widget("orientation"), widget("randomize_orientation").value);
+        setHidden(widget("seed"), !random && !widget("randomize_orientation").value);
+        setHidden(widget("preset"), mode !== "preset" || random);
+        setHidden(widget("width"), mode !== "custom" || random);
+        setHidden(widget("height"), mode !== "custom" || random);
         for (const name of ["frames", "seconds", "fps"]) setHidden(widget(name), !video);
         node.setSize([node.size[0], node.computeSize()[1]]);
         node.setDirtyCanvas(true, true);
       };
-      for (const name of ["res_mode", "kind"]) {
+      for (const name of ["frames", "seconds", "fps"]) setHidden(widget(name), !video);
+        node.setSize([node.size[0], node.computeSize()[1]]);
+        node.setDirtyCanvas(true, true);
+      };
+      for (const name of ["res_mode", "kind", "randomize_ratio", "randomize_orientation"]) {
         const target = widget(name);
         const original = target.callback;
         target.callback = function () {
@@ -40,11 +49,6 @@ app.registerExtension({
           return result;
         };
       }
-      node.promptforgeOnPipe = (loader) => {
-        const family = widget("family");
-        const label = loader.promptforgeFamilyLabel?.();
-        if (family.options.values.includes(label)) family.value = label;
-      };
       node.promptforgeLayout();
     };
     const onConfigure = nodeType.prototype.onConfigure;

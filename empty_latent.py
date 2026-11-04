@@ -6,6 +6,7 @@ derived from an aspect ratio and a megapixel budget, and is snapped to what the 
 counts are snapped to the family's grid (4n+1, 8n+1 ...).
 """
 import math
+import random
 
 import torch
 
@@ -16,10 +17,9 @@ from comfy_extras import nodes_minimax_h3
 
 from . import families
 
-RATIOS = {
-    "1:1": (1, 1), "5:4": (5, 4), "4:3": (4, 3), "3:2": (3, 2), "16:10": (16, 10),
-    "16:9": (16, 9), "2:1": (2, 1), "21:9": (21, 9),
-}
+# landscape ratios, lowest to highest; portrait is the same ratio turned around
+RATIOS = {name: tuple(int(part) for part in name.split(":")) for name in (
+    "1:1", "6:5", "5:4", "4:3", "7:5", "3:2", "16:10", "5:3", "16:9", "2:1", "21:9", "12:5", "5:2", "3:1", "32:9")}
 PRESETS = (
     "1024x1024", "768x768", "512x512", "1152x896", "1216x832", "1344x768", "1536x640",
     "848x480", "1024x576", "1280x720", "1920x1080", "2560x1440", "768x512", "1344x768",
@@ -69,12 +69,16 @@ class PROMPTFORGE_EmptyLatent:
                 "family": (["auto"] + [family.label for family in families.FAMILIES if family.key in LATENT_FORMATS or family.key == "minimax_h3"], {"default": "auto", "tooltip": "auto uses the connected model or pipe."}),
                 "kind": (["image", "video"], {"default": "image"}),
                 "res_mode": (["aspect + megapixels", "preset", "custom"], {"default": "aspect + megapixels"}),
-                "aspect_ratio": (list(RATIOS), {"default": "1:1"}),
+                "aspect_ratio": (list(RATIOS), {"default": "1:1", "tooltip": "Landscape ratios, lowest to highest; orientation turns them around."}),
                 "megapixels": ("FLOAT", {"default": 1.0, "min": 0.05, "max": 64.0, "step": 0.05}),
                 "preset": (list(dict.fromkeys(PRESETS)), {"default": "1024x1024"}),
                 "width": ("INT", {"default": 1024, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 8}),
                 "height": ("INT", {"default": 1024, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 8}),
-                "orientation": (["as set", "landscape", "portrait"], {"default": "as set", "tooltip": "landscape / portrait swap width and height when needed."}),
+                "orientation": (["landscape", "portrait"], {"default": "landscape", "tooltip": "Turns width and height around when needed, in every size mode."}),
+                "randomize_ratio": ("BOOLEAN", {"default": False, "tooltip": "Picks the aspect ratio from ratio_pool with the seed. Uses the megapixels size mode."}),
+                "ratio_pool": ("STRING", {"default": "", "tooltip": "Ratios to pick from, comma separated, for example 1:1, 3:2, 16:9. Empty = all of: " + ", ".join(RATIOS)}),
+                "randomize_orientation": ("BOOLEAN", {"default": False, "tooltip": "Picks landscape or portrait with the seed."}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 2 ** 32 - 1, "tooltip": "Drives the random ratio and orientation; change it between runs."}),
                 "frames": ("INT", {"default": 81, "min": 1, "max": 4096, "tooltip": "Video only. Snapped up to the family's frame grid. Ignored when seconds is above 0."}),
                 "seconds": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 600.0, "step": 0.1, "tooltip": "Video only. When above 0, frames = seconds * fps."}),
                 "fps": ("INT", {"default": 24, "min": 1, "max": 240}),
@@ -92,7 +96,7 @@ class PROMPTFORGE_EmptyLatent:
     CATEGORY = "🔮 PromptForge"
     DESCRIPTION = "Empty latent for any model family: custom size, preset or aspect ratio + megapixels, image or video."
 
-    def make(self, family, kind, res_mode, aspect_ratio, megapixels, preset, width, height, orientation, frames, seconds, fps, batch_size, model=None, pipe=None):
+    def make(self, family, kind, res_mode, aspect_ratio, megapixels, preset, width, height, orientation, randomize_ratio, ratio_pool, randomize_orientation, seed, frames, seconds, fps, batch_size, model=None, pipe=None):
         chosen = next((f for f in families.FAMILIES if f.label == family), None)
         if chosen is None and pipe and pipe.get("family"):
             chosen = families.BY_KEY.get(pipe["family"])
@@ -105,6 +109,15 @@ class PROMPTFORGE_EmptyLatent:
 
         ratio = latent_format.spacial_downscale_ratio if latent_format is not None else 16
         multiple = SIZE_MULTIPLE.get(key, max(16, ratio * 2 if ratio == 8 else ratio))
+        rng = random.Random(seed)
+        if randomize_ratio:
+            pool = [name.strip() for name in ratio_pool.split(",") if name.strip()] or list(RATIOS)
+            unknown = [name for name in pool if name not in RATIOS]
+            if unknown:
+                raise ValueError(f"[PromptForge] unknown ratio {unknown[0]} in ratio_pool; use any of {', '.join(RATIOS)}.")
+            aspect_ratio, res_mode = rng.choice(pool), "aspect + megapixels"
+        if randomize_orientation:
+            orientation = rng.choice(("landscape", "portrait"))
         width, height = resolve_size(res_mode, width, height, preset, aspect_ratio, megapixels, orientation, multiple)
 
         if kind == "image":
@@ -124,7 +137,7 @@ class PROMPTFORGE_EmptyLatent:
         samples = torch.zeros(shape, device=model_management.intermediate_device(), dtype=model_management.intermediate_dtype())
         latent = {"samples": samples, "downscale_ratio_spacial": ratio}
         label = chosen.label if chosen else type(latent_format).__name__
-        return (latent, width, height, count, f"{label}: {width}x{height}" + (f", {count} frames" if kind == "video" else "") + f" -> latent {list(samples.shape)}")
+        return (latent, width, height, count, f"{label}: {width}x{height}" + (f" ({aspect_ratio} {orientation})" if randomize_ratio or randomize_orientation else "") + (f", {count} frames" if kind == "video" else "") + f" -> latent {list(samples.shape)}")
 
 
 NODE_CLASS_MAPPINGS = {"PROMPTFORGE_EmptyLatent": PROMPTFORGE_EmptyLatent}

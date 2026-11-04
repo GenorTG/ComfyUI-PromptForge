@@ -13,6 +13,7 @@ The list is drawn by web/promptforge_lora.js; this file holds the state format, 
 import json
 import os
 import random
+import re
 
 from aiohttp import web
 from server import PromptServer
@@ -67,6 +68,52 @@ def library():
 @PromptServer.instance.routes.get("/promptforge/loras")
 async def _library_route(request):
     return web.json_response(library())
+
+
+PREVIEW_SUFFIXES = (".preview.jpeg", ".preview.jpg", ".preview.png", ".preview.webp", ".jpeg", ".jpg", ".png", ".webp")
+
+
+def _preview_path(name):
+    stem = os.path.splitext(folder_paths.get_full_path_or_raise("loras", name))[0]
+    return next((stem + suffix for suffix in PREVIEW_SUFFIXES if os.path.isfile(stem + suffix)), None)
+
+
+def _plain(html):
+    return re.sub(r"\n{3,}", "\n\n", re.sub(r"<[^>]+>", "", re.sub(r"<(?:br|/p|/li)\s*/?>", "\n", html or ""))).strip()
+
+
+@PromptServer.instance.routes.get("/promptforge/lora_info")
+async def _info_route(request):
+    name = request.query.get("name", "")
+    path = folder_paths.get_full_path("loras", name)
+    if path is None:
+        return web.json_response({"error": "not found"}, status=404)
+    try:
+        with open(os.path.splitext(path)[0] + ".metadata.json", encoding="utf-8") as handle:
+            sidecar = json.load(handle)
+    except (OSError, ValueError):
+        sidecar = {}
+    civitai = sidecar.get("civitai") or {}
+    model_id = civitai.get("modelId")
+    return web.json_response({
+        "name": name,
+        "title": sidecar.get("model_name") or os.path.basename(name),
+        "base_model": sidecar.get("base_model", ""),
+        "words": _trigger_words(sidecar),
+        "tips": sidecar.get("usage_tips") or "",
+        "tags": sidecar.get("tags") or [],
+        "description": _plain(sidecar.get("modelDescription") or ""),
+        "url": f"https://civitai.com/models/{model_id}" + (f"?modelVersionId={civitai['id']}" if civitai.get("id") else "") if model_id else "",
+        "preview": _preview_path(name) is not None,
+    })
+
+
+@PromptServer.instance.routes.get("/promptforge/lora_preview")
+async def _preview_route(request):
+    name = request.query.get("name", "")
+    if folder_paths.get_full_path("loras", name) is None or (path := _preview_path(name)) is None:
+        return web.Response(status=404)
+    return web.FileResponse(path)
 
 
 def _model_family(model):

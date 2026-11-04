@@ -15,7 +15,6 @@ app.registerExtension({
       const node = this;
       const widget = (name) => node.widgets.find((item) => item.name === name);
       let presets = {};
-      let origin = null;
 
       const apply = (settings) => {
         for (const [name, value] of Object.entries(settings)) {
@@ -47,21 +46,25 @@ app.registerExtension({
         await send({ name: presetWidget.value, delete: true });
         presetWidget.value = NO_PRESET;
       });
+      // only ever runs when the button is pressed; the loader is whatever is wired to the pipe input right now
+      const loader = () => {
+        const link = app.graph.links[node.inputs?.find((input) => input.name === "pipe")?.link];
+        return app.graph.getNodeById(link?.origin_id);
+      };
+      const say = (summary, detail) => {
+        const toast = app.extensionManager?.toast;
+        if (toast) toast.add({ severity: "info", summary, detail, life: 4000 });
+        else window.alert(`${summary}\n${detail}`);
+      };
       const recommend = async () => {
-        const info = origin?.promptforgeModelInfo?.();
-        if (!info) return;
-        const query = new URLSearchParams(info).toString();
-        const { settings } = await (await api.fetchApi("/promptforge/recommend?" + query)).json();
+        const info = loader()?.promptforgeModelInfo?.();
+        if (!info) return say("PromptForge Sampler", "Connect a PromptForge Loader to the pipe input first.");
+        const { settings, source } = await (await api.fetchApi("/promptforge/recommend?" + new URLSearchParams(info))).json();
         apply(settings);
+        say("Recommended settings applied", Object.entries(settings).map(([key, value]) => `${key}: ${value} (${source[key]})`).join("\n"));
       };
       const recommendButton = node.addWidget("button", "Use recommended settings", null, recommend);
       [save, remove, recommendButton].forEach((button) => { button.serialize = false; });
-
-      // wiring a PromptForge Loader fills in the settings recommended for its model
-      node.promptforgeOnPipe = (loader) => {
-        origin = loader;
-        recommend();
-      };
     };
   },
 });
