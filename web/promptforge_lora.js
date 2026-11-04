@@ -92,8 +92,8 @@ function buildList(node, stateWidget) {
   const bar = el("div", { display: "flex", gap: "4px" });
   const searchBox = el("input", { flex: "1", minWidth: "0", background: "var(--comfy-input-bg)", color: "var(--input-text)", border: "1px solid var(--border-color)", borderRadius: "3px", padding: "3px 6px" },
     { type: "search", placeholder: "Search LoRAs (name, folder, trigger words)..." });
-  const familyBox = el("select", { background: "var(--comfy-input-bg)", color: "var(--input-text)", border: "1px solid var(--border-color)", borderRadius: "3px", maxWidth: "140px" });
-  const counter = el("span", { opacity: "0.7", whiteSpace: "nowrap", alignSelf: "center" });
+  const familyBox = el("select", { flex: "0 0 140px", width: "140px", background: "var(--comfy-input-bg)", color: "var(--input-text)", border: "1px solid var(--border-color)", borderRadius: "3px", maxWidth: "140px" });
+  const counter = el("span", { opacity: "0.7", whiteSpace: "nowrap", alignSelf: "center", flex: "0 0 auto", minWidth: "112px", textAlign: "right" });
   const refresh = el("button", { cursor: "pointer" }, { textContent: "↻", title: "Rescan the loras folders" });
   const onlyLabel = el("label", { display: "flex", alignItems: "center", gap: "2px", whiteSpace: "nowrap" });
   const onlyBox = el("input", {}, { type: "checkbox" });
