@@ -85,7 +85,17 @@ KSampler, KSampler (Advanced) and custom sigmas in one node, built on `comfy.sam
 - **runs**: samples seed, seed+1 ... in one node and returns one batch.
 - **Advanced**: `start_at_step`, `end_at_step`, `add_noise`.
 - **Recommended settings**: wiring a Loader's PIPE fills sampler, scheduler, steps and cfg. They come from the model's sidecar (the most common sampler, scheduler, steps and cfg of the author's example images; prompts are never read), then name hints (turbo / distilled -> 8 steps, cfg 1), then family defaults from community documentation (Krea 2: res_multistep/simple; MiniMax H3: euler/simple; LTX: the LTXV schedule). These are starting points, not official values.
-- **Presets**: save, apply and delete named presets (steps, cfg, sampler, scheduler, denoise, runs). They are stored in ComfyUI's user folder under `promptforge/sampler_presets.json`.
+- **Step cache**: `step_cache` (off / auto / easycache / lazycache) wraps ComfyUI's own EasyCache and LazyCache, which skip model calls on steps where the output barely changes and work across architectures (including audio+video models). `auto` turns on easycache from 15 steps up; distilled 4-8 step runs should stay off. `cache_threshold` (higher = faster, softer), `cache_start` and `cache_end` set when it may skip. Measured on Anima, 30 steps, RTX 5080: easycache 0.1 skipped 15/30 steps (1.8x, similarity to uncached 0.991), 0.2 skipped 17 (2.05x, 0.978), 0.4 skipped 19 (2.4x, 0.971); lazycache 0.2 gave 2.05x at 0.988. Results vary by model.
+- **Presets**: save, apply and delete named presets (steps, cfg, sampler, scheduler, denoise, runs, step cache). They are stored in ComfyUI's user folder under `promptforge/sampler_presets.json`.
+
+### PromptForge Quantize Model (`PROMPTFORGE_QuantizeModel`)
+
+Converts a bf16 / fp16 diffusion model to **NVFP4** (about 3.5x smaller, native on RTX 50) or **INT8 ConvRot** (about 2x smaller, native on RTX 20 and newer, so it helps the 3080 laptop) and saves it next to the source in the same models folder. Refresh the model lists afterwards.
+
+- **What gets quantized**: only 2D weights inside the numbered transformer blocks, minus embeddings, norms, modulation and input/output projections, plus extra sensitive names for the families that need them (Krea 2, MiniMax H3, Anima, Qwen Image, Wan, LTX, Flux, Chroma, Z-Image). `keep_edge_blocks` keeps the first and last N blocks unquantized, `extra_keep` adds your own name fragments.
+- **Memory**: the source is read tensor by tensor, so the full model is never in RAM; the converted model is built in RAM. An Anima model (3.9 GB) converts in a few seconds. Measured on Anima, 30 steps, RTX 5080: INT8 ConvRot 1.63x faster (similarity to bf16 output 0.992), NVFP4 1.37x (0.929). NVFP4 loses more on small models, so compare before replacing a bf16 file.
+- **Report**: file sizes and the relative weight error after dequantizing (mean and the worst layer). For reference, NVFP4 is about 0.095 and INT8 ConvRot about 0.009 on Anima.
+- Already quantized files are refused; start from the original bf16 / fp16 file. Output is the ComfyUI format (`.comfy_quant` per layer), so any ComfyUI loader reads it.
 
 ### Wiring nodes together
 

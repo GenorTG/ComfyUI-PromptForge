@@ -2,7 +2,7 @@ import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 
 const NODE = "PROMPTFORGE_Sampler";
-const PRESET_FIELDS = ["steps", "cfg", "sampler_name", "scheduler", "denoise", "runs"];
+const PRESET_FIELDS = ["steps", "cfg", "sampler_name", "scheduler", "denoise", "runs", "step_cache", "cache_threshold"];
 const NO_PRESET = "(no preset)";
 
 app.registerExtension({

@@ -21,13 +21,16 @@ import comfy.samplers
 import comfy.utils
 import folder_paths
 import latent_preview
-from comfy_extras import nodes_lt
+from comfy_extras import nodes_easycache, nodes_lt
 
 from . import families, sampler_defaults
 
 AUTO = "auto"
 LTXV = "ltxv"
-PRESET_FIELDS = ("steps", "cfg", "sampler_name", "scheduler", "denoise", "runs")
+PRESET_FIELDS = ("steps", "cfg", "sampler_name", "scheduler", "denoise", "runs", "step_cache", "cache_threshold")
+# step caching skips whole model calls, which only pays off (and only stays clean) with enough steps
+AUTO_CACHE_MIN_STEPS = 15
+CACHES = {"easycache": nodes_easycache.EasyCacheNode, "lazycache": nodes_easycache.LazyCacheNode}
 
 
 def _preset_file():
@@ -106,6 +109,10 @@ class PROMPTFORGE_Sampler:
                 "pipe": ("PROMPTFORGE_PIPE", {"tooltip": "From a PromptForge Loader: sets the family and fills recommended settings when connected."}),
                 "sigmas": ("SIGMAS", {"tooltip": "Overrides the scheduler."}),
                 "custom_sigmas": ("STRING", {"default": "", "tooltip": "Comma separated descending sigmas, for example 1, 0.8, 0.5, 0. Overrides the scheduler."}),
+                "step_cache": (["off", "auto", "easycache", "lazycache"], {"default": "off", "tooltip": "Skips model calls on steps where the output barely changes. easycache is general and also handles audio+video models; lazycache is cheaper but rougher. auto = easycache when steps >= 15, else off. Useful for many-step runs; distilled 4-8 step models should stay off."}),
+                "cache_threshold": ("FLOAT", {"default": 0.2, "min": 0.0, "max": 3.0, "step": 0.01, "tooltip": "Higher skips more steps (faster, softer). 0.1-0.2 is conservative."}),
+                "cache_start": ("FLOAT", {"default": 0.15, "min": 0.0, "max": 1.0, "step": 0.01, "advanced": True, "tooltip": "Fraction of the run before which nothing is skipped."}),
+                "cache_end": ("FLOAT", {"default": 0.95, "min": 0.0, "max": 1.0, "step": 0.01, "advanced": True}),
                 "start_at_step": ("INT", {"default": 0, "min": 0, "max": 10000, "advanced": True}),
                 "end_at_step": ("INT", {"default": 10000, "min": 0, "max": 10000, "advanced": True}),
                 "add_noise": ("BOOLEAN", {"default": True, "advanced": True}),
@@ -142,9 +149,13 @@ class PROMPTFORGE_Sampler:
         return comfy.samplers.KSampler(model, steps=steps, device=model.load_device, sampler=sampler_name, scheduler=scheduler, denoise=denoise, model_options=model.model_options).sigmas
 
     def sample(self, model, positive, negative, latent_image, seed, steps, cfg, sampler_name, scheduler, denoise, runs,
-               pipe=None, sigmas=None, custom_sigmas="", start_at_step=0, end_at_step=10000, add_noise=True,
-               ltxv_max_shift=2.05, ltxv_base_shift=0.95, ltxv_terminal=0.1):
+               pipe=None, sigmas=None, custom_sigmas="", step_cache="off", cache_threshold=0.2, cache_start=0.15, cache_end=0.95,
+               start_at_step=0, end_at_step=10000, add_noise=True, ltxv_max_shift=2.05, ltxv_base_shift=0.95, ltxv_terminal=0.1):
         family = self._family(model, pipe)
+        if step_cache == "auto":
+            step_cache = "easycache" if steps >= AUTO_CACHE_MIN_STEPS else "off"
+        if step_cache != "off":
+            model = CACHES[step_cache].execute(model, cache_threshold, cache_start, cache_end, False).args[0]
         if scheduler == AUTO:
             scheduler = LTXV if family == "ltxv" else "simple"
 
@@ -171,7 +182,7 @@ class PROMPTFORGE_Sampler:
         out.pop("downscale_ratio_temporal", None)
         out["samples"] = merged
         schedule = "custom sigmas" if sigmas is not None or custom_sigmas.strip() else scheduler
-        info = f"{sampler_name} / {schedule}, {steps} steps, cfg {cfg:g}, denoise {denoise:g}, seed {seed}" + (f" x{runs}" if runs > 1 else "") + (f" ({family})" if family else "")
+        info = f"{sampler_name} / {schedule}, {steps} steps, cfg {cfg:g}, denoise {denoise:g}, seed {seed}" + (f" x{runs}" if runs > 1 else "") + (f" ({family})" if family else "") + (f", {step_cache} {cache_threshold:g}" if step_cache != "off" else "")
         return (out, used, info)
 
 
