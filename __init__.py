@@ -380,34 +380,58 @@ DIALOGUE_OTHER = "other (type below)"
 CHARACTER_LANGUAGES = {"Chinese", "Japanese", "Korean"}
 
 
+def _dialogue_language(language, other):
+    """The language name to write in, or '' when it is left to the instructions."""
+    if language == DIALOGUE_OTHER:
+        return (other or "").strip()
+    return "" if language == DIALOGUE_AUTO else language
+
+
 def _dialogue_block(instructions, language, other, seconds):
     """System prompt section asking for dialogue in the video prompt, sized to what fits in `seconds`; '' when off."""
     instructions = (instructions or "").strip()
-    chosen = (other or "").strip() if language == DIALOGUE_OTHER else ("" if language == DIALOGUE_AUTO else language)
+    chosen = _dialogue_language(language, other)
     if not instructions and not chosen:
         return ""
     unit, rate = ("characters", 4.0) if chosen in CHARACTER_LANGUAGES else ("words", 2.3)
     budget = max(3, round(max(seconds - 1.0, 1.0) * rate))
-    spoken = f"in {chosen}" if chosen else "in the language the dialogue instructions imply (English when they do not say)"
-    lines = [
-        "# Dialogue",
-        "The video contains spoken dialogue written by you, following the dialogue format described above (speaker IDs, voice description at first appearance, dialogue tags).",
-    ]
-    if instructions:
-        lines.append(f"Dialogue instructions from the user: {instructions}")
-    else:
-        lines.append("The user gave no dialogue instructions: invent short natural dialogue that fits the scene.")
-    lines.append(
-        f"Write every spoken line {spoken}. The dialogue tag carries the language name in English as its language tag"
-        + (f" ([{chosen}])" if chosen else "")
-        + f"; the words after it are natural, idiomatic {chosen or 'speech'} as a native speaker would really say them, not a translation. Everything else in the prompt stays in English."
-    )
-    lines.append(
-        f"Timing: the video lasts {seconds:g} seconds and people speak about {rate:g} {unit} per second. Keep a second before the first line and a short pause between speakers, "
-        f"so all speakers together say at most {budget} {unit}. Every line must end before the video does and belong to the shot it is written in. "
-        "Prefer short, natural exchanges to speeches, and say less when the topic needs more than fits."
-    )
-    return "\n".join(lines)
+    name = chosen or "LANGUAGE"
+    where = f"in {chosen}" if chosen else "in the language the dialogue instructions imply (English when they do not say)"
+    topic = f"Dialogue instructions from the user: {instructions}" if instructions else "The user gave no dialogue instructions: invent short natural dialogue that fits the scene."
+    return f"""# Dialogue (required in this video)
+{topic}
+Write every spoken line {where}. Only the spoken words are in that language; the rest of the prompt stays in English. The words are what a native speaker would really say, never a translation.
+
+Exact shape of every spoken line, copy it:
+the young woman with a quiet, breathy voice (S1) says: <d>[{name}] the spoken words in {name}</d>
+
+Rules, all mandatory:
+1. The words are wrapped in <d> and </d>. The closing </d> is never left out.
+2. Directly after <d> comes the language tag in square brackets, [{name}], then a space, then the words. The tag always holds the English name of the language, spelled the same way every time, even when the words are not English.
+3. Between the tags there is only speech in {name}: no quotation marks, no stage directions, no translation, no English words, no emoji.
+4. Name the speaker before every line with the ID: first appearance with a short voice description ("the tired baker with a low, gravelly voice (S1) says:"), then "(S1) says:" or "(S2) answers:". People who do not speak get no ID.
+5. Write each line inside the shot where it is spoken, at its timestamp.
+6. Timing: the video lasts {seconds:g} seconds and people speak about {rate:g} {unit} per second. Leave a second before the first line and a short pause between speakers, so all speakers together say at most {budget} {unit}. Every line ends before the video does. Short natural exchanges beat speeches; say less when the topic needs more than fits.
+
+Wrong, never write: She says "<words>"   |   <d><words></d> (no language tag)   |   <d>[{name}] <words> (no closing tag)   |   <d>[{name}] <words in English></d> (words in the wrong language)   |   [{name}] <d><words></d> (tag outside)
+Before you answer, check every <d>: it has [{name}] right after it, the words are {name}, and </d> closes it."""
+
+
+DIALOGUE_TAG = re.compile(r"<d>\s*\[([^\]]*)\]\s*(.+?)\s*</d>", re.S)
+
+
+def _dialogue_problem(text, language):
+    """What is wrong with the dialogue tags in `text`, or '' when they are right. `language` '' skips the language check."""
+    tags = DIALOGUE_TAG.findall(text)
+    if not tags:
+        return "no <d>[Language] words</d> dialogue line was written" if "<d>" not in text and "</d>" not in text else "the <d> tags are incomplete: every line needs <d>[Language] words</d>"
+    if text.count("<d>") != text.count("</d>") or text.count("<d>") != len(tags):
+        return "some <d> tags are missing their [Language] tag or their closing </d>"
+    if language:
+        wrong = next((tag for tag, _ in tags if tag.strip().lower() != language.lower()), None)
+        if wrong is not None:
+            return f"a language tag says [{wrong}] but it must be [{language}]"
+    return ""
 
 
 FAMILY_PRESETS = {
@@ -1819,41 +1843,52 @@ class PROMPTFORGE_PromptEnhancer:
 
         short_form = any(word in (enhancement_preset or "").lower() for word in ("tags", "refine", "technical"))
         min_chars = 40 if short_form else (400 if max_tokens >= 192 else 120)
-        enhanced = self._generate(
-            full_prompt=full_prompt,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            mode=mode,
-            engine=engine,
-            model_name=model_name,
-            quantization=quantization,
-            context_size=context_size,
-            gpu_layers=gpu_layers,
-            batch_size=batch_size,
-            ubatch_size=ubatch_size,
-            kv_cache_type=kv_cache_type,
-            offload_kqv=offload_kqv,
-            swa_full=swa_full,
-            flash_attn=flash_attn,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
-            num_beams=num_beams,
-            repetition_penalty=repetition_penalty,
-            image=image,
-            image2=image2,
-            image3=image3,
-            video=video,
-            frame_count=frame_count,
-            seed=seed,
-            clip=clip_for_generate,
-            local_model_path=local_model_path,
-            mmproj_path=mmproj_path,
-            disable_thinking=True,
-            auto_retry=auto_retry,
-            min_chars=min_chars,
-        )
+        def run(attempt_seed, attempt_system):
+            return self._generate(
+                full_prompt=full_prompt,
+                system_prompt=attempt_system,
+                user_prompt=user_prompt,
+                mode=mode,
+                engine=engine,
+                model_name=model_name,
+                quantization=quantization,
+                context_size=context_size,
+                gpu_layers=gpu_layers,
+                batch_size=batch_size,
+                ubatch_size=ubatch_size,
+                kv_cache_type=kv_cache_type,
+                offload_kqv=offload_kqv,
+                swa_full=swa_full,
+                flash_attn=flash_attn,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+                num_beams=num_beams,
+                repetition_penalty=repetition_penalty,
+                image=image,
+                image2=image2,
+                image3=image3,
+                video=video,
+                frame_count=frame_count,
+                seed=attempt_seed,
+                clip=clip_for_generate,
+                local_model_path=local_model_path,
+                mmproj_path=mmproj_path,
+                disable_thinking=True,
+                auto_retry=auto_retry,
+                min_chars=min_chars,
+            )
+        enhanced = run(seed, system_prompt)
+        if dialogue_block and auto_retry:
+            language = _dialogue_language(dialogue_language, dialogue_language_other)
+            for attempt in range(1, 3):
+                problem = _dialogue_problem(_split_thinking(enhanced)[0], language)
+                if not problem:
+                    break
+                print(f"[PromptForge] dialogue rejected ({problem}); retrying ({attempt}/2).")
+                seed = _next_seed(seed)
+                enhanced = run(seed, system_prompt + f"\n\n# Correction\nYour previous answer broke the dialogue format: {problem}. Write the whole prompt again and follow the Dialogue section exactly.")
         answer, thinking = _split_thinking(enhanced)
         answer = _clean_prompt_output(answer)
         if minimax_key:
