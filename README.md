@@ -54,6 +54,15 @@ RIFE frame interpolation for large frames (for example the 2x-upscaled MiniMax o
 - **VRAM**: one frame pair at a time in fp16. On an out-of-memory error it unloads ComfyUI's models and retries, then estimates flow at 1/2 and 1/4 resolution (the result is still warped at full resolution), and finally runs on the CPU.
 - About 25–30 frame pairs per second at 1920x1088 on an RTX 5080 (rife49).
 
+### PromptForge Save Video (`PROMPTFORGE_SaveVideo`)
+
+A faster stand-in for VHS Video Combine. Frames are converted to BT.709 YUV on the GPU while ffmpeg encodes, and video, audio and the embedded workflow go into one ffmpeg run. About 2x faster than the VHS path on 1920x1088 clips (240 frames in ~1.7 s on an RTX 5080 against ~3.2 s).
+
+- **Codecs**: h264 / h265 / av1 on nvenc (GPU) or x264 / x265 / SVT-AV1 (CPU), `speed` preset, `quality` (crf/cq) or `bitrate`, 8 or 10-bit.
+- **Options**: `pingpong`, `save_output` (off writes to temp), `save_metadata` (workflow in the file), optional `audio` with `audio_bitrate_kbps`.
+- Odd sizes are padded by one pixel to an even size. Needs `ffmpeg` on PATH (or `VHS_FORCE_FFMPEG_PATH`). nvenc rejects very small frames (under about 150 px); use a CPU codec for those.
+- Keep the interpolation node's `output_precision` on float32 when feeding this node or VHS.
+
 ## One-click config
 
 The front-end extension adds a button to both nodes:

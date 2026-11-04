@@ -24,6 +24,7 @@ import psutil
 import torch
 import torch.nn.functional as F
 from .frame_interpolation import NODE_CLASS_MAPPINGS as VFI_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as VFI_DISPLAY_NAMES
+from .video_save import NODE_CLASS_MAPPINGS as SAVE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as SAVE_DISPLAY_NAMES
 import transformers
 from transformers import AutoModelForCausalLM, AutoProcessor, AutoTokenizer, BitsAndBytesConfig
 from transformers import LogitsProcessor, LogitsProcessorList, StoppingCriteria, StoppingCriteriaList
@@ -2474,6 +2475,7 @@ NODE_CLASS_MAPPINGS = {
     "PROMPTFORGE_PromptEnhancer": PROMPTFORGE_PromptEnhancer,
     "PROMPTFORGE_ConfigFinder": PROMPTFORGE_ConfigFinder,
     **VFI_CLASS_MAPPINGS,
+    **SAVE_CLASS_MAPPINGS,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -2481,6 +2483,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "PROMPTFORGE_PromptEnhancer": "PromptForge Enhancer",
     "PROMPTFORGE_ConfigFinder": "PromptForge Config Finder",
     **VFI_DISPLAY_NAMES,
+    **SAVE_DISPLAY_NAMES,
 }
 
 WEB_DIRECTORY = "./web"
