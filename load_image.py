@@ -94,7 +94,7 @@ class PROMPTFORGE_LoadImage:
         return {
             "required": {
                 "image": ("STRING", {"default": "", "tooltip": "Path inside the input folder. Use Choose image to pick it from thumbnails."}),
-                "description": ("STRING", {"default": "", "multiline": True, "placeholder": "Description of this image / character. Empty = the stored description.", "tooltip": "Output as DESCRIPTION. Choose image fills in the stored description; Save description stores this text for the image."}),
+                "description": ("STRING", {"default": "", "multiline": True, "placeholder": "Description of this image / character. Empty = the stored description.", "tooltip": "Output as DESCRIPTION. The stored description of the image is used when this is empty; Save description stores this text for the image."}),
             },
         }
 

@@ -65,9 +65,14 @@ app.registerExtension({
       const picture = el("img", { flex: "1", minHeight: "0", width: "100%", objectFit: "contain", borderRadius: "4px", background: "rgba(0,0,0,.25)", cursor: "pointer" }, { alt: "" });
       const buttons = el("div", { display: "flex", gap: "6px" });
       const choose = el("button", { ...BUTTON, flex: "1" }, { textContent: "Choose image…" });
-      const save = el("button", BUTTON, { textContent: "Save description", title: "Store the text below as this image's description" });
+      const save = el("button", BUTTON, { textContent: "Save description", title: "Store the text below as this image's description. The text box itself is never changed when you pick another image." });
       buttons.append(choose, save);
-      root.append(picture, buttons);
+      const middle = el("div", { flex: "1", minHeight: "0", display: "flex", gap: "6px" });
+      const meta = el("textarea", { width: "42%", minWidth: "0", resize: "none", boxSizing: "border-box", padding: "4px 6px", fontSize: "11px", borderRadius: "4px", border: "1px solid var(--border-color, #555)", background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)", overflowY: "auto", display: "none" }, { readOnly: true, title: "Caption and keywords from the image library. Click to select, copy with Ctrl+C." });
+      meta.addEventListener("wheel", (event) => event.stopPropagation());
+      Object.assign(picture.style, { flex: "1", minWidth: "0", height: "100%", width: "auto" });
+      middle.append(picture, meta);
+      root.append(middle, buttons);
       frame.append(root);
       frame.addEventListener("pointerdown", (event) => event.stopPropagation());
 
@@ -78,6 +83,11 @@ app.registerExtension({
         const info = await (await api.fetchApi("/promptforge/library/info?name=" + encodeURIComponent(imageWidget.value))).json();
         picture.dataset.nsfw = info.nsfw ? "1" : "";
         picture.style.filter = info.nsfw && !nsfwShown() ? BLUR : "none";
+        const words = (info.tags || []).join(", ");
+        meta.style.display = words || info.caption ? "" : "none";
+        meta.value = [info.caption, words && "Tags: " + words].filter(Boolean).join("\n\n");
+        const stored = (await (await api.fetchApi("/promptforge/image_description?name=" + encodeURIComponent(imageWidget.value))).json()).description;
+        if (textWidget.inputEl) textWidget.inputEl.placeholder = stored ? "Stored description (used when this is empty):\n" + stored : "Description of this image / character. Empty = the stored description.";
       };
       const eye = el("button", BUTTON, { textContent: "👁", title: "Show or blur NSFW images (also in the picker)" });
       eye.addEventListener("click", () => { setNsfwShown(!nsfwShown()); show(); });
@@ -86,18 +96,16 @@ app.registerExtension({
         const name = await chooseImage(imageWidget.value);
         if (!name) return;
         imageWidget.value = name;
-        const stored = await (await api.fetchApi("/promptforge/image_description?name=" + encodeURIComponent(name))).json();
-        textWidget.value = stored.description || "";
         show();
         node.setDirtyCanvas(true, true);
       };
       choose.addEventListener("click", pick);
       picture.addEventListener("click", pick);
       save.addEventListener("click", async () => {
-        if (!imageWidget.value) return;
+        if (!imageWidget.value || !textWidget.value.trim()) return;
         const reply = await api.fetchApi("/promptforge/image_description", { method: "POST", body: JSON.stringify({ name: imageWidget.value, description: textWidget.value }) });
         const answer = await reply.json();
-        save.textContent = answer.saved ? "Saved ✓" : answer.error ? "Failed" : "Cleared ✓";
+        save.textContent = answer.saved ? "Saved ✓" : "Failed";
         setTimeout(() => { save.textContent = "Save description"; }, 1500);
       });
 
