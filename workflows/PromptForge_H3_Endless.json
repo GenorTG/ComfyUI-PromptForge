@@ -1,8 +1,8 @@
 {
- "id": "0558cd2e-805b-42b3-838b-f0c906668447",
+ "id": "099f1ea8-9df1-49f9-b345-b76633f68917",
  "revision": 0,
- "last_node_id": 10,
- "last_link_id": 17,
+ "last_node_id": 12,
+ "last_link_id": 20,
  "nodes": [
   {
    "id": 1,
@@ -23,10 +23,10 @@
    "title": "READ ME",
    "properties": {},
    "widgets_values": [
-    "PromptForge H3 Endless Video\n\n1. Pick your MiniMax H3 model, text encoder and VAEs in the Loader (left).\n2. Pick the vision/language model that writes the prompts in 'PromptForge Model' (a Qwen3-VL GGUF works well).\n3. Write what the whole video is about in 'instructions' on the Endless node. Optional: choose reference images (the Load Image nodes) and describe them.\n4. Set parts, seconds per part, size and how parts continue in 'Endless Options'. Part ideas go one per part, separated by a line with only ---.\n5. Queue. Every part is previewed when it finishes; the joined video lands in the output folder.\n\nTurn on the LoRAs you want in the LoRA loader (a turbo LoRA wants steps 6-8, cfg 1)."
+    "PromptForge H3 Endless Video\n\n1. Pick your MiniMax H3 model, text encoder and VAEs in the Loader (left).\n2. Pick the vision/language model that writes the prompts in 'PromptForge Model' (a Qwen3-VL GGUF works well).\n3. Write what the whole video is about in 'instructions' on the Endless node. Optional: choose reference images (the Load Image nodes) and describe them.\n4. In 'Endless Options' write what happens in each part, one line per part: Part 1: ... / Part 2: ... / Part 3 (10s): ... (or 0-5s: ... / 5-10s: ...). Start a part with raw: to use your own finished prompt. Also set size and how parts continue there.\n5. Queue. The prompt of each part shows in the node as it is written, and every part is previewed when it finishes; the joined video lands in the output folder.\n\nTurn on the LoRAs you want in the LoRA loader (a turbo LoRA wants steps 6-8, cfg 1). Attention backend and chunked feed-forward are speed/VRAM options; bypass them (Ctrl+B) if a result looks off. The Loader's extra VAE (the MiniMax H3 2x detail decoder) decodes the video, so it comes out at twice the generation size."
    ],
    "widgets_values_named": {
-    "text": "PromptForge H3 Endless Video\n\n1. Pick your MiniMax H3 model, text encoder and VAEs in the Loader (left).\n2. Pick the vision/language model that writes the prompts in 'PromptForge Model' (a Qwen3-VL GGUF works well).\n3. Write what the whole video is about in 'instructions' on the Endless node. Optional: choose reference images (the Load Image nodes) and describe them.\n4. Set parts, seconds per part, size and how parts continue in 'Endless Options'. Part ideas go one per part, separated by a line with only ---.\n5. Queue. Every part is previewed when it finishes; the joined video lands in the output folder.\n\nTurn on the LoRAs you want in the LoRA loader (a turbo LoRA wants steps 6-8, cfg 1)."
+    "text": "PromptForge H3 Endless Video\n\n1. Pick your MiniMax H3 model, text encoder and VAEs in the Loader (left).\n2. Pick the vision/language model that writes the prompts in 'PromptForge Model' (a Qwen3-VL GGUF works well).\n3. Write what the whole video is about in 'instructions' on the Endless node. Optional: choose reference images (the Load Image nodes) and describe them.\n4. In 'Endless Options' write what happens in each part, one line per part: Part 1: ... / Part 2: ... / Part 3 (10s): ... (or 0-5s: ... / 5-10s: ...). Start a part with raw: to use your own finished prompt. Also set size and how parts continue there.\n5. Queue. The prompt of each part shows in the node as it is written, and every part is previewed when it finishes; the joined video lands in the output folder.\n\nTurn on the LoRAs you want in the LoRA loader (a turbo LoRA wants steps 6-8, cfg 1). Attention backend and chunked feed-forward are speed/VRAM options; bypass them (Ctrl+B) if a result looks off. The Loader's extra VAE (the MiniMax H3 2x detail decoder) decodes the video, so it comes out at twice the generation size."
    },
    "color": "#432",
    "bgcolor": "#653"
@@ -186,8 +186,8 @@
      "name": "VAE",
      "type": "VAE",
      "links": [
-      6,
-      10
+      8,
+      12
      ]
     },
     {
@@ -195,15 +195,17 @@
      "name": "AUDIO_VAE",
      "type": "VAE",
      "links": [
-      7,
-      11
+      9,
+      13
      ]
     },
     {
      "localized_name": "EXTRA_VAE",
      "name": "EXTRA_VAE",
      "type": "VAE",
-     "links": null
+     "links": [
+      14
+     ]
     },
     {
      "localized_name": "INFO",
@@ -226,7 +228,7 @@
      "input_ue_unconnectable": {}
     },
     "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "c6a13cdc89925ad746f315145916092e15ab3fa2",
+    "ver": "64822ba77c35319374fb41d8f9c7546d8b512018",
     "Node name for S&R": "PROMPTFORGE_Loader"
    },
    "widgets_values": [
@@ -242,7 +244,7 @@
     "default",
     "minimax_h3_video_vae_int8_convrot.safetensors",
     "minimax_h3_audio_vae_fp32.safetensors",
-    "(none)"
+    "MiniMax-H3-X2-Detail-v1_int8_convrot.safetensors"
    ],
    "widgets_values_named": {
     "model": "[unet] MiniMax H3/audio/dasiwa_minimax_h3_ref2va_v4_pruned_turbo_w4a8.safetensors",
@@ -257,7 +259,7 @@
     "clip_device": "default",
     "vae": "minimax_h3_video_vae_int8_convrot.safetensors",
     "audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
-    "extra_vae": "(none)"
+    "extra_vae": "MiniMax-H3-X2-Detail-v1_int8_convrot.safetensors"
    }
   },
   {
@@ -337,7 +339,7 @@
      "name": "CLIP",
      "type": "CLIP",
      "links": [
-      9
+      11
      ]
     },
     {
@@ -359,7 +361,7 @@
      "input_ue_unconnectable": {}
     },
     "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "c6a13cdc89925ad746f315145916092e15ab3fa2",
+    "ver": "64822ba77c35319374fb41d8f9c7546d8b512018",
     "Node name for S&R": "PROMPTFORGE_LoraLoader"
    },
    "widgets_values": [
@@ -447,14 +449,14 @@
   },
   {
    "id": 5,
-   "type": "ModelPreviewOverrideKJ",
+   "type": "ModelAttentionBackend",
    "pos": [
     420,
-    800
+    780
    ],
    "size": [
-    360,
-    480
+    270,
+    58
    ],
    "flags": {},
    "order": 4,
@@ -467,18 +469,143 @@
      "link": 5
     },
     {
+     "localized_name": "backend",
+     "name": "attention",
+     "type": "COMBO",
+     "widget": {
+      "name": "attention"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "MODEL",
+     "links": [
+      6
+     ]
+    }
+   ],
+   "properties": {
+    "ue_properties": {
+     "widget_ue_connectable": {},
+     "input_ue_unconnectable": {}
+    },
+    "cnr_id": "comfy-core",
+    "ver": "0.43.0",
+    "Node name for S&R": "ModelAttentionBackend"
+   },
+   "widgets_values": [
+    "comfy kitchen attention"
+   ],
+   "widgets_values_named": {
+    "attention": "comfy kitchen attention"
+   }
+  },
+  {
+   "id": 6,
+   "type": "MiniMaxChunkFeedForward",
+   "pos": [
+    420,
+    900
+   ],
+   "size": [
+    316.38046875,
+    82
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "MODEL",
+     "link": 6
+    },
+    {
+     "localized_name": "chunks",
+     "name": "chunks",
+     "type": "INT",
+     "widget": {
+      "name": "chunks"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "seq_threshold",
+     "name": "seq_threshold",
+     "type": "INT",
+     "widget": {
+      "name": "seq_threshold"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "MODEL",
+     "links": [
+      7
+     ]
+    }
+   ],
+   "properties": {
+    "ue_properties": {
+     "widget_ue_connectable": {},
+     "input_ue_unconnectable": {}
+    },
+    "cnr_id": "comfyui-workflow-encrypt",
+    "ver": "1.0.0",
+    "Node name for S&R": "MiniMaxChunkFeedForward"
+   },
+   "widgets_values": [
+    3,
+    4096
+   ],
+   "widgets_values_named": {
+    "chunks": 3,
+    "seq_threshold": 4096
+   }
+  },
+  {
+   "id": 7,
+   "type": "ModelPreviewOverrideKJ",
+   "pos": [
+    420,
+    1050
+   ],
+   "size": [
+    360,
+    480
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "MODEL",
+     "link": 7
+    },
+    {
      "localized_name": "vae",
      "name": "vae",
      "shape": 7,
      "type": "VAE",
-     "link": 6
+     "link": 8
     },
     {
      "localized_name": "audio_vae",
      "name": "audio_vae",
      "shape": 7,
      "type": "VAE",
-     "link": 7
+     "link": 9
     },
     {
      "localized_name": "max_resolution",
@@ -542,7 +669,7 @@
      "name": "MODEL",
      "type": "MODEL",
      "links": [
-      8
+      10
      ]
     }
    ],
@@ -576,7 +703,7 @@
    }
   },
   {
-   "id": 6,
+   "id": 8,
    "type": "PROMPTFORGE_Model",
    "pos": [
     0,
@@ -587,7 +714,7 @@
     228
    ],
    "flags": {},
-   "order": 5,
+   "order": 7,
    "mode": 0,
    "inputs": [
     {
@@ -649,7 +776,7 @@
      "name": "MODEL",
      "type": "PROMPTFORGE_MODEL",
      "links": [
-      12
+      15
      ]
     },
     {
@@ -666,7 +793,7 @@
      "input_ue_unconnectable": {}
     },
     "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "c6a13cdc89925ad746f315145916092e15ab3fa2",
+    "ver": "64822ba77c35319374fb41d8f9c7546d8b512018",
     "Node name for S&R": "PROMPTFORGE_Model"
    },
    "widgets_values": [
@@ -687,7 +814,7 @@
    }
   },
   {
-   "id": 7,
+   "id": 9,
    "type": "PROMPTFORGE_LoadImage",
    "pos": [
     0,
@@ -698,7 +825,7 @@
     460
    ],
    "flags": {},
-   "order": 6,
+   "order": 8,
    "mode": 0,
    "inputs": [
     {
@@ -726,7 +853,7 @@
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
-      14
+      17
      ]
     },
     {
@@ -740,7 +867,7 @@
      "name": "DESCRIPTION",
      "type": "STRING",
      "links": [
-      15
+      18
      ]
     },
     {
@@ -757,7 +884,7 @@
      "input_ue_unconnectable": {}
     },
     "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "c6a13cdc89925ad746f315145916092e15ab3fa2",
+    "ver": "64822ba77c35319374fb41d8f9c7546d8b512018",
     "Node name for S&R": "PROMPTFORGE_LoadImage"
    },
    "widgets_values": [
@@ -772,7 +899,7 @@
    }
   },
   {
-   "id": 8,
+   "id": 10,
    "type": "PROMPTFORGE_LoadImage",
    "pos": [
     1100,
@@ -783,7 +910,7 @@
     460
    ],
    "flags": {},
-   "order": 7,
+   "order": 9,
    "mode": 0,
    "inputs": [
     {
@@ -811,7 +938,7 @@
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
-      16
+      19
      ]
     },
     {
@@ -825,7 +952,7 @@
      "name": "DESCRIPTION",
      "type": "STRING",
      "links": [
-      17
+      20
      ]
     },
     {
@@ -842,7 +969,7 @@
      "input_ue_unconnectable": {}
     },
     "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "c6a13cdc89925ad746f315145916092e15ab3fa2",
+    "ver": "64822ba77c35319374fb41d8f9c7546d8b512018",
     "Node name for S&R": "PROMPTFORGE_LoadImage"
    },
    "widgets_values": [
@@ -857,7 +984,7 @@
    }
   },
   {
-   "id": 9,
+   "id": 11,
    "type": "PROMPTFORGE_H3Options",
    "pos": [
     1100,
@@ -865,10 +992,10 @@
    ],
    "size": [
     400,
-    628
+    652
    ],
    "flags": {},
-   "order": 8,
+   "order": 10,
    "mode": 0,
    "inputs": [
     {
@@ -1003,6 +1130,16 @@
      "link": null
     },
     {
+     "localized_name": "temperature",
+     "name": "temperature",
+     "shape": 7,
+     "type": "FLOAT",
+     "widget": {
+      "name": "temperature"
+     },
+     "link": null
+    },
+    {
      "localized_name": "steps",
      "name": "steps",
      "shape": 7,
@@ -1079,7 +1216,7 @@
      "name": "OPTIONS",
      "type": "PROMPTFORGE_H3_OPTIONS",
      "links": [
-      13
+      16
      ]
     }
    ],
@@ -1089,11 +1226,11 @@
      "input_ue_unconnectable": {}
     },
     "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "c6a13cdc89925ad746f315145916092e15ab3fa2",
+    "ver": "64822ba77c35319374fb41d8f9c7546d8b512018",
     "Node name for S&R": "PROMPTFORGE_H3Options"
    },
    "widgets_values": [
-    4,
+    3,
     "5",
     "16:9",
     "landscape",
@@ -1107,6 +1244,7 @@
     "",
     "auto (from the instructions)",
     "",
+    0.8,
     8,
     1,
     "euler",
@@ -1116,7 +1254,7 @@
     false
    ],
    "widgets_values_named": {
-    "parts": 4,
+    "parts": 3,
     "seconds_per_part": "5",
     "aspect_ratio": "16:9",
     "orientation": "landscape",
@@ -1130,6 +1268,7 @@
     "dialogue": "",
     "dialogue_language": "auto (from the instructions)",
     "dialogue_language_other": "",
+    "temperature": 0.8,
     "steps": 8,
     "cfg": 1,
     "sampler_name": "euler",
@@ -1140,7 +1279,7 @@
    }
   },
   {
-   "id": 10,
+   "id": 12,
    "type": "PROMPTFORGE_H3Endless",
    "pos": [
     1560,
@@ -1151,45 +1290,52 @@
     560
    ],
    "flags": {},
-   "order": 9,
+   "order": 11,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "model",
      "name": "model",
      "type": "MODEL",
-     "link": 8
+     "link": 10
     },
     {
      "localized_name": "clip",
      "name": "clip",
      "type": "CLIP",
-     "link": 9
+     "link": 11
     },
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 10
+     "link": 12
     },
     {
      "localized_name": "audio_vae",
      "name": "audio_vae",
      "type": "VAE",
-     "link": 11
+     "link": 13
     },
     {
      "localized_name": "enhancer",
      "name": "enhancer",
      "type": "PROMPTFORGE_MODEL",
-     "link": 12
+     "link": 15
     },
     {
      "localized_name": "options",
      "name": "options",
      "shape": 7,
      "type": "PROMPTFORGE_H3_OPTIONS",
-     "link": 13
+     "link": 16
+    },
+    {
+     "localized_name": "decode_vae",
+     "name": "decode_vae",
+     "shape": 7,
+     "type": "VAE",
+     "link": 14
     },
     {
      "localized_name": "first_frame",
@@ -1203,14 +1349,14 @@
      "name": "ref_image_1",
      "shape": 7,
      "type": "IMAGE",
-     "link": 14
+     "link": 17
     },
     {
      "localized_name": "ref_image_2",
      "name": "ref_image_2",
      "shape": 7,
      "type": "IMAGE",
-     "link": 16
+     "link": 19
     },
     {
      "localized_name": "ref_image_3",
@@ -1224,14 +1370,14 @@
      "name": "ref_text_1",
      "shape": 7,
      "type": "STRING",
-     "link": 15
+     "link": 18
     },
     {
      "localized_name": "ref_text_2",
      "name": "ref_text_2",
      "shape": 7,
      "type": "STRING",
-     "link": 17
+     "link": 20
     },
     {
      "localized_name": "ref_text_3",
@@ -1295,22 +1441,24 @@
      "input_ue_unconnectable": {}
     },
     "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "c6a13cdc89925ad746f315145916092e15ab3fa2",
+    "ver": "64822ba77c35319374fb41d8f9c7546d8b512018",
     "Node name for S&R": "PROMPTFORGE_H3Endless"
    },
    "widgets_values": [
-    "A short adventure: the characters from the reference images hike up a mountain trail at sunset, reach a small wooden cabin, and sit on its porch talking quietly as the light fades.",
+    "A short adventure with the characters from the reference images. Describe the whole idea here, then write what happens in each part in the Options node.",
     1,
     "randomize",
     "PromptForge/endless",
+    "",
     ""
    ],
    "widgets_values_named": {
-    "instructions": "A short adventure: the characters from the reference images hike up a mountain trail at sunset, reach a small wooden cabin, and sit on its porch talking quietly as the light fades.",
+    "instructions": "A short adventure with the characters from the reference images. Describe the whole idea here, then write what happens in each part in the Options node.",
     "seed": 1,
     "control_after_generate": "randomize",
     "filename_prefix": "PromptForge/endless",
-    "video_preview": ""
+    "video_preview": "",
+    "part_prompts": ""
    }
   }
  ],
@@ -1357,98 +1505,122 @@
   ],
   [
    6,
-   2,
-   2,
-   5,
-   1,
-   "VAE"
-  ],
-  [
-   7,
-   2,
-   3,
-   5,
-   2,
-   "VAE"
-  ],
-  [
-   8,
    5,
    0,
-   10,
+   6,
    0,
    "MODEL"
   ],
   [
+   7,
+   6,
+   0,
+   7,
+   0,
+   "MODEL"
+  ],
+  [
+   8,
+   2,
+   2,
+   7,
+   1,
+   "VAE"
+  ],
+  [
    9,
+   2,
+   3,
+   7,
+   2,
+   "VAE"
+  ],
+  [
+   10,
+   7,
+   0,
+   12,
+   0,
+   "MODEL"
+  ],
+  [
+   11,
    3,
    1,
-   10,
+   12,
    1,
    "CLIP"
   ],
   [
-   10,
+   12,
    2,
    2,
-   10,
+   12,
    2,
    "VAE"
   ],
   [
-   11,
+   13,
    2,
    3,
-   10,
+   12,
    3,
    "VAE"
   ],
   [
+   14,
+   2,
+   4,
    12,
    6,
+   "VAE"
+  ],
+  [
+   15,
+   8,
    0,
-   10,
+   12,
    4,
    "PROMPTFORGE_MODEL"
   ],
   [
-   13,
-   9,
+   16,
+   11,
    0,
-   10,
+   12,
    5,
    "PROMPTFORGE_H3_OPTIONS"
   ],
   [
-   14,
-   7,
+   17,
+   9,
    0,
-   10,
-   7,
+   12,
+   8,
    "IMAGE"
   ],
   [
-   15,
-   7,
+   18,
+   9,
    2,
-   10,
-   10,
+   12,
+   11,
    "STRING"
   ],
   [
-   16,
-   8,
-   0,
+   19,
    10,
-   8,
+   0,
+   12,
+   9,
    "IMAGE"
   ],
   [
-   17,
-   8,
-   2,
+   20,
    10,
-   11,
+   2,
+   12,
+   12,
    "STRING"
   ]
  ],

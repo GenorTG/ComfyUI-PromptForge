@@ -21,6 +21,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 import torch
@@ -28,6 +29,7 @@ from server import PromptServer
 
 import comfy.model_management as model_management
 import comfy.samplers
+import comfy.utils
 import folder_paths
 from comfy_extras import nodes_audio, nodes_minimax_h3
 
@@ -35,6 +37,8 @@ from . import empty_latent, minimax_decode, sampler, video_save
 
 FPS = 24
 GRID = 17
+SEAM_FLOOR = 25.0
+SEAM_RATIO = 6.0
 CONTINUITY = ("anchor tail", "reference video", "none")
 TRANSITIONS = ("continue the same shot", "let the story decide", "cut to a new shot")
 CONTEXTS = ("1", "5", "22", "39", "56", "73")
@@ -44,7 +48,7 @@ DIALOGUE_AUTO = "auto (from the instructions)"
 DEFAULT_OPTIONS = {
     "parts": 3, "seconds": 5, "aspect_ratio": "16:9", "orientation": "landscape", "megapixels": 0.5, "transition": TRANSITIONS[0],
     "continuity": CONTINUITY[0], "context_frames": 22, "part_ideas": "", "preset_style": "standard", "negative_prompt": "",
-    "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "temperature": 0.8, "steps": 8, "cfg": 1.0,
+    "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "temperature": 0.8, "seam_check": True, "seam_retries": 2, "steps": 8, "cfg": 1.0,
     "sampler_name": "euler", "scheduler": "simple", "codec": "h264 (nvenc)", "quality": 19, "keep_parts": False,
 }
 TRANSITION_TEXT = {
@@ -151,6 +155,22 @@ def continuation_brief(index, total, seconds, notes, last_shot, mode, prefix_sec
     return "\n".join(lines)
 
 
+def small(frames, longest=512):
+    """Frames shrunk for the language model: the context only has to show what is happening, and every full-size frame costs a thousand tokens."""
+    scale = longest / max(frames.shape[1], frames.shape[2])
+    if scale >= 1:
+        return frames
+    resized = comfy.utils.common_upscale(frames.movedim(-1, 1), round(frames.shape[2] * scale), round(frames.shape[1] * scale), "area", "disabled")
+    return resized.movedim(1, -1)
+
+
+def seam_jump(previous_last, previous_before, first):
+    """(jump, motion): mean picture change from the previous part's last frame to this part's first frame, and the change between the previous part's last two frames."""
+    def gray(frame):
+        return small(frame[None], 160).mean(dim=-1)[0] * 255
+    return float((gray(first) - gray(previous_last)).abs().mean()), float((gray(previous_last) - gray(previous_before)).abs().mean())
+
+
 def tail_audio(waveform, sample_rate, frames):
     """The last `frames` frames of a part's audio, as an audio dict for the H3 guide."""
     count = min(waveform.shape[-1], round(frames / FPS * sample_rate))
@@ -179,6 +199,8 @@ class PROMPTFORGE_H3Options:
                 "dialogue_language": ([DIALOGUE_AUTO, "Arabic", "Chinese", "English", "French", "German", "Italian", "Japanese", "Korean", "Portuguese", "Russian", "Spanish", "other (type below)"], {"default": DIALOGUE_AUTO}),
                 "dialogue_language_other": ("STRING", {"default": ""}),
                 "temperature": ("FLOAT", {"default": 0.8, "min": 0.1, "max": 1.0, "step": 0.05, "tooltip": "Creativity of the prompt writer. Lower sticks closer to your text."}),
+                "seam_check": ("BOOLEAN", {"default": True, "tooltip": "When a part is meant to continue the same shot, compare its first frame with the previous part's last frame and generate it again with another seed if the picture jumps. Not used when cuts are allowed."}),
+                "seam_retries": ("INT", {"default": 2, "min": 0, "max": 5, "tooltip": "How many times a jumping part is generated again."}),
                 "steps": ("INT", {"default": 8, "min": 1, "max": 200, "tooltip": "6-8 with a turbo LoRA, more without."}),
                 "cfg": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 30.0, "step": 0.1}),
                 "sampler_name": (comfy.samplers.KSampler.SAMPLERS, {"default": "euler"}),
@@ -272,12 +294,14 @@ class PROMPTFORGE_H3Endless:
 
         scratch = tempfile.mkdtemp(prefix="promptforge_endless_")
         parts_video, parts_audio, prompts, notes = [], [], [], []
-        tail, tail_wave, last_shot, sample_rate = None, None, "", 0
+        tail, tail_wave, last_shot, sample_rate, previous = None, None, "", 0, None
         self._status(unique_id, "Starting")
         try:
             for index in range(total):
                 model_management.throw_exception_if_processing_interrupted()
                 seconds = lengths[index]
+                clock = time.time()
+                marks = {}
                 continuing = index > 0 and mode != "none"
                 prefix = context if continuing and mode == "anchor tail" else 0
                 self._status(unique_id, f"Part {index + 1}/{total}: writing the prompt")
@@ -287,6 +311,7 @@ class PROMPTFORGE_H3Endless:
                 else:
                     prompt = self._prompt(enhancer, opts, mode, continuing, index, total, seconds, seed + index, part_text(index, total, brief, reference_lines, plan, seconds),
                                           pictures, tail if continuing else None, notes, last_shot, prefix)
+                marks["prompt"] = time.time() - clock
                 prompts.append(prompt)
                 self._prompt_preview(unique_id, index, prompt)
                 notes_entry = story_note(prompt)
@@ -299,18 +324,32 @@ class PROMPTFORGE_H3Endless:
                                                       tail if continuing else None, (tail_wave, sample_rate) if continuing else None, mode, voice_audio, continuing)
                 negative = positive if opts["cfg"] == 1.0 else clip.encode_from_tokens_scheduled(clip.tokenize(""))
 
-                self._status(unique_id, f"Part {index + 1}/{total}: sampling")
-                self._release()
-                latent_out = sampler.PROMPTFORGE_Sampler().sample(model, positive, negative, latent, seed + index, opts["steps"], opts["cfg"], opts["sampler_name"], opts["scheduler"], 1.0, 1)[0]
+                marks["encode"] = time.time() - clock - marks["prompt"]
+                check = opts["seam_check"] and continuing and opts["transition"] == TRANSITIONS[0] and previous is not None
+                for attempt in range(1 + (int(opts["seam_retries"]) if check else 0)):
+                    self._status(unique_id, f"Part {index + 1}/{total}: sampling" + (f" (try {attempt + 1})" if attempt else ""))
+                    self._release()
+                    clock_sample = time.time()
+                    latent_out = sampler.PROMPTFORGE_Sampler().sample(model, positive, negative, latent, seed + index + 1000 * attempt, opts["steps"], opts["cfg"], opts["sampler_name"], opts["scheduler"], 1.0, 1)[0]
+                    marks["sample"] = time.time() - clock_sample
+                    self._status(unique_id, f"Part {index + 1}/{total}: decoding")
+                    self._release()
+                    clock_decode = time.time()
+                    images = minimax_decode.PROMPTFORGE_MiniMaxDecode().decode(latent_out, decode_vae if decode_vae is not None else vae, 0, 0, "cpu", True)[0]
+                    audio = nodes_audio.vae_decode_audio(audio_vae, {"samples": latent_out["samples"].unbind()[1]})
+                    del latent_out
+                    if not check:
+                        break
+                    jump, motion = seam_jump(previous[-1], previous[-2] if previous.shape[0] > 1 else previous[-1], images[prefix])
+                    ok = jump <= max(SEAM_FLOOR, SEAM_RATIO * motion)
+                    print(f"[PromptForge] endless video: part {index + 1} seam change {jump:.1f} (previous motion {motion:.1f}) -> {'ok' if ok else 'jump'}")
+                    if ok:
+                        break
+                    self._status(unique_id, f"Part {index + 1}/{total}: the picture jumps at the join; trying again" if attempt < int(opts["seam_retries"]) else f"Part {index + 1}/{total}: still jumping, keeping it")
                 del positive, negative, latent
-
-                self._status(unique_id, f"Part {index + 1}/{total}: decoding")
-                self._release()
-                images = minimax_decode.PROMPTFORGE_MiniMaxDecode().decode(latent_out, decode_vae if decode_vae is not None else vae, 0, 0, "cpu", True)[0]
-                audio = nodes_audio.vae_decode_audio(audio_vae, {"samples": latent_out["samples"].unbind()[1]})
-                del latent_out
                 self._release()
 
+                marks["decode"] = time.time() - clock_decode
                 sample_rate = int(audio["sample_rate"])
                 wave = audio["waveform"][0].float().cpu()
                 # the decoded frames can be larger than the generation (2x decoder); the frames cut off here are the anchored ending
@@ -319,7 +358,10 @@ class PROMPTFORGE_H3Endless:
                 preview = self._save_part(images, wave, sample_rate, filename_prefix, opts, index, scratch, parts_video, opts["keep_parts"])
                 parts_audio.append(wave)
                 self._preview(unique_id, preview)
+                marks["total"] = time.time() - clock
+                self._status(unique_id, f"Part {index + 1}/{total} done in {marks['total']:.0f}s (" + ", ".join(f"{name} {value:.0f}s" for name, value in marks.items() if name != "total") + ")")
 
+                previous = images[-2:].clone()
                 tail = images[-context:].clone() if context > 1 else images[-1:].clone()
                 tail_wave = wave
                 del images
@@ -343,10 +385,17 @@ class PROMPTFORGE_H3Endless:
 
     @staticmethod
     def _release():
-        """Everything ComfyUI holds goes, so the next stage (language model, sampler, decoder) has the whole GPU."""
+        """Everything ComfyUI holds goes, so the next stage (language model, sampler, decoder) has the whole GPU. Returns the free VRAM in GB."""
         model_management.unload_all_models()
         gc.collect()
         model_management.soft_empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+            if os.environ.get("PROMPTFORGE_DEBUG_VRAM"):
+                live = sorted(((obj.numel() * obj.element_size(), tuple(obj.shape), str(obj.dtype)) for obj in gc.get_objects() if torch.is_tensor(obj) and obj.is_cuda), reverse=True)[:6]
+                print(f"[PromptForge] VRAM debug: allocated {torch.cuda.memory_allocated() / 1024 ** 3:.2f} GB, reserved {torch.cuda.memory_reserved() / 1024 ** 3:.2f} GB, largest live tensors {live}")
+            return torch.cuda.mem_get_info()[0] / 1024 ** 3
+        return 0.0
 
     @staticmethod
     def _preview(unique_id, preview):
@@ -366,15 +415,25 @@ class PROMPTFORGE_H3Endless:
         have_refs = bool(pictures) or (continuing and mode == "reference video")
         preset = ("NSFW › " if opts["preset_style"] == "NSFW" else "") + ("MiniMax H3 Ref2VA" if have_refs else "MiniMax H3 T2VA")
         continuation = continuation_brief(index, total, seconds, notes[-4:], last_shot, mode, prefix / FPS, opts["transition"]) if continuing else ""
-        self._release()
-        answer, _ = package.PROMPTFORGE_PromptEnhancer().enhance(
-            enhancer, text, "inputs" if (pictures or tail is not None) else "text_only", preset, seed, 2048, opts["temperature"], 0.95, 40, 1, 1.1, "",
-            video_seconds=max(1, round(seconds + prefix / FPS)), image=refs[0], image2=refs[1], image3=refs[2],
-            video=tail if (continuing and mode == "reference video") else None, frame_count=8,
-            negative_prompt=opts["negative_prompt"], auto_retry=True, dialogue=opts["dialogue"], dialogue_language=opts["dialogue_language"],
-            dialogue_language_other=opts["dialogue_language_other"], continuation=continuation,
-            context_video=tail if (continuing and mode == "anchor tail") else None)
-        return answer
+        context = small(tail) if (continuing and tail is not None) else None
+        for attempt in range(2):
+            free = self._release()
+            print(f"[PromptForge] endless video: {free:.1f} GB of VRAM free for the prompt writer.")
+            try:
+                settings = dict(enhancer, context_size=8192, kv_cache_type="q8_0") if attempt else enhancer
+                answer, _ = package.PROMPTFORGE_PromptEnhancer().enhance(
+                    settings, text, "inputs" if (pictures or context is not None) else "text_only", preset, seed + attempt * 1000, 2048, opts["temperature"], 0.95, 40, 1, 1.1, "",
+                    video_seconds=max(1, round(seconds + prefix / FPS)), image=refs[0], image2=refs[1], image3=refs[2],
+                    video=context if mode == "reference video" else None, frame_count=6 - 2 * attempt,
+                    negative_prompt=opts["negative_prompt"], auto_retry=True, dialogue=opts["dialogue"], dialogue_language=opts["dialogue_language"],
+                    dialogue_language_other=opts["dialogue_language_other"], continuation=continuation,
+                    context_video=context if mode == "anchor tail" else None)
+                return answer
+            except ValueError as error:
+                if attempt or "llama context" not in str(error):
+                    raise
+                print("[PromptForge] endless video: the prompt writer could not start (out of VRAM?); freeing memory and trying again with a smaller context.")
+                time.sleep(3)
 
     def _conditioning(self, clip, vae, audio_vae, prompt, width, height, length, pictures, first_frame, tail, tail_wave, mode, voice_audio, continuing):
         refs = {f"ref_image_{number + 1}": image for number, image in enumerate(pictures)}
