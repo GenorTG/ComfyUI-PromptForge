@@ -108,6 +108,7 @@ class PROMPTFORGE_SaveVideo:
                 "audio_bitrate_kbps": ("INT", {"default": 192, "min": 32, "max": 512}),
                 "show_preview": ("BOOLEAN", {"default": True, "tooltip": "Show the video inside the node after it is saved."}),
                 "loop_preview": ("BOOLEAN", {"default": True, "tooltip": "Loop the preview. Takes effect straight away, no rerun needed."}),
+                "autoplay_preview": ("BOOLEAN", {"default": True, "tooltip": "Start the preview playing when a video finishes. Off leaves it paused until you press play."}),
             },
             "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
         }
@@ -119,7 +120,7 @@ class PROMPTFORGE_SaveVideo:
     DESCRIPTION = "VHS-style video save with GPU colour conversion and a single ffmpeg pass for video and audio."
 
     def save(self, images, frame_rate, filename_prefix, codec, speed, rate_control, quality, bitrate_mbit, bit_depth,
-             save_output, pingpong, save_metadata, audio=None, audio_bitrate_kbps=192, show_preview=True, loop_preview=True, prompt=None, extra_pnginfo=None):
+             save_output, pingpong, save_metadata, audio=None, audio_bitrate_kbps=192, show_preview=True, loop_preview=True, autoplay_preview=True, prompt=None, extra_pnginfo=None):
         count, height, width = (int(size) for size in images.shape[:3])
         bits = int(bit_depth)
         encoder, presets, quality_flag, pix_fmt_10 = CODECS[codec]

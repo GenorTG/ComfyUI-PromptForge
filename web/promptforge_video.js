@@ -28,12 +28,12 @@ app.registerExtension({
       const apply = () => {
         video.loop = option("loop_preview")?.value !== false;
         frame.style.display = visible() ? "" : "none";
+        video.autoplay = option("autoplay_preview")?.value !== false;
         if (!visible()) video.pause();
-        else if (video.paused) video.play().catch(() => {});
         node.setSize([node.size[0], Math.max(node.computeSize()[1], visible() ? node.size[1] : 0)]);
         node.setDirtyCanvas(true, true);
       };
-      for (const name of ["show_preview", "loop_preview"]) {
+      for (const name of ["show_preview", "loop_preview", "autoplay_preview"]) {
         const toggle = option(name);
         const callback = toggle.callback;
         toggle.callback = function () { callback?.apply(this, arguments); apply(); };
@@ -42,6 +42,7 @@ app.registerExtension({
         const query = new URLSearchParams({ filename: preview.filename, subfolder: preview.subfolder, type: preview.type, t: String(Date.now()) });
         video.src = api.apiURL("/view?" + query);
         apply();
+        if (video.autoplay) video.play().catch(() => {});
       };
     };
     const onExecuted = nodeType.prototype.onExecuted;

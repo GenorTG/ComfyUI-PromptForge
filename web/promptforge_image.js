@@ -11,6 +11,40 @@ function el(tag, style = {}, props = {}) {
 
 import { createLibrary, thumb, nsfwShown, setNsfwShown, BLUR } from "./promptforge_library.js";
 
+const HISTORY_KEY = "promptforge.descriptionHistory";
+const readHistory = () => { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); } catch { return []; } };
+
+// every text typed into the description box is kept (newest first), so nothing typed can be lost for good
+function remember(text) {
+  text = text.trim();
+  if (!text) return;
+  const history = readHistory();
+  const [latest] = history;
+  if (latest && Date.now() - latest.time < 60000 && (text.startsWith(latest.text) || latest.text.startsWith(text) && text.length > latest.text.length / 2)) history.shift();
+  else if (history.some((entry) => entry.text === text)) return;
+  history.unshift({ text, time: Date.now() });
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 60)));
+}
+
+function showHistory(onRestore) {
+  const backdrop = el("div", { position: "fixed", inset: "0", zIndex: 10003, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center" });
+  const card = el("div", { width: "min(640px, 94vw)", maxHeight: "80vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: "6px", padding: "12px", boxSizing: "border-box", background: "var(--comfy-menu-bg, #222)", color: "var(--input-text, #ddd)", border: "1px solid var(--border-color, #555)", borderRadius: "8px", fontSize: "13px" });
+  const close = () => backdrop.remove();
+  backdrop.addEventListener("pointerdown", (event) => event.stopPropagation());
+  backdrop.addEventListener("click", (event) => { if (event.target === backdrop) close(); });
+  card.append(el("div", { fontWeight: "bold" }, { textContent: "Description history (click one to put it back in the box)" }));
+  const history = readHistory();
+  if (!history.length) card.append(el("div", { opacity: ".7" }, { textContent: "Nothing typed yet." }));
+  for (const entry of history) {
+    const row = el("div", { cursor: "pointer", padding: "6px 8px", borderRadius: "4px", border: "1px solid var(--border-color, #555)", whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: "110px", overflow: "hidden" }, { textContent: entry.text });
+    row.prepend(el("div", { opacity: ".55", fontSize: "11px" }, { textContent: new Date(entry.time).toLocaleString() }));
+    row.addEventListener("click", () => { onRestore(entry.text); close(); });
+    card.append(row);
+  }
+  backdrop.append(card);
+  document.body.append(backdrop);
+}
+
 const BUTTON = { cursor: "pointer", padding: "3px 10px", borderRadius: "4px", border: "1px solid var(--border-color, #555)", background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)" };
 
 function chooseImage(current) {
@@ -92,6 +126,18 @@ app.registerExtension({
       const eye = el("button", BUTTON, { textContent: "👁", title: "Show or blur NSFW images (also in the picker)" });
       eye.addEventListener("click", () => { setNsfwShown(!nsfwShown()); show(); });
       buttons.append(eye);
+      const history = el("button", BUTTON, { textContent: "↶", title: "History of everything typed in the description box" });
+      history.addEventListener("click", () => showHistory((text) => { textWidget.value = text; node.setDirtyCanvas(true, true); }));
+      buttons.append(history);
+      let typing;
+      const watch = () => {
+        if (!textWidget.inputEl || textWidget.inputEl.dataset.pfWatched) return;
+        textWidget.inputEl.dataset.pfWatched = "1";
+        textWidget.inputEl.addEventListener("input", () => { clearTimeout(typing); typing = setTimeout(() => remember(textWidget.value), 800); });
+        textWidget.inputEl.addEventListener("blur", () => remember(textWidget.value));
+      };
+      watch();
+      setTimeout(watch, 500);
       const pick = async () => {
         const name = await chooseImage(imageWidget.value);
         if (!name) return;
@@ -116,7 +162,7 @@ app.registerExtension({
       this.widgets.splice(0, 0, widget);
       imageWidget.callback = show;
       const configure = this.onConfigure;
-      this.onConfigure = function () { const result = configure?.apply(this, arguments); show(); return result; };
+      this.onConfigure = function () { const result = configure?.apply(this, arguments); remember(textWidget.value || ""); watch(); show(); return result; };
       this.setSize([Math.max(this.size[0], 340), Math.max(this.size[1], 460)]);
       show();
     };
