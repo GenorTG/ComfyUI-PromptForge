@@ -196,6 +196,8 @@ function buildList(node, stateWidget) {
   refresh.addEventListener("click", () => reload(true));
 
   const widget = node.addDOMWidget("lora_list", "promptforge_lora_list", frame, { serialize: false, getMinHeight: () => 380 });
+  // the frontend narrows widget.width from layout passes; the list should always span the node
+  Object.defineProperty(widget, "width", { get: () => node.size[0], set: () => {}, configurable: true });
   widget.refreshFilter = () => { if (state.filter === "pipe") render(); };
   widget.restore = () => { state = parseState(stateWidget.value); fillFamilies(); render(); };
   reload();
