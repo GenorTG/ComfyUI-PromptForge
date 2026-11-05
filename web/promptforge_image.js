@@ -9,73 +9,32 @@ function el(tag, style = {}, props = {}) {
   return element;
 }
 
+import { createLibrary, thumb, nsfwShown, setNsfwShown, BLUR } from "./promptforge_library.js";
+
 const BUTTON = { cursor: "pointer", padding: "3px 10px", borderRadius: "4px", border: "1px solid var(--border-color, #555)", background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)" };
-const thumb = (name, size) => api.apiURL(`/promptforge/image_thumb?name=${encodeURIComponent(name)}&size=${size}`);
 
-async function chooseImage(current) {
-  const { images } = await (await api.fetchApi("/promptforge/images")).json();
+function chooseImage(current) {
   return new Promise((resolve) => {
-    let folder = "";
-    let search = "";
-    const done = (value) => { backdrop.remove(); document.removeEventListener("keydown", onKey, true); resolve(value); };
-    const onKey = (event) => { if (event.key === "Escape") { event.stopPropagation(); done(null); } };
+    const done = (value) => { library.destroy(); backdrop.remove(); document.removeEventListener("keydown", onKey, true); resolve(value); };
+    const onKey = (event) => { if (event.key === "Escape" && !document.querySelector("[data-pf-nested]")) { event.stopPropagation(); done(null); } };
     document.addEventListener("keydown", onKey, true);
-
     const backdrop = el("div", { position: "fixed", inset: "0", zIndex: 10001, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center" });
-    const card = el("div", { width: "min(1100px, 94vw)", height: "min(760px, 90vh)", display: "flex", flexDirection: "column", gap: "8px", padding: "12px", boxSizing: "border-box", background: "var(--comfy-menu-bg, #222)", color: "var(--input-text, #ddd)", border: "1px solid var(--border-color, #555)", borderRadius: "8px", fontSize: "13px" });
-    const bar = el("div", { display: "flex", gap: "8px", alignItems: "center" });
-    const searchBox = el("input", { flex: "1", padding: "5px 8px", borderRadius: "4px", border: "1px solid var(--border-color, #555)", background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)" }, { type: "search", placeholder: "Search by name or description..." });
-    const folderBox = el("select", { maxWidth: "260px", padding: "4px", background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)", border: "1px solid var(--border-color, #555)", borderRadius: "4px" });
-    const upload = el("button", BUTTON, { textContent: "Upload…" });
-    const close = el("button", BUTTON, { textContent: "Close" });
-    const count = el("span", { opacity: "0.7", whiteSpace: "nowrap" });
-    const grid = el("div", { flex: "1", overflowY: "auto", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "8px", alignContent: "start", padding: "2px" });
-    bar.append(searchBox, folderBox, count, upload, close);
-    card.append(bar, grid);
+    const card = el("div", { width: "min(1180px, 95vw)", height: "min(800px, 92vh)", display: "flex", flexDirection: "column", padding: "12px", boxSizing: "border-box", background: "var(--comfy-menu-bg, #222)", border: "1px solid var(--border-color, #555)", borderRadius: "8px" });
     backdrop.append(card);
     document.body.append(backdrop);
     backdrop.addEventListener("pointerdown", (event) => event.stopPropagation());
     backdrop.addEventListener("click", (event) => { if (event.target === backdrop) done(null); });
+
+    const upload = el("button", BUTTON, { textContent: "Upload…" });
+    const close = el("button", BUTTON, { textContent: "Close" });
     close.addEventListener("click", () => done(null));
-
-    const folderOf = (name) => (name.includes("/") ? name.slice(0, name.lastIndexOf("/")) : "");
-    const folders = () => [...new Set(images.map((image) => folderOf(image.name)))].sort();
-    const fillFolders = () => {
-      folderBox.replaceChildren(new Option("All folders", "*"), ...folders().map((name) => new Option(name || "(input root)", name)));
-      folderBox.value = folder === "" && !folders().includes("") ? "*" : folder;
-    };
-    folder = "*";
-
-    function render() {
-      const words = search.toLowerCase().split(/\s+/).filter(Boolean);
-      const shown = images
-        .filter((image) => (folder === "*" || folderOf(image.name) === folder) && words.every((word) => (image.name + " " + image.description).toLowerCase().includes(word)))
-        .sort((a, b) => b.mtime - a.mtime);
-      count.textContent = `${shown.length} images`;
-      grid.replaceChildren(...shown.map((image) => {
-        const tile = el("div", { cursor: "pointer", display: "flex", flexDirection: "column", gap: "3px", padding: "4px", borderRadius: "5px", border: image.name === current ? "2px solid #6af" : "1px solid var(--border-color, #555)", position: "relative" });
-        const picture = el("img", { width: "100%", aspectRatio: "1 / 1", objectFit: "contain", borderRadius: "3px", background: "#111" }, { loading: "lazy", src: thumb(image.name, 220) });
-        const label = el("div", { fontSize: "11px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, { textContent: image.name.split("/").pop() });
-        tile.title = image.name + (image.description ? "\n\n" + image.description : "");
-        tile.append(picture, label);
-        if (image.described) tile.append(el("div", { position: "absolute", top: "8px", right: "8px", padding: "0 5px", borderRadius: "8px", background: "#26a", color: "#fff", fontSize: "10px" }, { textContent: "text" }));
-        tile.addEventListener("click", () => done(image.name));
-        return tile;
-      }));
-    }
-
-    let timer;
-    searchBox.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => { search = searchBox.value; render(); }, 120); });
-    folderBox.addEventListener("change", () => { folder = folderBox.value; render(); });
     upload.addEventListener("click", () => {
       const picker = el("input", {}, { type: "file", accept: "image/*" });
       picker.addEventListener("change", async () => {
         const file = picker.files[0];
         if (!file) return;
-        const target = folder === "*" ? "" : folder;
         const body = new FormData();
         body.append("image", file);
-        body.append("subfolder", target);
         body.append("type", "input");
         const reply = await api.fetchApi("/upload/image", { method: "POST", body });
         if (reply.status === 200) {
@@ -85,9 +44,8 @@ async function chooseImage(current) {
       });
       picker.click();
     });
-    fillFolders();
-    render();
-    searchBox.focus();
+    const library = createLibrary(card, { onPick: done, current, extraControls: [upload, close] });
+    library.focus();
   });
 }
 
@@ -113,10 +71,17 @@ app.registerExtension({
       frame.append(root);
       frame.addEventListener("pointerdown", (event) => event.stopPropagation());
 
-      const show = () => {
+      const show = async () => {
         picture.style.visibility = imageWidget.value ? "visible" : "hidden";
-        if (imageWidget.value) picture.src = thumb(imageWidget.value, 480);
+        if (!imageWidget.value) return;
+        picture.src = thumb(imageWidget.value, 480);
+        const info = await (await api.fetchApi("/promptforge/library/info?name=" + encodeURIComponent(imageWidget.value))).json();
+        picture.dataset.nsfw = info.nsfw ? "1" : "";
+        picture.style.filter = info.nsfw && !nsfwShown() ? BLUR : "none";
       };
+      const eye = el("button", BUTTON, { textContent: "👁", title: "Show or blur NSFW images (also in the picker)" });
+      eye.addEventListener("click", () => { setNsfwShown(!nsfwShown()); show(); });
+      buttons.append(eye);
       const pick = async () => {
         const name = await chooseImage(imageWidget.value);
         if (!name) return;

@@ -7,8 +7,6 @@ the node wins over the stored one, which makes the node usable with one-off text
 """
 import asyncio
 import hashlib
-import json
-import os
 from pathlib import Path
 
 import numpy as np
@@ -17,57 +15,31 @@ from aiohttp import web
 from PIL import Image, ImageOps
 from server import PromptServer
 
-import folder_paths
 import node_helpers
 
-EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff", ".avif"}
+from . import image_library
 
-
-def _store_dir():
-    return Path(folder_paths.get_user_directory()) / "promptforge"
-
-
-def _descriptions():
-    try:
-        return json.loads((_store_dir() / "image_descriptions.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-
-
-def _resolve(name):
-    """Absolute path of `name` inside the input folder; raises when it points elsewhere or is not an image."""
-    root = Path(os.path.abspath(folder_paths.get_input_directory()))
-    path = Path(os.path.abspath(root / name))
-    if root not in path.parents or path.suffix.lower() not in EXTENSIONS:
-        raise ValueError(f"[PromptForge] {name} is not an image inside the input folder.")
-    return path
-
-
-def _scan():
-    root = folder_paths.get_input_directory()
-    found = []
-    for folder, dirs, files in os.walk(root, followlinks=True):
-        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
-        for file in files:
-            if os.path.splitext(file)[1].lower() in EXTENSIONS:
-                full = os.path.join(folder, file)
-                found.append({"name": os.path.relpath(full, root).replace(os.sep, "/"), "mtime": os.path.getmtime(full)})
-    return found
+EXTENSIONS = image_library.EXTENSIONS
+_resolve = image_library.resolve
+_descriptions = image_library.descriptions
 
 
 @PromptServer.instance.routes.get("/promptforge/images")
 async def _images_route(request):
-    described = _descriptions()
-    images = await asyncio.get_running_loop().run_in_executor(None, _scan)
+    described, known = _descriptions(), image_library.tags()
+    images = await asyncio.get_running_loop().run_in_executor(None, image_library.scan)
     for image in images:
-        image["described"] = bool(described.get(image["name"], "").strip())
-        image["description"] = described.get(image["name"], "")[:300]
+        text = described.get(image["name"], "").strip()
+        entry = known.get(image["name"])
+        image.update({"described": bool(text), "description": text[:300], "tagged": entry is not None,
+                      "theme": entry["theme"] if entry else "", "nsfw": bool(entry and entry.get("nsfw")),
+                      "tags": entry["tags"] if entry else [], "caption": entry["caption"] if entry else ""})
     return web.json_response({"images": images})
 
 
 def _thumbnail(path, size):
     stat = path.stat()
-    cached = _store_dir() / "thumbs" / (hashlib.sha1(f"{path}|{stat.st_mtime_ns}|{size}".encode()).hexdigest() + ".jpg")
+    cached = image_library.store_dir() / "thumbs" / (hashlib.sha1(f"{path}|{stat.st_mtime_ns}|{size}".encode()).hexdigest() + ".jpg")
     if not cached.exists():
         cached.parent.mkdir(parents=True, exist_ok=True)
         with node_helpers.pillow(Image.open, str(path)) as image:
@@ -102,17 +74,17 @@ async def _description_route(request):
 async def _save_description_route(request):
     body = await request.json()
     try:
-        name = _resolve(str(body.get("name", ""))).relative_to(os.path.abspath(folder_paths.get_input_directory())).as_posix()
+        name = _resolve(str(body.get("name", ""))).relative_to(image_library.input_root()).as_posix()
     except ValueError as error:
         return web.json_response({"error": str(error)}, status=400)
-    store = _descriptions()
     text = str(body.get("description", "")).strip()
-    if text:
-        store[name] = text
-    else:
-        store.pop(name, None)
-    _store_dir().mkdir(parents=True, exist_ok=True)
-    (_store_dir() / "image_descriptions.json").write_text(json.dumps(store, indent=1, ensure_ascii=False), encoding="utf-8")
+    with image_library._store_lock:
+        store = _descriptions()
+        if text:
+            store[name] = text
+        else:
+            store.pop(name, None)
+        image_library.save_descriptions(store)
     return web.json_response({"saved": bool(text)})
 
 

@@ -103,6 +103,14 @@ Decodes MiniMax H3 video latents with H3's own decoder. It always tiles at 256 p
 ### PromptForge Load Image (`PROMPTFORGE_LoadImage`)
 Loads an image from the input folder through a thumbnail browser (search, folder filter, upload). Each image can have a stored description (`user/promptforge/image_descriptions.json`): picking an image fills the text box with it, *Save description* stores the text, and the node outputs it as `DESCRIPTION` next to `IMAGE`, `MASK` and `NAME`. Text typed in the node is used as is; an empty box falls back to the stored description. Handy for switching a character and its description together in reference-to-video workflows.
 
+#### Image library (picker and sidebar)
+The Choose image picker, and an **Images** tab in the left sidebar, share one library of the input folder. **Tools** runs a local vision model (a GGUF with its mmproj, found in your text_encoders / LLM folders) that gives every image keywords, a caption, a people count and an NSFW flag; results are stored in `user/promptforge/image_tags.json`.
+- **Search** looks through names, keywords, captions and descriptions; filters for folder and theme (female, male, group, people, nsfw, animals, scenery, objects, other).
+- **NSFW** images are blurred everywhere (picker, node preview, editor) until *Show NSFW* (or the eye button on the node) is on.
+- **Tag untagged / Tag selected / Re-tag all** run as a background job with progress and cancel. ComfyUI's loaded models are unloaded while it runs.
+- **Organize into theme folders** shows what will move and asks first; tags and descriptions follow the files. *Undo last organize* moves everything back. Workflows that point at an old path need the image picked again.
+- The **i** button on a tile edits keywords, theme, NSFW flag and description by hand.
+
 ### Dialogue in video prompts
 
 On the Prompt Enhancer, the MiniMax H3 presets accept `dialogue` (what the spoken lines should be about), `dialogue_language` and `dialogue_language_other` (for example Polish). The enhancer writes the lines in that language inside the dialogue tags with the language tag, keeps everything else in English, and sizes the dialogue to `video_seconds`. The instruction block spells out the exact line shape (`speaker (S1) says: <d>[Language] words</d>`), the rules and the common mistakes, and the output is checked: if a `<d>` tag has no `[Language]` tag, no closing `</d>`, or the wrong language name, the enhancer retries with the problem named (twice at most, with `auto_retry` on) (about 2.3 words or 4 characters per second after a one second lead-in, with pauses between speakers). The language list is what MiniMax H3 speaks reliably according to third-party model cards (Arabic, Chinese, English, French, German, Italian, Japanese, Korean, Portuguese, Russian, Spanish); other languages are partially supported.
