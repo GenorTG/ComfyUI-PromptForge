@@ -95,16 +95,32 @@ async def _info_route(request):
         sidecar = {}
     civitai = sidecar.get("civitai") or {}
     model_id = civitai.get("modelId")
+    model = civitai.get("model") or {}
+    images = []
+    for image in civitai.get("images") or []:
+        meta = image.get("meta") or {}
+        if image.get("url"):
+            images.append({"url": image["url"], "video": image.get("type") == "video", "seed": meta.get("seed"), "steps": meta.get("steps"), "cfg": meta.get("cfgScale"),
+                           "sampler": meta.get("sampler"), "model": meta.get("Model"), "positive": meta.get("prompt"), "negative": meta.get("negativePrompt")})
     return web.json_response({
         "name": name,
         "title": sidecar.get("model_name") or os.path.basename(name),
+        "version": civitai.get("name") or "",
+        "type": model.get("type") or "",
         "base_model": sidecar.get("base_model", ""),
+        "sha256": sidecar.get("sha256", ""),
+        "size": sidecar.get("size") or os.path.getsize(path),
+        "creator": (civitai.get("creator") or {}).get("username", ""),
+        "downloads": (civitai.get("stats") or {}).get("downloadCount"),
+        "likes": (civitai.get("stats") or {}).get("thumbsUpCount"),
         "words": _trigger_words(sidecar),
         "tips": sidecar.get("usage_tips") or "",
+        "notes": sidecar.get("notes") or "",
         "tags": sidecar.get("tags") or [],
         "description": _plain(sidecar.get("modelDescription") or ""),
         "url": f"https://civitai.com/models/{model_id}" + (f"?modelVersionId={civitai['id']}" if civitai.get("id") else "") if model_id else "",
         "preview": _preview_path(name) is not None,
+        "images": images,
     })
 
 

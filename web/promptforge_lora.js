@@ -55,25 +55,120 @@ function showTip(event, lines) {
 }
 function hideTip() { tip?.remove(); tip = null; }
 
+const INFO_CSS = `
+.pf-info { width: min(980px, 94vw); max-height: 90vh; overflow-y: auto; padding: 16px 18px; box-sizing: border-box; font-size: 13px; line-height: 1.4; }
+.pf-info h2 { margin: 0 0 8px; font-size: 18px; }
+.pf-info .pf-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; padding: 0; list-style: none; }
+.pf-info .pf-tags li { padding: 2px 10px; border-radius: 12px; background: rgba(255,255,255,.1); font-size: 12px; }
+.pf-info .pf-tags li.pf-base { background: #2a5d9a; color: #fff; }
+.pf-info table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+.pf-info td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,.1); vertical-align: top; word-break: break-word; }
+.pf-info td:first-child { width: 130px; opacity: .65; white-space: nowrap; }
+.pf-info a { color: #6af; }
+.pf-info .pf-words { display: flex; flex-wrap: wrap; gap: 5px; }
+.pf-info .pf-word { padding: 1px 9px; border-radius: 4px; background: rgba(255,255,255,.1); cursor: pointer; border: 1px solid transparent; }
+.pf-info .pf-word.pf-on { border-color: #6af; background: rgba(80,140,255,.25); }
+.pf-info .pf-copy { margin-left: 8px; cursor: pointer; color: #6af; text-decoration: underline; }
+.pf-info .pf-text { white-space: pre-wrap; max-height: 150px; overflow-y: auto; }
+.pf-info .pf-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.pf-info figure { margin: 0; display: flex; flex-direction: column; gap: 4px; background: rgba(0,0,0,.25); border-radius: 6px; overflow: hidden; }
+.pf-info figure img, .pf-info figure video { width: 100%; max-height: 380px; object-fit: contain; background: #111; }
+.pf-info figcaption { padding: 4px 8px 8px; display: flex; flex-direction: column; gap: 2px; font-size: 11.5px; }
+.pf-info figcaption label { opacity: .6; margin-right: 4px; }
+.pf-info figcaption .pf-long { max-height: 3.9em; overflow: hidden; cursor: pointer; white-space: pre-wrap; word-break: break-word; }
+.pf-info figcaption .pf-long.pf-open { max-height: 260px; overflow-y: auto; }
+.pf-info .pf-close { position: sticky; float: right; top: 0; cursor: pointer; }
+`;
+
 async function showInfo(name) {
+  if (!document.getElementById("pf-info-css")) document.head.append(el("style", {}, { id: "pf-info-css", textContent: INFO_CSS }));
   const info = await (await api.fetchApi("/promptforge/lora_info?name=" + encodeURIComponent(name))).json();
-  const backdrop = el("div", { position: "fixed", inset: "0", zIndex: 10001, background: "rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "center" });
-  const card = el("div", { ...POPUP, position: "relative", width: "min(640px, 92vw)", maxHeight: "86vh", overflowY: "auto", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" });
-  const field = (label, text) => text && card.append(el("div", { whiteSpace: "pre-wrap", wordBreak: "break-word" }, { textContent: `${label}${text}` }));
-  card.append(el("div", { fontSize: "15px", fontWeight: "bold" }, { textContent: info.title || name }));
-  if (info.preview) card.append(el("img", { maxWidth: "100%", maxHeight: "280px", objectFit: "contain", borderRadius: "4px" }, { src: api.apiURL("/promptforge/lora_preview?name=" + encodeURIComponent(name)) }));
-  field("File: ", info.name);
-  field("Base model: ", info.base_model);
-  field("Trigger words: ", (info.words || []).join(", "));
-  field("Usage tips: ", typeof info.tips === "string" ? info.tips : JSON.stringify(info.tips));
-  field("Tags: ", (info.tags || []).join(", "));
-  field("", info.description);
-  if (info.url) card.append(el("a", { color: "#6af" }, { href: info.url, target: "_blank", rel: "noopener", textContent: "Open on CivitAI" }));
-  if (!info.words?.length && !info.description && !info.url) field("", "No CivitAI information stored for this LoRA.");
-  const close = el("button", { alignSelf: "flex-end", cursor: "pointer" }, { textContent: "Close" });
-  close.addEventListener("click", () => backdrop.remove());
-  backdrop.addEventListener("click", (event) => { if (event.target === backdrop) backdrop.remove(); });
-  card.append(close);
+  const backdrop = el("div", { position: "fixed", inset: "0", zIndex: 10001, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center" });
+  const card = el("div", { ...POPUP, position: "relative" }, { className: "pf-info" });
+  const done = () => { backdrop.remove(); document.removeEventListener("keydown", onKey, true); };
+  const onKey = (event) => { if (event.key === "Escape") { event.stopPropagation(); done(); } };
+  document.addEventListener("keydown", onKey, true);
+  backdrop.addEventListener("pointerdown", (event) => event.stopPropagation());
+  backdrop.addEventListener("click", (event) => { if (event.target === backdrop) done(); });
+
+  const close = el("button", {}, { className: "pf-close", textContent: "Close" });
+  close.addEventListener("click", done);
+  card.append(close, el("h2", {}, { textContent: info.title || name }));
+
+  const tags = el("ul", {}, { className: "pf-tags" });
+  const pill = (text, cls = "") => text && tags.append(el("li", {}, { className: cls, textContent: text }));
+  pill(info.type); pill(info.base_model, "pf-base"); pill(info.version);
+  pill(info.creator && "by " + info.creator);
+  pill(info.downloads != null && "↓ " + info.downloads.toLocaleString());
+  pill(info.likes != null && "👍 " + info.likes.toLocaleString());
+  card.append(tags);
+
+  const table = el("table");
+  const row = (label, content) => {
+    if (content == null || content === "" || (Array.isArray(content) && !content.length)) return null;
+    const cell = el("td");
+    cell.append(...(Array.isArray(content) ? content : [content]));
+    const line = el("tr");
+    line.append(el("td", {}, { textContent: label }), cell);
+    table.append(line);
+    return line;
+  };
+  const text = (value) => el("div", {}, { className: "pf-text", textContent: value });
+  row("File", info.name);
+  row("Hash (sha256)", info.sha256);
+  if (info.size) row("Size", (info.size / 1024 ** 2).toFixed(0) + " MB");
+  if (info.url) row("Civitai", el("a", {}, { href: info.url, target: "_blank", rel: "noopener", textContent: "View on Civitai" }));
+  if (info.words?.length) {
+    const box = el("div", {}, { className: "pf-words" });
+    const status = el("span");
+    const chosen = () => [...box.querySelectorAll(".pf-on")].map((chip) => chip.dataset.word);
+    const update = () => {
+      status.replaceChildren();
+      const picked = chosen();
+      if (!picked.length) return;
+      status.append(`${picked.length} selected`, el("span", {}, { className: "pf-copy", textContent: "Copy" }));
+      status.lastChild.addEventListener("click", async () => { await navigator.clipboard.writeText(picked.join(", ")); status.textContent = "Copied ✓"; });
+    };
+    info.words.forEach((word) => {
+      const chip = el("span", {}, { className: "pf-word", textContent: word, title: "Click to select for copying" });
+      chip.dataset.word = word;
+      chip.addEventListener("click", () => { chip.classList.toggle("pf-on"); update(); });
+      box.append(chip);
+    });
+    const all = el("span", {}, { className: "pf-copy", textContent: "Copy all" });
+    all.addEventListener("click", async () => { await navigator.clipboard.writeText(info.words.join(", ")); all.textContent = "Copied ✓"; });
+    row("Trained words", [box, el("div", { marginTop: "4px" }), status, all]);
+  }
+  row("Usage tips", text(typeof info.tips === "string" ? info.tips : JSON.stringify(info.tips)));
+  row("Tags", (info.tags || []).join(", "));
+  row("Notes", info.notes && text(info.notes));
+  row("Description", info.description && text(info.description));
+  if (!table.children.length || (!info.words?.length && !info.description && !info.url && !info.images?.length)) row("Info", "No CivitAI information stored for this LoRA.");
+  card.append(table);
+
+  const gallery = el("ul", {}, { className: "pf-gallery" });
+  const shots = [...(info.preview ? [{ url: api.apiURL("/promptforge/lora_preview?name=" + encodeURIComponent(name)) }] : []), ...(info.images || [])];
+  for (const shot of shots) {
+    const figure = el("figure");
+    const media = shot.video
+      ? el("video", {}, { src: shot.url, loop: true, muted: true, controls: true, preload: "metadata" })
+      : el("img", {}, { src: shot.url, loading: "lazy", referrerPolicy: "no-referrer" });
+    figure.append(media);
+    const caption = el("figcaption");
+    for (const [label, key] of [["seed", "seed"], ["steps", "steps"], ["cfg", "cfg"], ["sampler", "sampler"], ["model", "model"], ["positive", "positive"], ["negative", "negative"]]) {
+      if (shot[key] == null || shot[key] === "") continue;
+      const line = el("div");
+      const long = String(shot[key]).length > 80;
+      const value = el("span", {}, { className: long ? "pf-long" : "", textContent: String(shot[key]) });
+      if (long) value.addEventListener("click", () => value.classList.toggle("pf-open"));
+      line.append(el("label", {}, { textContent: label }), value);
+      caption.append(line);
+    }
+    if (caption.children.length) figure.append(caption);
+    gallery.append(el("li", {}, {}));
+    gallery.lastChild.append(figure);
+  }
+  if (shots.length) card.append(gallery);
   backdrop.append(card);
   document.body.append(backdrop);
 }
