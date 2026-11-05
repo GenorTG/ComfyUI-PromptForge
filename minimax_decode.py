@@ -3,8 +3,9 @@
 The stock decode gives up on an OOM by switching to a generic tiler that ignores H3's blend rules. This node
 calls H3's own decoder instead and, when memory runs out, steps down a ladder that keeps the same quality:
 
-    whole frame -> 512 px tiles -> 256 px tiles -> 256 px tiles + 5 / 2 / 1 groups of frames per pass
+    256 px tiles (the size H3's decoder was built for) -> 85 / 34 / 17 frames per pass
 
+Whole-frame or larger tiles look fried and banded with H3, so they are never chosen automatically.
 The rung that worked for a given latent size is remembered, so the next run does not repeat the failed
 attempts. Output is written into one preallocated buffer (no list-then-concatenate), non-finite pixels are
 repaired and reported, and a model that has a 2x packed output projection (like the Wan 2x VAE trick) is
@@ -20,9 +21,8 @@ import comfy.model_management as model_management
 import comfy.utils
 
 CONTEXT_GROUPS = 2
-# (spatial tile, 0 = whole frame; frame groups per pass, 0 = whole clip). One group = 17 frames, 5 latent steps.
-LADDER = ((0, 0), (512, 0), (256, 0), (256, 5), (256, 2), (256, 1))
-RUNG_NAMES = {0: "whole frame", 512: "512px tiles", 256: "256px tiles"}
+# (spatial tile; frame groups per pass, 0 = whole clip). One group = 17 frames, 5 latent steps.
+LADDER = ((256, 0), (256, 5), (256, 2), (256, 1))
 SHUFFLE_FRAMES = 8
 _worked = {}
 
@@ -127,7 +127,7 @@ class PROMPTFORGE_MiniMaxDecode:
             "required": {
                 "samples": ("LATENT",),
                 "vae": ("VAE", {"tooltip": "The MiniMax H3 video VAE."}),
-                "tile_size": ("INT", {"default": 0, "min": 0, "max": 4096, "step": 16, "tooltip": "0 = auto: start with the whole frame and step down on out-of-memory. A number forces tiles of that size (overlap = a quarter of it)."}),
+                "tile_size": ("INT", {"default": 0, "min": 0, "max": 4096, "step": 16, "tooltip": "0 = auto: 256 px tiles, the size H3's decoder was built for. Larger tiles or the whole frame decode faster but look fried and banded. Overlap is a quarter of the tile."}),
                 "frames_per_pass": ("INT", {"default": 0, "min": 0, "max": 4096, "step": 17, "tooltip": "0 = auto: the whole clip, then fewer frames per pass on out-of-memory. A number decodes the clip in passes of about that many frames, with causal context."}),
                 "output_device": (["cpu", "gpu"], {"default": "cpu", "tooltip": "Where the finished frames are kept. gpu skips the copy to RAM but needs VRAM for the whole clip."}),
                 "retry_on_oom": ("BOOLEAN", {"default": True, "tooltip": "On out-of-memory, step down to smaller tiles and shorter passes instead of failing."}),
@@ -138,7 +138,7 @@ class PROMPTFORGE_MiniMaxDecode:
     RETURN_NAMES = ("images", "INFO")
     FUNCTION = "decode"
     CATEGORY = "🔮 PromptForge"
-    DESCRIPTION = "MiniMax H3 video decode that steps down to smaller tiles and shorter passes on out-of-memory instead of failing, and remembers what worked."
+    DESCRIPTION = "MiniMax H3 video decode with 256px tiles that steps down to shorter passes on out-of-memory instead of failing, and remembers what worked."
 
     def decode(self, samples, vae, tile_size, frames_per_pass, output_device, retry_on_oom):
         inner = _inner(vae)
@@ -148,7 +148,7 @@ class PROMPTFORGE_MiniMaxDecode:
         key = tuple(video.shape)
 
         if tile_size or frames_per_pass:
-            forced = (max(256, tile_size // 16 * 16) if tile_size else 0, max(1, round(frames_per_pass / 17)) if frames_per_pass else 0)
+            forced = (max(256, tile_size // 16 * 16), max(1, round(frames_per_pass / 17)) if frames_per_pass else 0)
             unlimited = lambda value: value or 10 ** 9
             safer = [rung for rung in LADDER if unlimited(rung[0]) < unlimited(forced[0]) or rung[0] == forced[0] and unlimited(rung[1]) < unlimited(forced[1])]
             ladder = [forced] + (safer if retry_on_oom else [])
@@ -182,7 +182,7 @@ class PROMPTFORGE_MiniMaxDecode:
                 torch.nan_to_num_(part, nan=0.0, posinf=1.0, neginf=0.0)
                 repaired = True
 
-        how = RUNG_NAMES.get(rung[0], f"{rung[0]}px tiles") + (f", {17 * rung[1]} frames per pass" if rung[1] else "")
+        how = f"{rung[0]}px tiles" + (f", {17 * rung[1]} frames per pass" if rung[1] else "")
         info = f"{images.shape[1]} frames {images.shape[3]}x{images.shape[2]}, {how}" + (f" (after {len(failures)} out-of-memory retries)" if failures else "") + (", non-finite pixels were repaired" if repaired else "")
         return (images.reshape(-1, *images.shape[-3:]), info)
 
