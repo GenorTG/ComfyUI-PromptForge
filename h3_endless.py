@@ -44,7 +44,7 @@ DIALOGUE_AUTO = "auto (from the instructions)"
 DEFAULT_OPTIONS = {
     "parts": 3, "seconds": 5, "aspect_ratio": "16:9", "orientation": "landscape", "megapixels": 0.5, "transition": TRANSITIONS[0],
     "continuity": CONTINUITY[0], "context_frames": 22, "part_ideas": "", "preset_style": "standard", "negative_prompt": "",
-    "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "steps": 8, "cfg": 1.0,
+    "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "temperature": 0.8, "steps": 8, "cfg": 1.0,
     "sampler_name": "euler", "scheduler": "simple", "codec": "h264 (nvenc)", "quality": 19, "keep_parts": False,
 }
 TRANSITION_TEXT = {
@@ -63,10 +63,59 @@ def nearest_grid(frames):
     return GRID * max(0, round((frames - 5) / GRID)) + 5
 
 
-def split_ideas(text, parts):
-    """One idea per part from text separated by lines with only ---; missing ones are empty."""
-    ideas = [piece.strip() for piece in re.split(r"^\s*---+\s*$", text or "", flags=re.M)]
-    return (ideas + [""] * parts)[:parts]
+PART_MARKERS = (
+    re.compile(r"^\s*(?:part|segment|scene|shot)\s*(\d+)\s*(?:\(\s*(\d+(?:\.\d+)?)\s*s(?:ec(?:onds?)?)?\s*\))?\s*[:.\-)]\s*(.*)$", re.I),
+    re.compile(r"^\s*(\d+)\s*[.)]\s+()(.*)$"),
+    re.compile(r"^\s*(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)\s*(?:s|sec|seconds)?\s*:\s*(.*)$", re.I),
+)
+
+
+def parse_plan(text, leading_is_part):
+    """(brief, parts) from a text that splits into parts with 'Part 2: ...', '2. ...', '0-5s: ...' or lines of only ---.
+
+    Each part is {"text", "seconds"} (seconds is None unless given as 'Part 2 (10s):' or '5-15s:'). Text before the first
+    marker is the brief, or the first part when `leading_is_part`.
+    """
+    brief, parts, marked = [], [], False
+    leading = {"text": [], "seconds": None} if leading_is_part else None
+    current = leading
+    for line in (text or "").splitlines():
+        if re.fullmatch(r"\s*-{3,}\s*", line):
+            current = {"text": [], "seconds": None}
+            parts.append(current)
+            continue
+        match = next((m for m in (pattern.match(line) for pattern in PART_MARKERS) if m), None)
+        if match:
+            marked = True
+            seconds = None
+            if match.re is PART_MARKERS[0] and match.group(2):
+                seconds = float(match.group(2))
+            elif match.re is PART_MARKERS[2]:
+                seconds = float(match.group(2)) - float(match.group(1))
+            current = {"text": [match.group(3)], "seconds": seconds if seconds and seconds > 0 else None}
+            parts.append(current)
+        elif current is not None:
+            current["text"].append(line)
+        else:
+            brief.append(line)
+    if leading is not None and not marked and any(piece.strip() for piece in leading["text"]):
+        parts.insert(0, leading)
+    return "\n".join(brief).strip(), [{"text": " ".join(piece.strip() for piece in part["text"] if piece.strip()), "seconds": part["seconds"]} for part in parts]
+
+
+def part_text(index, total, brief, reference_lines, plan, seconds):
+    """What the Enhancer is asked for one part: the brief as context, this part's idea as the thing to show, the other parts as things to keep out."""
+    lines = ([f"Whole-video context (do not show all of it in this part): {brief}"] if brief else []) + list(reference_lines)
+    idea = plan[index]["text"] if index < len(plan) else ""
+    if idea:
+        lines.append(f"PART {index + 1} OF {total} ({seconds:g} seconds). This part shows exactly the following, and nothing that belongs to another part: {idea}")
+        lines.append("Show it completely, paced across the whole part. Do not skip ahead to, repeat or summarise the other parts.")
+    else:
+        lines.append(f"PART {index + 1} OF {total} ({seconds:g} seconds). The user gave no instruction for this part: continue the story from the brief naturally.")
+    others = [f"Part {number + 1}: {part['text'][:300]}" for number, part in enumerate(plan) if number != index and part["text"]]
+    if others:
+        lines.append("Other parts, made separately (never show their events here):\n" + "\n".join(others))
+    return "\n".join(lines)
 
 
 def _section(text, name):
@@ -81,11 +130,10 @@ def story_note(prompt):
     return summary[:600], (shots[-1].strip() if shots else prompt[-500:])[:700]
 
 
-def continuation_brief(index, total, seconds, instructions, notes, last_shot, mode, prefix_seconds, transition, idea):
+def continuation_brief(index, total, seconds, notes, last_shot, mode, prefix_seconds, transition):
     lines = [
         f"# Continuation job (part {index + 1} of {total})",
-        f"You are writing the next part of ONE long video that is generated {seconds} seconds at a time. Every part starts from the ending of the previous one, so this part must carry on from it, not start over.",
-        "Whole-video brief: " + instructions.strip(),
+        f"You are writing the next part of ONE long video that is generated {seconds:g} seconds at a time. Every part starts from the ending of the previous one, so this part must carry on from it, not start over.",
     ]
     if notes:
         lines.append("Story so far:\n" + "\n".join(f"- Part {number}: {text}" for number, text in notes))
@@ -99,8 +147,7 @@ def continuation_brief(index, total, seconds, instructions, notes, last_shot, mo
         lines.append("<Video 1> is the ending of the previous part. The task type is [video continuation]: the target video continues <Video 1> without restarting, keeping what it shows, and the new action follows on from its last moment.")
     lines.append(TRANSITION_TEXT[transition])
     lines.append("This is the final part: bring the story to a natural close." if index + 1 == total else "This is not the last part: do not conclude the story; leave the action open so the next part can continue.")
-    if idea:
-        lines.append("What this part must show (from the user): " + idea)
+    lines.append("The instructions for this part in the user's text are binding: show them, and only them.")
     return "\n".join(lines)
 
 
@@ -123,7 +170,7 @@ class PROMPTFORGE_H3Options:
                 "transition": (list(TRANSITIONS), {"default": TRANSITIONS[0], "tooltip": "How a part follows the previous one: carry on in the same shot, let the story decide, or cut to a new shot each time (cuts do not carry the previous frames forward)."}),
                 "continuity": (list(CONTINUITY), {"default": CONTINUITY[0], "tooltip": "anchor tail: the previous ending (frames and audio) is anchored at the start of the new part, frame-exact. reference video: H3's own continuation from a reference video. none: every part is independent."}),
                 "context_frames": (list(CONTEXTS), {"default": "22", "tooltip": "Frames of the previous part carried forward (24 per second). More context follows the motion better but costs a little time per part. 1 carries only the last frame."}),
-                "part_ideas": ("STRING", {"default": "", "multiline": True, "tooltip": "Optional: what each part should show. Separate the parts with a line containing only ---. Parts without an idea are continued from the story automatically."}),
+                "part_ideas": ("STRING", {"default": "", "multiline": True, "placeholder": "Part 1: what happens in the first part\nPart 2: what happens in the second part\nPart 3 (10s): a longer part", "tooltip": "What each part shows. Start lines with 'Part 2:', '2.' or '0-5s:' (add (10s) to give one part its own length), or separate parts with a line containing only ---. Start a part with raw: to use your own finished prompt for it. The same markers also work inside the instructions text of the Endless node."}),
             },
             "optional": {
                 "preset_style": (list(PRESET_STYLES), {"default": "standard", "tooltip": "Which family of MiniMax H3 prompt presets the Enhancer uses."}),
@@ -131,6 +178,7 @@ class PROMPTFORGE_H3Options:
                 "dialogue": ("STRING", {"default": "", "multiline": True, "tooltip": "What the dialogue should be about and how it sounds. Written fresh for every part, sized to its length."}),
                 "dialogue_language": ([DIALOGUE_AUTO, "Arabic", "Chinese", "English", "French", "German", "Italian", "Japanese", "Korean", "Portuguese", "Russian", "Spanish", "other (type below)"], {"default": DIALOGUE_AUTO}),
                 "dialogue_language_other": ("STRING", {"default": ""}),
+                "temperature": ("FLOAT", {"default": 0.8, "min": 0.1, "max": 1.0, "step": 0.05, "tooltip": "Creativity of the prompt writer. Lower sticks closer to your text."}),
                 "steps": ("INT", {"default": 8, "min": 1, "max": 200, "tooltip": "6-8 with a turbo LoRA, more without."}),
                 "cfg": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 30.0, "step": 0.1}),
                 "sampler_name": (comfy.samplers.KSampler.SAMPLERS, {"default": "euler"}),
@@ -170,6 +218,7 @@ class PROMPTFORGE_H3Endless:
             },
             "optional": {
                 "options": ("PROMPTFORGE_H3_OPTIONS", {"tooltip": "From a PromptForge H3 Options node. Without it, 3 parts of 5 seconds."}),
+                "decode_vae": ("VAE", {"tooltip": "Optional: decode the video with this VAE instead of the main one, for example the MiniMax H3 2x detail VAE (the Loader's extra_vae). Frames then come out at twice the generation size."}),
                 "first_frame": ("IMAGE", {"tooltip": "Optional first frame of the first part."}),
                 "ref_image_1": ("IMAGE", {"tooltip": "Reference images are used in every part, so the characters stay the same."}),
                 "ref_image_2": ("IMAGE",),
@@ -189,16 +238,25 @@ class PROMPTFORGE_H3Endless:
     CATEGORY = "🔮 PromptForge"
     DESCRIPTION = "Makes a long MiniMax H3 video part by part: writes each part's prompt, continues from the previous ending, previews every part and joins them into one video."
 
-    def generate(self, model, clip, vae, audio_vae, enhancer, instructions, seed, filename_prefix, options=None, first_frame=None,
+    def generate(self, model, clip, vae, audio_vae, enhancer, instructions, seed, filename_prefix, options=None, decode_vae=None, first_frame=None,
                  ref_image_1=None, ref_image_2=None, ref_image_3=None, ref_text_1="", ref_text_2="", ref_text_3="", voice_audio=None, unique_id=None):
         opts = {**DEFAULT_OPTIONS, **(options or {})}
-        total, seconds = int(opts["parts"]), int(opts["seconds"])
+        default_seconds = int(opts["seconds"])
         mode = "none" if opts["transition"] == TRANSITIONS[2] else opts["continuity"]
         context = int(opts["context_frames"])
         if mode == "reference video":
             context = max(5, context)
         width, height = empty_latent.resolve_size("aspect + megapixels", 0, 0, "", opts["aspect_ratio"], opts["megapixels"], opts["orientation"], 32)
-        ideas = split_ideas(opts["part_ideas"], total)
+
+        brief, plan = parse_plan(instructions, False)
+        listed = parse_plan(opts["part_ideas"], True)[1]
+        plan = [part for part in (listed or plan)]
+        brief = brief if plan and not listed else instructions.strip()
+        total = max(int(opts["parts"]), len(plan))
+        if len(plan) > int(opts["parts"]):
+            print(f"[PromptForge] endless video: {len(plan)} parts were described, so {len(plan)} parts will be made.")
+        plan += [{"text": "", "seconds": None}] * (total - len(plan))
+        lengths = [float(part["seconds"] or default_seconds) for part in plan]
 
         pictures = [image for image in (first_frame, ref_image_1, ref_image_2, ref_image_3) if image is not None][:3]
         texts = [text for image, text in zip((ref_image_1, ref_image_2, ref_image_3), (ref_text_1, ref_text_2, ref_text_3)) if image is not None]
@@ -219,12 +277,18 @@ class PROMPTFORGE_H3Endless:
         try:
             for index in range(total):
                 model_management.throw_exception_if_processing_interrupted()
+                seconds = lengths[index]
                 continuing = index > 0 and mode != "none"
                 prefix = context if continuing and mode == "anchor tail" else 0
                 self._status(unique_id, f"Part {index + 1}/{total}: writing the prompt")
-                prompt = self._prompt(enhancer, opts, mode, continuing, index, total, seconds, seed + index, instructions, reference_lines, ideas[index],
-                                      pictures, tail if continuing else None, notes, last_shot, prefix, voice_audio is not None)
+                idea = plan[index]["text"]
+                if idea.lower().startswith("raw:"):
+                    prompt = idea[4:].strip()
+                else:
+                    prompt = self._prompt(enhancer, opts, mode, continuing, index, total, seconds, seed + index, part_text(index, total, brief, reference_lines, plan, seconds),
+                                          pictures, tail if continuing else None, notes, last_shot, prefix)
                 prompts.append(prompt)
+                self._prompt_preview(unique_id, index, prompt)
                 notes_entry = story_note(prompt)
                 notes.append((index + 1, notes_entry[0]))
                 last_shot = notes_entry[1]
@@ -242,13 +306,14 @@ class PROMPTFORGE_H3Endless:
 
                 self._status(unique_id, f"Part {index + 1}/{total}: decoding")
                 self._release()
-                images = minimax_decode.PROMPTFORGE_MiniMaxDecode().decode(latent_out, vae, 0, 0, "cpu", True)[0]
+                images = minimax_decode.PROMPTFORGE_MiniMaxDecode().decode(latent_out, decode_vae if decode_vae is not None else vae, 0, 0, "cpu", True)[0]
                 audio = nodes_audio.vae_decode_audio(audio_vae, {"samples": latent_out["samples"].unbind()[1]})
                 del latent_out
                 self._release()
 
                 sample_rate = int(audio["sample_rate"])
                 wave = audio["waveform"][0].float().cpu()
+                # the decoded frames can be larger than the generation (2x decoder); the frames cut off here are the anchored ending
                 images = images[prefix:]
                 wave = wave[:, round(prefix / FPS * sample_rate):round(prefix / FPS * sample_rate) + round(images.shape[0] / FPS * sample_rate)]
                 preview = self._save_part(images, wave, sample_rate, filename_prefix, opts, index, scratch, parts_video, opts["keep_parts"])
@@ -289,25 +354,22 @@ class PROMPTFORGE_H3Endless:
             PromptServer.instance.send_sync("executed", {"node": str(unique_id), "display_node": str(unique_id), "output": {"promptforge_video": [preview]},
                                                          "prompt_id": next((item[1] for item in PromptServer.instance.prompt_queue.currently_running.values()), None)}, PromptServer.instance.client_id)
 
-    def _prompt(self, enhancer, opts, mode, continuing, index, total, seconds, seed, instructions, reference_lines, idea, pictures, tail, notes, last_shot, prefix, has_voice):
+    @staticmethod
+    def _prompt_preview(unique_id, index, prompt):
+        if unique_id is not None:
+            PromptServer.instance.send_sync("executed", {"node": str(unique_id), "display_node": str(unique_id), "output": {"promptforge_prompt": [{"index": index, "text": prompt}]},
+                                                         "prompt_id": next((item[1] for item in PromptServer.instance.prompt_queue.currently_running.values()), None)}, PromptServer.instance.client_id)
+
+    def _prompt(self, enhancer, opts, mode, continuing, index, total, seconds, seed, text, pictures, tail, notes, last_shot, prefix):
         package = _package()
         refs = list(pictures) + [None] * (3 - len(pictures))
         have_refs = bool(pictures) or (continuing and mode == "reference video")
-        name = "MiniMax H3 Ref2VA" if have_refs else "MiniMax H3 T2VA"
-        preset = ("NSFW › " if opts["preset_style"] == "NSFW" else "") + name
-        lines = [f"Whole video: {total} parts of {seconds} seconds. Brief: {instructions.strip()}"]
-        lines += reference_lines
-        if idea and not continuing:
-            lines.append(f"What this first part must show: {idea}")
-        brief = "\n".join(lines)
-        total_seconds = seconds + prefix / FPS
-        continuation = ""
-        if continuing:
-            continuation = continuation_brief(index, total, seconds, instructions, notes[-4:], last_shot, mode, prefix / FPS, opts["transition"], idea)
+        preset = ("NSFW › " if opts["preset_style"] == "NSFW" else "") + ("MiniMax H3 Ref2VA" if have_refs else "MiniMax H3 T2VA")
+        continuation = continuation_brief(index, total, seconds, notes[-4:], last_shot, mode, prefix / FPS, opts["transition"]) if continuing else ""
         self._release()
         answer, _ = package.PROMPTFORGE_PromptEnhancer().enhance(
-            enhancer, brief, "inputs" if (pictures or tail is not None) else "text_only", preset, seed, 2048, 0.8, 0.95, 40, 1, 1.1, "",
-            video_seconds=max(1, round(total_seconds)), image=refs[0], image2=refs[1], image3=refs[2],
+            enhancer, text, "inputs" if (pictures or tail is not None) else "text_only", preset, seed, 2048, opts["temperature"], 0.95, 40, 1, 1.1, "",
+            video_seconds=max(1, round(seconds + prefix / FPS)), image=refs[0], image2=refs[1], image3=refs[2],
             video=tail if (continuing and mode == "reference video") else None, frame_count=8,
             negative_prompt=opts["negative_prompt"], auto_retry=True, dialogue=opts["dialogue"], dialogue_language=opts["dialogue_language"],
             dialogue_language_other=opts["dialogue_language_other"], continuation=continuation,
