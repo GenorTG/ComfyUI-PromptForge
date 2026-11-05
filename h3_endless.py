@@ -48,7 +48,7 @@ DIALOGUE_AUTO = "auto (from the instructions)"
 DEFAULT_OPTIONS = {
     "parts": 3, "seconds": 5, "aspect_ratio": "16:9", "orientation": "landscape", "megapixels": 0.5, "transition": TRANSITIONS[0],
     "continuity": CONTINUITY[0], "context_frames": 22, "part_ideas": "", "preset_style": "standard", "negative_prompt": "",
-    "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "temperature": 0.8, "seam_check": True, "seam_retries": 2, "steps": 8, "cfg": 1.0,
+    "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "temperature": 0.8, "seam_check": False, "seam_retries": 1, "steps": 8, "cfg": 1.0,
     "sampler_name": "euler", "scheduler": "simple", "codec": "h264 (nvenc)", "quality": 19, "keep_parts": False,
 }
 TRANSITION_TEXT = {
@@ -199,8 +199,8 @@ class PROMPTFORGE_H3Options:
                 "dialogue_language": ([DIALOGUE_AUTO, "Arabic", "Chinese", "English", "French", "German", "Italian", "Japanese", "Korean", "Portuguese", "Russian", "Spanish", "other (type below)"], {"default": DIALOGUE_AUTO}),
                 "dialogue_language_other": ("STRING", {"default": ""}),
                 "temperature": ("FLOAT", {"default": 0.8, "min": 0.1, "max": 1.0, "step": 0.05, "tooltip": "Creativity of the prompt writer. Lower sticks closer to your text."}),
-                "seam_check": ("BOOLEAN", {"default": True, "tooltip": "When a part is meant to continue the same shot, compare its first frame with the previous part's last frame and generate it again with another seed if the picture jumps. Not used when cuts are allowed."}),
-                "seam_retries": ("INT", {"default": 2, "min": 0, "max": 5, "tooltip": "How many times a jumping part is generated again."}),
+                "seam_check": ("BOOLEAN", {"default": False, "tooltip": "When a part is meant to continue the same shot, compare its first frame with the previous part's last frame and generate it again with another seed if the picture jumps. Not used when cuts are allowed."}),
+                "seam_retries": ("INT", {"default": 1, "min": 0, "max": 5, "tooltip": "How many times a jumping part is generated again."}),
                 "steps": ("INT", {"default": 8, "min": 1, "max": 200, "tooltip": "6-8 with a turbo LoRA, more without."}),
                 "cfg": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 30.0, "step": 0.1}),
                 "sampler_name": (comfy.samplers.KSampler.SAMPLERS, {"default": "euler"}),
