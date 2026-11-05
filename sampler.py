@@ -16,6 +16,7 @@ import torch
 from aiohttp import web
 from server import PromptServer
 
+import comfy.model_management
 import comfy.sample
 import comfy.samplers
 import comfy.utils
@@ -164,6 +165,9 @@ class PROMPTFORGE_Sampler:
         if runs > 1 and not isinstance(samples, torch.Tensor):
             raise ValueError("[PromptForge] runs > 1 needs a plain latent; this model uses a combined audio+video latent.")
 
+        device = comfy.model_management.get_torch_device()
+        if device.type == "cuda":
+            torch.cuda.reset_peak_memory_stats(device)
         callback = latent_preview.prepare_callback(model, steps)
         progress = comfy.utils.PROGRESS_BAR_ENABLED
         results = []
@@ -183,6 +187,8 @@ class PROMPTFORGE_Sampler:
         out["samples"] = merged
         schedule = "custom sigmas" if sigmas is not None or custom_sigmas.strip() else scheduler
         info = f"{sampler_name} / {schedule}, {steps} steps, cfg {cfg:g}, denoise {denoise:g}, seed {seed}" + (f" x{runs}" if runs > 1 else "") + (f" ({family})" if family else "") + (f", {step_cache} {cache_threshold:g}" if step_cache != "off" else "")
+        if device.type == "cuda":
+            info += f", peak VRAM {torch.cuda.max_memory_allocated(device) / 1024 ** 3:.1f} GB"
         return (out, used, info)
 
 
