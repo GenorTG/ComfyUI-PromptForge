@@ -1,5 +1,5 @@
 {
- "id": "099f1ea8-9df1-49f9-b345-b76633f68917",
+ "id": "2ddb733f-bcde-491d-b754-aca94492be28",
  "revision": 0,
  "last_node_id": 12,
  "last_link_id": 20,
@@ -223,12 +223,12 @@
     }
    ],
    "properties": {
+    "aux_id": "GenorTG/ComfyUI-PromptForge",
+    "ver": "4fb80270d842520faf782821a2fd23974c40c7b1",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
-    "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "64822ba77c35319374fb41d8f9c7546d8b512018",
     "Node name for S&R": "PROMPTFORGE_Loader"
    },
    "widgets_values": [
@@ -356,12 +356,12 @@
     }
    ],
    "properties": {
+    "aux_id": "GenorTG/ComfyUI-PromptForge",
+    "ver": "4fb80270d842520faf782821a2fd23974c40c7b1",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
-    "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "64822ba77c35319374fb41d8f9c7546d8b512018",
     "Node name for S&R": "PROMPTFORGE_LoraLoader"
    },
    "widgets_values": [
@@ -430,12 +430,12 @@
     }
    ],
    "properties": {
+    "cnr_id": "comfy-core",
+    "ver": "0.43.0",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
-    "cnr_id": "comfy-core",
-    "ver": "0.43.0",
     "Node name for S&R": "MiniMaxH3SigmaShift"
    },
    "widgets_values": [
@@ -489,12 +489,12 @@
     }
    ],
    "properties": {
+    "cnr_id": "comfy-core",
+    "ver": "0.43.0",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
-    "cnr_id": "comfy-core",
-    "ver": "0.43.0",
     "Node name for S&R": "ModelAttentionBackend"
    },
    "widgets_values": [
@@ -555,12 +555,12 @@
     }
    ],
    "properties": {
+    "cnr_id": "comfyui-workflow-encrypt",
+    "ver": "1.0.0",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
-    "cnr_id": "comfyui-workflow-encrypt",
-    "ver": "1.0.0",
     "Node name for S&R": "MiniMaxChunkFeedForward"
    },
    "widgets_values": [
@@ -675,12 +675,12 @@
    ],
    "title": "Latent preview (per part)",
    "properties": {
+    "cnr_id": "comfyui-workflow-encrypt",
+    "ver": "1.0.0",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
-    "cnr_id": "comfyui-workflow-encrypt",
-    "ver": "1.0.0",
     "Node name for S&R": "ModelPreviewOverrideKJ"
    },
    "widgets_values": [
@@ -788,12 +788,12 @@
    ],
    "title": "Prompt writer model",
    "properties": {
+    "aux_id": "GenorTG/ComfyUI-PromptForge",
+    "ver": "4fb80270d842520faf782821a2fd23974c40c7b1",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
-    "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "64822ba77c35319374fb41d8f9c7546d8b512018",
     "Node name for S&R": "PROMPTFORGE_Model"
    },
    "widgets_values": [
@@ -879,12 +879,12 @@
    ],
    "title": "Character 1",
    "properties": {
+    "aux_id": "GenorTG/ComfyUI-PromptForge",
+    "ver": "4fb80270d842520faf782821a2fd23974c40c7b1",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
-    "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "64822ba77c35319374fb41d8f9c7546d8b512018",
     "Node name for S&R": "PROMPTFORGE_LoadImage"
    },
    "widgets_values": [
@@ -964,12 +964,12 @@
    ],
    "title": "Character 2 (optional)",
    "properties": {
+    "aux_id": "GenorTG/ComfyUI-PromptForge",
+    "ver": "4fb80270d842520faf782821a2fd23974c40c7b1",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
-    "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "64822ba77c35319374fb41d8f9c7546d8b512018",
     "Node name for S&R": "PROMPTFORGE_LoadImage"
    },
    "widgets_values": [
@@ -992,7 +992,7 @@
    ],
    "size": [
     400,
-    652
+    724
    ],
    "flags": {},
    "order": 10,
@@ -1130,16 +1130,6 @@
      "link": null
     },
     {
-     "localized_name": "temperature",
-     "name": "temperature",
-     "shape": 7,
-     "type": "FLOAT",
-     "widget": {
-      "name": "temperature"
-     },
-     "link": null
-    },
-    {
      "localized_name": "steps",
      "name": "steps",
      "shape": 7,
@@ -1208,6 +1198,46 @@
       "name": "keep_parts"
      },
      "link": null
+    },
+    {
+     "localized_name": "temperature",
+     "name": "temperature",
+     "shape": 7,
+     "type": "FLOAT",
+     "widget": {
+      "name": "temperature"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "seam_blend",
+     "name": "seam_blend",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "seam_blend"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "seam_check",
+     "name": "seam_check",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "seam_check"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "seam_retries",
+     "name": "seam_retries",
+     "shape": 7,
+     "type": "INT",
+     "widget": {
+      "name": "seam_retries"
+     },
+     "link": null
     }
    ],
    "outputs": [
@@ -1221,12 +1251,12 @@
     }
    ],
    "properties": {
+    "aux_id": "GenorTG/ComfyUI-PromptForge",
+    "ver": "4fb80270d842520faf782821a2fd23974c40c7b1",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
-    "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "64822ba77c35319374fb41d8f9c7546d8b512018",
     "Node name for S&R": "PROMPTFORGE_H3Options"
    },
    "widgets_values": [
@@ -1244,14 +1274,17 @@
     "",
     "auto (from the instructions)",
     "",
-    0.8,
     8,
     1,
     "euler",
     "simple",
     "h264 (nvenc)",
     19,
-    false
+    false,
+    0.8,
+    true,
+    false,
+    1
    ],
    "widgets_values_named": {
     "parts": 3,
@@ -1268,14 +1301,17 @@
     "dialogue": "",
     "dialogue_language": "auto (from the instructions)",
     "dialogue_language_other": "",
-    "temperature": 0.8,
     "steps": 8,
     "cfg": 1,
     "sampler_name": "euler",
     "scheduler": "simple",
     "codec": "h264 (nvenc)",
     "quality": 19,
-    "keep_parts": false
+    "keep_parts": false,
+    "temperature": 0.8,
+    "seam_blend": true,
+    "seam_check": false,
+    "seam_retries": 1
    }
   },
   {
@@ -1436,12 +1472,12 @@
     }
    ],
    "properties": {
+    "aux_id": "GenorTG/ComfyUI-PromptForge",
+    "ver": "4fb80270d842520faf782821a2fd23974c40c7b1",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
-    "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "64822ba77c35319374fb41d8f9c7546d8b512018",
     "Node name for S&R": "PROMPTFORGE_H3Endless"
    },
    "widgets_values": [

@@ -211,10 +211,6 @@ class PROMPTFORGE_H3Options:
                 "dialogue": ("STRING", {"default": "", "multiline": True, "tooltip": "What the dialogue should be about and how it sounds. Written fresh for every part, sized to its length."}),
                 "dialogue_language": ([DIALOGUE_AUTO, "Arabic", "Chinese", "English", "French", "German", "Italian", "Japanese", "Korean", "Portuguese", "Russian", "Spanish", "other (type below)"], {"default": DIALOGUE_AUTO}),
                 "dialogue_language_other": ("STRING", {"default": ""}),
-                "temperature": ("FLOAT", {"default": 0.8, "min": 0.1, "max": 1.0, "step": 0.05, "tooltip": "Creativity of the prompt writer. Lower sticks closer to your text."}),
-                "seam_blend": ("BOOLEAN", {"default": True, "tooltip": "Evens out the brief light flash at the join: the first third of a second of the new part is brought onto a straight brightness/colour line from the previous part's last frame. Skipped when the change is large enough to be a real cut."}),
-                "seam_check": ("BOOLEAN", {"default": False, "tooltip": "When a part is meant to continue the same shot, compare its first frame with the previous part's last frame and generate it again with another seed if the picture jumps. Not used when cuts are allowed."}),
-                "seam_retries": ("INT", {"default": 1, "min": 0, "max": 5, "tooltip": "How many times a jumping part is generated again."}),
                 "steps": ("INT", {"default": 8, "min": 1, "max": 200, "tooltip": "6-8 with a turbo LoRA, more without."}),
                 "cfg": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 30.0, "step": 0.1}),
                 "sampler_name": (comfy.samplers.KSampler.SAMPLERS, {"default": "euler"}),
@@ -222,6 +218,10 @@ class PROMPTFORGE_H3Options:
                 "codec": (list(video_save.CODECS), {"default": "h264 (nvenc)"}),
                 "quality": ("INT", {"default": 19, "min": 0, "max": 63}),
                 "keep_parts": ("BOOLEAN", {"default": False, "tooltip": "Also keep every part (with its audio) as its own file in the output folder."}),
+                "temperature": ("FLOAT", {"default": 0.8, "min": 0.1, "max": 1.0, "step": 0.05, "tooltip": "Creativity of the prompt writer. Lower sticks closer to your text."}),
+                "seam_blend": ("BOOLEAN", {"default": True, "tooltip": "Evens out the brief light flash at the join: the first third of a second of the new part is brought onto a straight brightness/colour line from the previous part's last frame. Skipped when the change is large enough to be a real cut."}),
+                "seam_check": ("BOOLEAN", {"default": False, "tooltip": "When a part is meant to continue the same shot, compare its first frame with the previous part's last frame and generate it again with another seed if the picture jumps. Not used when cuts are allowed."}),
+                "seam_retries": ("INT", {"default": 1, "min": 0, "max": 5, "tooltip": "How many times a jumping part is generated again."}),
             },
         }
 
