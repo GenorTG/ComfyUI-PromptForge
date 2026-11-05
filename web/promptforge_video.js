@@ -1,13 +1,13 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 
-const NODE = "PROMPTFORGE_SaveVideo";
+const NODES = ["PROMPTFORGE_SaveVideo", "PROMPTFORGE_H3Endless"];
 const HEIGHT = 260;
 
 app.registerExtension({
   name: "PromptForge.SaveVideo",
   async beforeRegisterNodeDef(nodeType, nodeData) {
-    if (nodeData.name !== NODE) return;
+    if (!NODES.includes(nodeData.name)) return;
     const onCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
       onCreated?.apply(this, arguments);
@@ -35,6 +35,7 @@ app.registerExtension({
       };
       for (const name of ["show_preview", "loop_preview", "autoplay_preview"]) {
         const toggle = option(name);
+        if (!toggle) continue;
         const callback = toggle.callback;
         toggle.callback = function () { callback?.apply(this, arguments); apply(); };
       }

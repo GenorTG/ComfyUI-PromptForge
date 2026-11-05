@@ -32,6 +32,7 @@ from .sampler import NODE_CLASS_MAPPINGS as SAMPLER_CLASS_MAPPINGS, NODE_DISPLAY
 from .quantize_model import NODE_CLASS_MAPPINGS as QUANT_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as QUANT_DISPLAY_NAMES
 from .minimax_decode import NODE_CLASS_MAPPINGS as DECODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as DECODE_DISPLAY_NAMES
 from . import image_library
+from .h3_endless import NODE_CLASS_MAPPINGS as ENDLESS_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as ENDLESS_DISPLAY_NAMES
 from .load_image import NODE_CLASS_MAPPINGS as IMAGE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as IMAGE_DISPLAY_NAMES
 import transformers
 from transformers import AutoModelForCausalLM, AutoProcessor, AutoTokenizer, BitsAndBytesConfig
@@ -1724,6 +1725,8 @@ class PROMPTFORGE_PromptEnhancer:
                 "dialogue_language": ([DIALOGUE_AUTO, *DIALOGUE_LANGUAGES, DIALOGUE_OTHER], {"default": DIALOGUE_AUTO, "tooltip": "Language of the spoken lines. The list is what MiniMax H3 speaks reliably."}),
                 "dialogue_language_other": ("STRING", {"default": "", "tooltip": "Used when dialogue_language is 'other', for example Polish. Languages outside the list are only partially supported by the video model."}),
                 "auto_retry": ("BOOLEAN", {"default": True, "tooltip": "Regenerate with a new seed (up to 3 tries) when the output looks empty, repetitive, leaked reasoning or a refusal. Turn off to always keep the first output."}),
+                "continuation": ("STRING", {"default": "", "multiline": True, "tooltip": "Video presets only (MiniMax H3). A continuation brief added to the system prompt; the Endless Video node fills this in."}),
+                "context_video": ("IMAGE", {"tooltip": "Video presets only (MiniMax H3). Frames the generator will start from. The model looks at them to continue the action, but they are never cited as <Video 1>."}),
             },
         }
 
@@ -1756,6 +1759,8 @@ class PROMPTFORGE_PromptEnhancer:
         dialogue="",
         dialogue_language=DIALOGUE_AUTO,
         dialogue_language_other="",
+        continuation="",
+        context_video=None,
         **kwargs,
     ):
         if enhancement_preset == "auto" and pipe:
@@ -1800,6 +1805,9 @@ class PROMPTFORGE_PromptEnhancer:
         if minimax_key:
             image, image2, image3, video, minimax_block = self._minimax_inputs(minimax_key, mode, image, image2, image3, video, frame_count, duration_text)
         media_line = self._media_inventory(mode, image, image2, image3, video, frame_count)
+        labelled_video = video is not None
+        if minimax_key and mode != "text_only" and self._has_media(context_video):
+            video = context_video
         dialogue_block = _dialogue_block(dialogue, dialogue_language, dialogue_language_other, float(video_seconds)) if minimax_key else ""
         negative_text = (negative_prompt or "").strip()
         negative_line = ""
@@ -1811,7 +1819,8 @@ class PROMPTFORGE_PromptEnhancer:
                 ". Write the scene so they are absent, converting each exclusion into a positive description "
                 "of the desired state; never name them inside the prompt itself."
             )
-        system_parts = [p for p in (sys_text, media_line, minimax_block, dialogue_block, negative_line, guard) if p and p.strip()]
+        continuation_block = (continuation or "").strip() if minimax_key else ""
+        system_parts = [p for p in (sys_text, media_line, minimax_block, continuation_block, dialogue_block, negative_line, guard) if p and p.strip()]
         user_parts = [p for p in (user_text, duration_line) if p and p.strip()]
         system_prompt = "\n\n".join(system_parts)
         user_prompt = "\n\n".join(user_parts)
@@ -1895,7 +1904,7 @@ class PROMPTFORGE_PromptEnhancer:
         answer, thinking = _split_thinking(enhanced)
         answer = _clean_prompt_output(answer)
         if minimax_key:
-            answer = _drop_absent_references(answer, sum(value is not None for value in (image, image2, image3)), video is not None, user_text)
+            answer = _drop_absent_references(answer, sum(value is not None for value in (image, image2, image3)), labelled_video, user_text)
         preset_lower = (enhancement_preset or "").lower()
         if not any(marker in preset_lower for marker in ("minimax", "wan", "ltx", "ace-step")):
             answer = _strip_video_meta(answer)
@@ -2591,6 +2600,7 @@ NODE_CLASS_MAPPINGS = {
     **QUANT_CLASS_MAPPINGS,
     **DECODE_CLASS_MAPPINGS,
     **IMAGE_CLASS_MAPPINGS,
+    **ENDLESS_CLASS_MAPPINGS,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -2606,6 +2616,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **QUANT_DISPLAY_NAMES,
     **DECODE_DISPLAY_NAMES,
     **IMAGE_DISPLAY_NAMES,
+    **ENDLESS_DISPLAY_NAMES,
 }
 
 WEB_DIRECTORY = "./web"
