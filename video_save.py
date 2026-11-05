@@ -106,6 +106,8 @@ class PROMPTFORGE_SaveVideo:
             "optional": {
                 "audio": ("AUDIO",),
                 "audio_bitrate_kbps": ("INT", {"default": 192, "min": 32, "max": 512}),
+                "show_preview": ("BOOLEAN", {"default": True, "tooltip": "Show the video inside the node after it is saved."}),
+                "loop_preview": ("BOOLEAN", {"default": True, "tooltip": "Loop the preview. Takes effect straight away, no rerun needed."}),
             },
             "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
         }
@@ -117,7 +119,7 @@ class PROMPTFORGE_SaveVideo:
     DESCRIPTION = "VHS-style video save with GPU colour conversion and a single ffmpeg pass for video and audio."
 
     def save(self, images, frame_rate, filename_prefix, codec, speed, rate_control, quality, bitrate_mbit, bit_depth,
-             save_output, pingpong, save_metadata, audio=None, audio_bitrate_kbps=192, prompt=None, extra_pnginfo=None):
+             save_output, pingpong, save_metadata, audio=None, audio_bitrate_kbps=192, show_preview=True, loop_preview=True, prompt=None, extra_pnginfo=None):
         count, height, width = (int(size) for size in images.shape[:3])
         bits = int(bit_depth)
         encoder, presets, quality_flag, pix_fmt_10 = CODECS[codec]
@@ -172,7 +174,7 @@ class PROMPTFORGE_SaveVideo:
             shutil.rmtree(scratch, ignore_errors=True)
 
         preview = {"filename": filename, "subfolder": subfolder, "type": "output" if save_output else "temp"}
-        return {"ui": {"images": [preview], "animated": (True,)}}
+        return {"ui": {"promptforge_video": [preview]}}
 
     def _encode(self, args, images, order, bits, total):
         device = model_management.get_torch_device()
