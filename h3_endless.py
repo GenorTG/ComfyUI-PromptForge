@@ -48,7 +48,7 @@ DIALOGUE_AUTO = "auto (from the instructions)"
 DEFAULT_OPTIONS = {
     "parts": 3, "seconds": 5, "aspect_ratio": "16:9", "orientation": "landscape", "megapixels": 0.5, "transition": TRANSITIONS[0],
     "continuity": CONTINUITY[0], "context_frames": 22, "part_ideas": "", "preset_style": "standard", "negative_prompt": "",
-    "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "temperature": 0.8, "seam_check": False, "seam_retries": 1, "steps": 8, "cfg": 1.0,
+    "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "temperature": 0.8, "seam_blend": True, "seam_check": False, "seam_retries": 1, "steps": 8, "cfg": 1.0,
     "sampler_name": "euler", "scheduler": "simple", "codec": "h264 (nvenc)", "quality": 19, "keep_parts": False,
 }
 TRANSITION_TEXT = {
@@ -171,6 +171,19 @@ def seam_jump(previous_last, previous_before, first):
     return float((gray(first) - gray(previous_last)).abs().mean()), float((gray(previous_last) - gray(previous_before)).abs().mean())
 
 
+def blend_seam(previous, images, limit=0.08, frames=8):
+    """Evens out the brightness/colour flash at a join: the first `frames` frames get their average colour moved onto a straight line from the previous part's last frame to where the new part settles. A difference above `limit` is a real change and stays."""
+    count = min(frames, images.shape[0] - 1)
+    means = images[:count + 1].mean(dim=(1, 2))
+    start, settled = previous[-1].mean(dim=(0, 1)), means[count]
+    if (settled - start).abs().max() > limit:
+        return images, settled - start
+    steps = torch.arange(1, count + 1, dtype=images.dtype).view(-1, 1) / (count + 1)
+    correction = start + (settled - start) * steps - means[:count]
+    images[:count] = (images[:count] + correction.view(count, 1, 1, 3)).clamp_(0, 1)
+    return images, correction.abs().max(dim=0).values
+
+
 def tail_audio(waveform, sample_rate, frames):
     """The last `frames` frames of a part's audio, as an audio dict for the H3 guide."""
     count = min(waveform.shape[-1], round(frames / FPS * sample_rate))
@@ -199,6 +212,7 @@ class PROMPTFORGE_H3Options:
                 "dialogue_language": ([DIALOGUE_AUTO, "Arabic", "Chinese", "English", "French", "German", "Italian", "Japanese", "Korean", "Portuguese", "Russian", "Spanish", "other (type below)"], {"default": DIALOGUE_AUTO}),
                 "dialogue_language_other": ("STRING", {"default": ""}),
                 "temperature": ("FLOAT", {"default": 0.8, "min": 0.1, "max": 1.0, "step": 0.05, "tooltip": "Creativity of the prompt writer. Lower sticks closer to your text."}),
+                "seam_blend": ("BOOLEAN", {"default": True, "tooltip": "Evens out the brief light flash at the join: the first third of a second of the new part is brought onto a straight brightness/colour line from the previous part's last frame. Skipped when the change is large enough to be a real cut."}),
                 "seam_check": ("BOOLEAN", {"default": False, "tooltip": "When a part is meant to continue the same shot, compare its first frame with the previous part's last frame and generate it again with another seed if the picture jumps. Not used when cuts are allowed."}),
                 "seam_retries": ("INT", {"default": 1, "min": 0, "max": 5, "tooltip": "How many times a jumping part is generated again."}),
                 "steps": ("INT", {"default": 8, "min": 1, "max": 200, "tooltip": "6-8 with a turbo LoRA, more without."}),
@@ -354,6 +368,9 @@ class PROMPTFORGE_H3Endless:
                 wave = audio["waveform"][0].float().cpu()
                 # the decoded frames can be larger than the generation (2x decoder); the frames cut off here are the anchored ending
                 images = images[prefix:]
+                if opts["seam_blend"] and previous is not None and continuing:
+                    images, offset = blend_seam(previous, images)
+                    print(f"[PromptForge] endless video: part {index + 1} join colour correction up to {[round(float(value) * 255, 1) for value in offset]} (0-255)")
                 wave = wave[:, round(prefix / FPS * sample_rate):round(prefix / FPS * sample_rate) + round(images.shape[0] / FPS * sample_rate)]
                 preview = self._save_part(images, wave, sample_rate, filename_prefix, opts, index, scratch, parts_video, opts["keep_parts"])
                 parts_audio.append(wave)
