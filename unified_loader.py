@@ -1,7 +1,7 @@
 """PromptForge Loader: one node for checkpoint / diffusion model / GGUF + text encoders + VAEs.
 
-It calls ComfyUI's own loaders (and ComfyUI-GGUF's when installed) rather than copying them, so new model
-types and loader fixes in ComfyUI apply here automatically. Its own jobs are choosing the text encoder type
+It calls ComfyUI's own loaders (GGUF files go through gguf_native, the GGUF loading code of ComfyUI-GGUF), so new
+model types and loader fixes in ComfyUI apply here automatically. Its own jobs are choosing the text encoder type
 from the model family, picking baked-in components, and choosing weight settings for this machine.
 
 File choices carry a source tag: "[ckpt] x", "[unet] x", "[gguf] x" for models and "[te] x", "[gguf] x" for
@@ -19,14 +19,14 @@ import comfy.utils
 import folder_paths
 import nodes
 
-from . import autotune, families
+from . import autotune, families, gguf_native
 
 AUTO = "auto"
 BAKED = "(baked-in)"
 NONE = "(none)"
 CLIP_SLOTS = 4
 TAG = re.compile(r"^\[(ckpt|unet|gguf|te)\] (.+)$")
-# (tag, folder key) per kind of file; the gguf folders exist only when ComfyUI-GGUF is installed
+# (tag, folder key) per kind of file; the gguf folders are made by gguf_native
 MODEL_SOURCES = (("ckpt", "checkpoints"), ("unet", "diffusion_models"), ("gguf", "unet_gguf"))
 CLIP_SOURCES = (("te", "text_encoders"), ("gguf", "clip_gguf"))
 WEIGHT_DTYPES = (AUTO, "default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2", "bf16", "fp16", "fp32")
@@ -185,15 +185,8 @@ class PROMPTFORGE_Loader:
         stored = {dtype for _, dtype in header.values()}
         return autotune.choose_weight_dtype(stored, os.path.getsize(path), optimize_for)
 
-    @staticmethod
-    def _gguf_node(name):
-        node = nodes.NODE_CLASS_MAPPINGS.get(name)
-        if node is None:
-            raise ValueError("[PromptForge] GGUF files need the ComfyUI-GGUF custom node pack.")
-        return node()
-
     def _load_gguf(self, name):
-        return self._gguf_node("UnetLoaderGGUFAdvanced").load_unet(name, "default", "default", False)[0]
+        return gguf_native.load_unet(folder_paths.get_full_path_or_raise("unet_gguf", name))
 
     def _load_clip(self, choices, clip_type, chosen, device):
         resolved = [_resolve(choice, CLIP_SOURCES) for choice in choices]
@@ -203,8 +196,7 @@ class PROMPTFORGE_Loader:
         else:
             type_ = getattr(comfy.sd.CLIPType, clip_type.upper())
         if any(entry[0] == "gguf" for entry in resolved):
-            loader = self._gguf_node("CLIPLoaderGGUF")
-            return loader.load_patcher(paths, type_, loader.load_data(paths))
+            return gguf_native.load_clip(paths, type_)
         options = {}
         if device == "cpu":
             options["load_device"] = options["offload_device"] = torch.device("cpu")
