@@ -116,9 +116,9 @@ class PROMPTFORGE_LoadImage:
             return float("nan")
 
     @classmethod
-    def VALIDATE_INPUTS(cls, image):
-        if not image.strip():
-            return "choose an image first"
+    def VALIDATE_INPUTS(cls, image, enabled=True):
+        if not image.strip() or not enabled:
+            return True
         try:
             return True if _resolve(image).is_file() else f"{image} does not exist"
         except ValueError as error:
