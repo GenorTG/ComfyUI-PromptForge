@@ -43,11 +43,12 @@ DEFAULTS = {
     "references": {"description_1": "", "description_2": "", "description_3": ""},
     "format": {"aspect_ratio": "16:9", "orientation": "landscape", "megapixels": 0.5, "seconds_per_part": "5"},
     "continuity": {"how_parts_join": next(iter(JOIN_MODES)), "story_style": STORY_STYLES[0], "carried_frames": "22", "smooth_joins": True, "check_joins": False, "join_retries": 1},
-    "sampling": {"sampler_name": "euler", "scheduler": "simple", "steps": 8, "cfg": 1.0},
+    "sampling": {"sampler_name": "er_sde", "scheduler": "sgm_uniform", "steps": 8, "cfg": 1.0, "shift_video": 12.0, "shift_audio": 3.0},
     "second_stage": {"upscale_model": h3_upscaler.default_model(), "size_mode": h3_upscaler.MODES[0], "scale": 2.0, "megapixels": 1.0, "width": 1280, "height": 704, "align": 32,
                     "precision": "fp16", "steps": 3, "start_sigma": 0.9035, "sampler_name": "er_sde"},
     "preview": {"mode": PREVIEW_MODES[0], "frames": 4, "fps": 8, "size": 512, "decoder": preview_decoder.default_decoder()},
-    "performance": {"attention": ATTENTION[0], "ffn_chunks": 3},
+    "performance": {"attention": ATTENTION[0], "ffn_chunks": 3, "sparse_attention": True, "keep_percent": 10.0},
+    "continue_from": {},
 }
 
 
@@ -164,10 +165,12 @@ class PROMPTFORGE_H3Sampling(_Settings):
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "sampler_name": (comfy.samplers.KSampler.SAMPLERS, {"default": "euler"}),
-                "scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"default": "simple"}),
+                "sampler_name": (comfy.samplers.KSampler.SAMPLERS, {"default": "er_sde", "tooltip": "er_sde with sgm_uniform or euler with simple are the reliable pairs for 8-step turbo H3 models."}),
+                "scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"default": "sgm_uniform"}),
                 "steps": ("INT", {"default": 8, "min": 1, "max": 200, "tooltip": "Steps of the first stage."}),
                 "cfg": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 30.0, "step": 0.1, "tooltip": "1 for turbo and distilled models."}),
+                "shift_video": ("FLOAT", {"default": 12.0, "min": 0.01, "max": 100.0, "step": 0.01, "tooltip": "Noise schedule shift of the video. 12 for MiniMax H3 turbo models; it is applied to the model, no shift node is needed."}),
+                "shift_audio": ("FLOAT", {"default": 3.0, "min": 0.01, "max": 100.0, "step": 0.01, "tooltip": "Noise schedule shift of the audio. 3 for MiniMax H3."}),
             },
         }
 
@@ -228,13 +231,30 @@ class PROMPTFORGE_H3Performance(_Settings):
             "required": {
                 "attention": (list(ATTENTION), {"default": ATTENTION[0], "tooltip": "comfy kitchen attention is INT8 attention: about 40% faster for MiniMax H3 with a tiny precision cost (it falls back to pytorch where it is not available). as connected keeps what the model already has."}),
                 "ffn_chunks": ("INT", {"default": 3, "min": 1, "max": 64, "tooltip": "Splits the model's feed-forward layers into this many chunks: lower peak VRAM, same result. 1 = off."}),
+                "sparse_attention": ("BOOLEAN", {"default": True, "tooltip": "Video sparse attention (VSA): faster, and the FastH3-based models (10Eros Max betas) are trained for it - without it they flicker. Turn off for other H3 checkpoints. The first blocks and short sequences stay dense."}),
+                "keep_percent": ("FLOAT", {"default": 10.0, "min": 0.5, "max": 95.0, "step": 0.5, "tooltip": "Share of the video each part of the picture attends to. FastH3 models are trained at 10 (90% sparse)."}),
             },
+        }
+
+
+class PROMPTFORGE_H3ContinueFrom(_Settings):
+    KEY = "continue_from"
+    RETURN_TYPES = ("PROMPTFORGE_H3_CONTINUE",)
+    RETURN_NAMES = ("continue_from",)
+    DESCRIPTION = "Extend a video you already have: the first part continues from its ending (frames and sound), and the result is the old video followed by the new parts."
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {"video": ("IMAGE", {"tooltip": "The video to extend, as frames (from a Load Video node, or a previous Endless Video result)."})},
+            "optional": {"audio": ("AUDIO", {"tooltip": "Its sound. Without it the old part is silent."})},
         }
 
 
 NODES = {
     "PROMPTFORGE_H3Story": ("PromptForge H3 Story", PROMPTFORGE_H3Story),
     "PROMPTFORGE_H3References": ("PromptForge H3 References", PROMPTFORGE_H3References),
+    "PROMPTFORGE_H3ContinueFrom": ("PromptForge H3 Continue Existing Video", PROMPTFORGE_H3ContinueFrom),
     "PROMPTFORGE_H3Format": ("PromptForge H3 Video Format", PROMPTFORGE_H3Format),
     "PROMPTFORGE_H3Continuity": ("PromptForge H3 Continuity", PROMPTFORGE_H3Continuity),
     "PROMPTFORGE_H3Sampling": ("PromptForge H3 Sampling", PROMPTFORGE_H3Sampling),

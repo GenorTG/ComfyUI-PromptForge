@@ -24,6 +24,7 @@ import time
 
 import psutil
 import torch
+import torchaudio
 from aiohttp import web
 from server import PromptServer
 
@@ -33,11 +34,14 @@ import comfy.nested_tensor
 import comfy.ops
 import comfy.utils
 from comfy_extras import nodes_audio, nodes_minimax_h3
+from comfy_extras.nodes_sparse_attention import BlockSparseAttention
 from comfy_extras.nodes_model_advanced import ModelAttentionBackend
 
 from . import empty_latent, h3_settings, h3_upscaler, minimax_decode, preview_override, sampler
 
+SPARSE_DENSE_BLOCKS = "0, 1"
 FPS = 24
+SILENCE_RATE = 32000
 GRID = 17
 SEAM_FLOOR = 25.0
 SEAM_RATIO = 6.0
@@ -228,13 +232,14 @@ class PROMPTFORGE_H3Generate:
                 "second_stage": ("PROMPTFORGE_H3_SECOND_STAGE", {"tooltip": "Connect to upscale every part and sample it again. Not connected: one stage."}),
                 "preview": ("PROMPTFORGE_H3_PREVIEW", {"tooltip": "Settings of the live preview. Default: a 4-frame loop."}),
                 "performance": ("PROMPTFORGE_H3_PERFORMANCE", {"tooltip": "Attention backend and feed-forward chunking. Default: the fast settings."}),
+                "continue_from": ("PROMPTFORGE_H3_CONTINUE", {"tooltip": "An existing video to extend: the first part continues from its ending and the result starts with that video."}),
                 "decode_vae": ("VAE", {"tooltip": "Decode with this VAE instead of the video VAE, for example the MiniMax H3 2x detail decoder (the Loader's extra VAE). The frames then come out twice as large."}),
             },
             "hidden": {"unique_id": "UNIQUE_ID"},
         }
 
     def generate(self, model, clip, vae, audio_vae, writer, story, seed, references=None, format=None, continuity=None, sampling=None, second_stage=None,
-                 preview=None, performance=None, decode_vae=None, unique_id=None):
+                 preview=None, performance=None, continue_from=None, decode_vae=None, unique_id=None):
         story = h3_settings.settings("story", story)
         refs = h3_settings.settings("references", references)
         fmt = h3_settings.settings("format", format)
@@ -254,6 +259,9 @@ class PROMPTFORGE_H3Generate:
             model = ModelAttentionBackend.execute(model, perf["attention"]).args[0]
         if int(perf["ffn_chunks"]) > 1:
             model = chunk_feed_forward(model, int(perf["ffn_chunks"]))
+        model = nodes_minimax_h3.MiniMaxH3SigmaShift.execute(model, sampling["shift_video"], sampling["shift_audio"]).args[0]
+        if perf["sparse_attention"]:
+            model = BlockSparseAttention.execute(model, {"selection": "vsa", "keep_percent": perf["keep_percent"]}, 0.0, 1.0, SPARSE_DENSE_BLOCKS).args[0]
 
         total = max(1, int(story["parts"]))
         plan = (part_boxes(story["part_prompts"]) + [{"text": "", "seconds": None}] * total)[:total]
@@ -277,6 +285,14 @@ class PROMPTFORGE_H3Generate:
         review = {"on": bool(story["review_prompts"]) and unique_id is not None and PromptServer.instance.client_id is not None}
         if story["review_prompts"] and not review["on"]:
             print("[PromptForge] endless video: review_prompts needs the ComfyUI page (run it from the browser); continuing without review.")
+        source = None
+        if continue_from is not None:
+            source = continue_from["video"][..., :3]
+            tail = source[-context:].clone() if context > 1 else source[-1:].clone()
+            previous = source[-2:].clone()
+            old = continue_from.get("audio")
+            sample_rate = int(old["sample_rate"]) if old is not None else SILENCE_RATE
+            tail_wave = old["waveform"][0].float().cpu() if old is not None else torch.zeros(2, round(source.shape[0] / FPS * sample_rate))
         self._status(unique_id, "Starting")
         try:
             for index in range(total):
@@ -284,7 +300,7 @@ class PROMPTFORGE_H3Generate:
                 seconds = lengths[index]
                 clock = time.time()
                 marks = {}
-                continuing = index > 0 and mode != "none"
+                continuing = (index > 0 or source is not None) and mode != "none"
                 prefix = context if continuing and mode == "anchor tail" else 0
                 self._status(unique_id, f"Part {index + 1}/{total}: writing the prompt")
                 idea = plan[index]["text"]
@@ -365,9 +381,31 @@ class PROMPTFORGE_H3Generate:
             self._release()
 
         self._status(unique_id, "Done")
+        if source is not None:
+            parts_frames.insert(0, self._fit(source, parts_frames[0]).half())
+            parts_audio.insert(0, self._resample(old, parts_audio[0].shape[0], sample_rate, source.shape[0]))
         video = self._assemble(parts_frames)
         text = "\n\n".join(f"--- Part {number + 1} ---\n{prompt}" for number, prompt in enumerate(prompts))
         return (video, {"waveform": torch.cat(parts_audio, dim=1)[None], "sample_rate": sample_rate}, text, "\n".join(report))
+
+    @staticmethod
+    def _fit(frames, like):
+        """The frames of an existing video at the size of the new parts."""
+        if frames.shape[1:3] == like.shape[1:3]:
+            return frames
+        return comfy.utils.common_upscale(frames.movedim(-1, 1), like.shape[2], like.shape[1], "lanczos", "center").movedim(1, -1)
+
+    @staticmethod
+    def _resample(audio, channels, rate, frames):
+        """The sound of an existing video (silence without any) in the format of the new parts, as long as its picture."""
+        count = round(frames / FPS * rate)
+        if audio is None:
+            return torch.zeros(channels, count)
+        wave = audio["waveform"][0].float().cpu()
+        if audio["sample_rate"] != rate:
+            wave = torchaudio.functional.resample(wave, audio["sample_rate"], rate)
+        wave = wave.mean(0, keepdim=True).expand(channels, -1) if wave.shape[0] != channels else wave
+        return torch.nn.functional.pad(wave[:, :count], (0, max(0, count - wave.shape[1])))
 
     @staticmethod
     def _assemble(parts):

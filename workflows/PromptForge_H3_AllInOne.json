@@ -1,0 +1,2750 @@
+{
+ "id": "f8ec9a73-4c7d-4dab-93c1-f15f98080784",
+ "revision": 0,
+ "last_node_id": 24,
+ "last_link_id": 32,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "PROMPTFORGE_Loader",
+   "pos": [
+    860,
+    60
+   ],
+   "size": [
+    270,
+    466
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "COMBO",
+     "widget": {
+      "name": "model"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "family",
+     "name": "family",
+     "type": "COMBO",
+     "widget": {
+      "name": "family"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "weight_dtype",
+     "name": "weight_dtype",
+     "type": "COMBO",
+     "widget": {
+      "name": "weight_dtype"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "optimize_for",
+     "name": "optimize_for",
+     "type": "COMBO",
+     "widget": {
+      "name": "optimize_for"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "clip_1",
+     "name": "clip_1",
+     "type": "COMBO",
+     "widget": {
+      "name": "clip_1"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "clip_2",
+     "name": "clip_2",
+     "type": "COMBO",
+     "widget": {
+      "name": "clip_2"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "clip_3",
+     "name": "clip_3",
+     "type": "COMBO",
+     "widget": {
+      "name": "clip_3"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "clip_4",
+     "name": "clip_4",
+     "type": "COMBO",
+     "widget": {
+      "name": "clip_4"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "clip_type",
+     "name": "clip_type",
+     "type": "COMBO",
+     "widget": {
+      "name": "clip_type"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "clip_device",
+     "name": "clip_device",
+     "type": "COMBO",
+     "widget": {
+      "name": "clip_device"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "vae",
+     "name": "vae",
+     "type": "COMBO",
+     "widget": {
+      "name": "vae"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "audio_vae",
+     "name": "audio_vae",
+     "type": "COMBO",
+     "widget": {
+      "name": "audio_vae"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "extra_vae",
+     "name": "extra_vae",
+     "type": "COMBO",
+     "widget": {
+      "name": "extra_vae"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "MODEL",
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      1
+     ]
+    },
+    {
+     "localized_name": "CLIP",
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      2
+     ]
+    },
+    {
+     "localized_name": "VAE",
+     "name": "VAE",
+     "type": "VAE",
+     "links": [
+      6
+     ]
+    },
+    {
+     "localized_name": "AUDIO_VAE",
+     "name": "AUDIO_VAE",
+     "type": "VAE",
+     "links": [
+      7
+     ]
+    },
+    {
+     "localized_name": "EXTRA_VAE",
+     "name": "EXTRA_VAE",
+     "type": "VAE",
+     "links": [
+      8
+     ]
+    },
+    {
+     "localized_name": "INFO",
+     "name": "INFO",
+     "type": "STRING",
+     "links": null
+    },
+    {
+     "localized_name": "PIPE",
+     "name": "PIPE",
+     "type": "PROMPTFORGE_PIPE",
+     "links": [
+      3
+     ]
+    }
+   ],
+   "title": "1. Loader",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_Loader"
+   },
+   "widgets_values": [
+    "[unet] MiniMax H3/no tags/10Eros_Max_h3_8stepTURBO_beta7_int8HQ.safetensors",
+    "MiniMax H3",
+    "auto",
+    "balanced",
+    "[te] qwen3vl_32b_heretic_minimax_h3_nvfp4.safetensors",
+    "(none)",
+    "(none)",
+    "(none)",
+    "auto",
+    "default",
+    "minimax_h3_video_vae_int8_convrot.safetensors",
+    "minimax_h3_audio_vae_fp32.safetensors",
+    "MiniMax-H3-X2-Detail-v1_int8_convrot.safetensors"
+   ],
+   "widgets_values_named": {
+    "model": "[unet] MiniMax H3/no tags/10Eros_Max_h3_8stepTURBO_beta7_int8HQ.safetensors",
+    "family": "MiniMax H3",
+    "weight_dtype": "auto",
+    "optimize_for": "balanced",
+    "clip_1": "[te] qwen3vl_32b_heretic_minimax_h3_nvfp4.safetensors",
+    "clip_2": "(none)",
+    "clip_3": "(none)",
+    "clip_4": "(none)",
+    "clip_type": "auto",
+    "clip_device": "default",
+    "vae": "minimax_h3_video_vae_int8_convrot.safetensors",
+    "audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
+    "extra_vae": "MiniMax-H3-X2-Detail-v1_int8_convrot.safetensors"
+   }
+  },
+  {
+   "id": 2,
+   "type": "PROMPTFORGE_LoraLoader",
+   "pos": [
+    1340,
+    60
+   ],
+   "size": [
+    620,
+    598
+   ],
+   "flags": {},
+   "order": 15,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "MODEL",
+     "link": 1
+    },
+    {
+     "localized_name": "clip",
+     "name": "clip",
+     "shape": 7,
+     "type": "CLIP",
+     "link": 2
+    },
+    {
+     "localized_name": "pipe",
+     "name": "pipe",
+     "shape": 7,
+     "type": "PROMPTFORGE_PIPE",
+     "link": 3
+    },
+    {
+     "localized_name": "loras",
+     "name": "loras",
+     "type": "STRING",
+     "widget": {
+      "name": "loras"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "seed",
+     "name": "seed",
+     "type": "INT",
+     "widget": {
+      "name": "seed"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "skip_mismatched",
+     "name": "skip_mismatched",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "skip_mismatched"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "balance",
+     "name": "balance",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "balance"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "balance_floor",
+     "name": "balance_floor",
+     "shape": 7,
+     "type": "FLOAT",
+     "widget": {
+      "name": "balance_floor"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "MODEL",
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      4
+     ]
+    },
+    {
+     "localized_name": "CLIP",
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      5
+     ]
+    },
+    {
+     "localized_name": "TRIGGER_WORDS",
+     "name": "TRIGGER_WORDS",
+     "type": "STRING",
+     "links": null
+    },
+    {
+     "localized_name": "REPORT",
+     "name": "REPORT",
+     "type": "STRING",
+     "links": null
+    }
+   ],
+   "title": "LoRAs",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_LoraLoader"
+   },
+   "widgets_values": [
+    "{}",
+    0,
+    "randomize",
+    true,
+    false,
+    0,
+    ""
+   ],
+   "widgets_values_named": {
+    "loras": "{}",
+    "seed": 0,
+    "control_after_generate": "randomize",
+    "skip_mismatched": true,
+    "balance": false,
+    "balance_floor": 0,
+    "lora_list": ""
+   }
+  },
+  {
+   "id": 3,
+   "type": "PROMPTFORGE_Model",
+   "pos": [
+    860,
+    596
+   ],
+   "size": [
+    400,
+    228
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "clip",
+     "name": "clip",
+     "shape": 7,
+     "type": "CLIP",
+     "link": null
+    },
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "COMBO",
+     "widget": {
+      "name": "model"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "quantization",
+     "name": "quantization",
+     "type": "COMBO",
+     "widget": {
+      "name": "quantization"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "context_size",
+     "name": "context_size",
+     "type": "INT",
+     "widget": {
+      "name": "context_size"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "local_model_path",
+     "name": "local_model_path",
+     "type": "STRING",
+     "widget": {
+      "name": "local_model_path"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "mmproj_path",
+     "name": "mmproj_path",
+     "type": "STRING",
+     "widget": {
+      "name": "mmproj_path"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "MODEL",
+     "name": "MODEL",
+     "type": "PROMPTFORGE_MODEL",
+     "links": [
+      9
+     ]
+    },
+    {
+     "localized_name": "REPORT",
+     "name": "REPORT",
+     "type": "STRING",
+     "links": null
+    }
+   ],
+   "title": "Prompt writer (language model)",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_Model"
+   },
+   "widgets_values": [
+    "[gguf] [LOCAL Q8] Qwen3-VL-4B abliterated GGUF [4B, vision]",
+    "auto",
+    0,
+    "",
+    "",
+    null
+   ],
+   "widgets_values_named": {
+    "model": "[gguf] [LOCAL Q8] Qwen3-VL-4B abliterated GGUF [4B, vision]",
+    "quantization": "auto",
+    "context_size": 0,
+    "local_model_path": "",
+    "mmproj_path": "",
+    "Test load & apply": null
+   }
+  },
+  {
+   "id": 4,
+   "type": "PROMPTFORGE_H3Story",
+   "pos": [
+    2040,
+    60
+   ],
+   "size": [
+    520,
+    768
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "general_prompt",
+     "name": "general_prompt",
+     "type": "STRING",
+     "widget": {
+      "name": "general_prompt"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "parts",
+     "name": "parts",
+     "shape": 7,
+     "type": "INT",
+     "widget": {
+      "name": "parts"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "part_prompts",
+     "name": "part_prompts",
+     "shape": 7,
+     "type": "STRING",
+     "widget": {
+      "name": "part_prompts"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "negative_prompt",
+     "name": "negative_prompt",
+     "shape": 7,
+     "type": "STRING",
+     "widget": {
+      "name": "negative_prompt"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "dialogue",
+     "name": "dialogue",
+     "shape": 7,
+     "type": "STRING",
+     "widget": {
+      "name": "dialogue"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "dialogue_language",
+     "name": "dialogue_language",
+     "shape": 7,
+     "type": "COMBO",
+     "widget": {
+      "name": "dialogue_language"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "dialogue_language_other",
+     "name": "dialogue_language_other",
+     "shape": 7,
+     "type": "STRING",
+     "widget": {
+      "name": "dialogue_language_other"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "prompt_style",
+     "name": "prompt_style",
+     "shape": 7,
+     "type": "COMBO",
+     "widget": {
+      "name": "prompt_style"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "writer_creativity",
+     "name": "writer_creativity",
+     "shape": 7,
+     "type": "FLOAT",
+     "widget": {
+      "name": "writer_creativity"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "review_prompts",
+     "name": "review_prompts",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "review_prompts"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "story",
+     "name": "story",
+     "type": "PROMPTFORGE_H3_STORY",
+     "links": [
+      10
+     ]
+    }
+   ],
+   "title": "2. Story",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_H3Story",
+    "heights": {},
+    "partHeights": []
+   },
+   "widgets_values": [
+    "",
+    "",
+    3,
+    "[\"\",\"\",\"\"]",
+    "",
+    "",
+    "auto (from the prompts)",
+    "",
+    "standard",
+    0.8,
+    false
+   ],
+   "widgets_values_named": {
+    "general_prompt": "",
+    "part_boxes": "",
+    "parts": 3,
+    "part_prompts": "[\"\",\"\",\"\"]",
+    "negative_prompt": "",
+    "dialogue": "",
+    "dialogue_language": "auto (from the prompts)",
+    "dialogue_language_other": "",
+    "prompt_style": "standard",
+    "writer_creativity": 0.8,
+    "review_prompts": false
+   }
+  },
+  {
+   "id": 5,
+   "type": "PROMPTFORGE_LoadImage",
+   "pos": [
+    2640,
+    1120
+   ],
+   "size": [
+    400,
+    460
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 4,
+   "inputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "STRING",
+     "widget": {
+      "name": "image"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "description",
+     "name": "description",
+     "type": "STRING",
+     "widget": {
+      "name": "description"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "IMAGE",
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      11
+     ]
+    },
+    {
+     "localized_name": "MASK",
+     "name": "MASK",
+     "type": "MASK",
+     "links": null
+    },
+    {
+     "localized_name": "DESCRIPTION",
+     "name": "DESCRIPTION",
+     "type": "STRING",
+     "links": null
+    },
+    {
+     "localized_name": "NAME",
+     "name": "NAME",
+     "type": "STRING",
+     "links": null
+    }
+   ],
+   "title": "First frame (optional: the video starts exactly like this)",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_LoadImage"
+   },
+   "widgets_values": [
+    "",
+    "",
+    ""
+   ],
+   "widgets_values_named": {
+    "image_picker": "",
+    "image": "",
+    "description": ""
+   }
+  },
+  {
+   "id": 6,
+   "type": "PROMPTFORGE_LoadImage",
+   "pos": [
+    2640,
+    60
+   ],
+   "size": [
+    400,
+    460
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "STRING",
+     "widget": {
+      "name": "image"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "description",
+     "name": "description",
+     "type": "STRING",
+     "widget": {
+      "name": "description"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "IMAGE",
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      12
+     ]
+    },
+    {
+     "localized_name": "MASK",
+     "name": "MASK",
+     "type": "MASK",
+     "links": null
+    },
+    {
+     "localized_name": "DESCRIPTION",
+     "name": "DESCRIPTION",
+     "type": "STRING",
+     "links": [
+      13
+     ]
+    },
+    {
+     "localized_name": "NAME",
+     "name": "NAME",
+     "type": "STRING",
+     "links": null
+    }
+   ],
+   "title": "Character / reference 1",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_LoadImage"
+   },
+   "widgets_values": [
+    "",
+    "",
+    ""
+   ],
+   "widgets_values_named": {
+    "image_picker": "",
+    "image": "",
+    "description": ""
+   }
+  },
+  {
+   "id": 7,
+   "type": "PROMPTFORGE_LoadImage",
+   "pos": [
+    2640,
+    590
+   ],
+   "size": [
+    400,
+    460
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 4,
+   "inputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "STRING",
+     "widget": {
+      "name": "image"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "description",
+     "name": "description",
+     "type": "STRING",
+     "widget": {
+      "name": "description"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "IMAGE",
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      14
+     ]
+    },
+    {
+     "localized_name": "MASK",
+     "name": "MASK",
+     "type": "MASK",
+     "links": null
+    },
+    {
+     "localized_name": "DESCRIPTION",
+     "name": "DESCRIPTION",
+     "type": "STRING",
+     "links": [
+      15
+     ]
+    },
+    {
+     "localized_name": "NAME",
+     "name": "NAME",
+     "type": "STRING",
+     "links": null
+    }
+   ],
+   "title": "Character / reference 2 (optional)",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_LoadImage"
+   },
+   "widgets_values": [
+    "",
+    "",
+    ""
+   ],
+   "widgets_values_named": {
+    "image_picker": "",
+    "image": "",
+    "description": ""
+   }
+  },
+  {
+   "id": 8,
+   "type": "LoadAudio",
+   "pos": [
+    2640,
+    1650
+   ],
+   "size": [
+    282.798828125,
+    136
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 4,
+   "inputs": [
+    {
+     "localized_name": "audio",
+     "name": "audio",
+     "type": "COMBO",
+     "widget": {
+      "name": "audio"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "audioUI",
+     "name": "audioUI",
+     "type": "AUDIO_UI",
+     "widget": {
+      "name": "audioUI"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "choose file to upload",
+     "name": "upload",
+     "type": "AUDIOUPLOAD",
+     "widget": {
+      "name": "upload"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "AUDIO",
+     "name": "AUDIO",
+     "type": "AUDIO",
+     "links": [
+      16
+     ]
+    }
+   ],
+   "title": "Voice sample (optional)",
+   "properties": {
+    "Node name for S&R": "LoadAudio"
+   },
+   "widgets_values": [
+    null,
+    ""
+   ],
+   "widgets_values_named": {
+    "audio": null,
+    "upload": ""
+   }
+  },
+  {
+   "id": 9,
+   "type": "PROMPTFORGE_H3References",
+   "pos": [
+    2640,
+    1856
+   ],
+   "size": [
+    400,
+    276
+   ],
+   "flags": {},
+   "order": 16,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "first_frame",
+     "name": "first_frame",
+     "shape": 7,
+     "type": "IMAGE",
+     "link": 11
+    },
+    {
+     "localized_name": "image_1",
+     "name": "image_1",
+     "shape": 7,
+     "type": "IMAGE",
+     "link": 12
+    },
+    {
+     "localized_name": "image_2",
+     "name": "image_2",
+     "shape": 7,
+     "type": "IMAGE",
+     "link": 14
+    },
+    {
+     "localized_name": "image_3",
+     "name": "image_3",
+     "shape": 7,
+     "type": "IMAGE",
+     "link": null
+    },
+    {
+     "localized_name": "voice",
+     "name": "voice",
+     "shape": 7,
+     "type": "AUDIO",
+     "link": 16
+    },
+    {
+     "localized_name": "description_1",
+     "name": "description_1",
+     "shape": 7,
+     "type": "STRING",
+     "widget": {
+      "name": "description_1"
+     },
+     "link": 13
+    },
+    {
+     "localized_name": "description_2",
+     "name": "description_2",
+     "shape": 7,
+     "type": "STRING",
+     "widget": {
+      "name": "description_2"
+     },
+     "link": 15
+    },
+    {
+     "localized_name": "description_3",
+     "name": "description_3",
+     "shape": 7,
+     "type": "STRING",
+     "widget": {
+      "name": "description_3"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "references",
+     "name": "references",
+     "type": "PROMPTFORGE_H3_REFERENCES",
+     "links": [
+      20
+     ]
+    }
+   ],
+   "title": "3. References",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_H3References"
+   },
+   "widgets_values": [
+    "",
+    "",
+    ""
+   ],
+   "widgets_values_named": {
+    "description_1": "",
+    "description_2": "",
+    "description_3": ""
+   }
+  },
+  {
+   "id": 10,
+   "type": "LoadVideo",
+   "pos": [
+    3120,
+    60
+   ],
+   "size": [
+    282.798828125,
+    82
+   ],
+   "flags": {},
+   "order": 7,
+   "mode": 4,
+   "inputs": [
+    {
+     "localized_name": "file",
+     "name": "file",
+     "type": "COMBO",
+     "widget": {
+      "name": "file"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "choose file to upload",
+     "name": "upload",
+     "type": "IMAGEUPLOAD",
+     "widget": {
+      "name": "upload"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "VIDEO",
+     "name": "VIDEO",
+     "type": "VIDEO",
+     "links": [
+      17
+     ]
+    }
+   ],
+   "title": "Video to extend",
+   "properties": {
+    "Node name for S&R": "LoadVideo"
+   },
+   "widgets_values": [
+    null,
+    "image"
+   ],
+   "widgets_values_named": {
+    "file": null,
+    "upload": "image"
+   }
+  },
+  {
+   "id": 11,
+   "type": "GetVideoComponents",
+   "pos": [
+    3120,
+    212
+   ],
+   "size": [
+    249.2642578125,
+    106
+   ],
+   "flags": {},
+   "order": 17,
+   "mode": 4,
+   "inputs": [
+    {
+     "localized_name": "video",
+     "name": "video",
+     "type": "VIDEO",
+     "link": 17
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "images",
+     "name": "images",
+     "type": "IMAGE",
+     "links": [
+      18
+     ]
+    },
+    {
+     "localized_name": "audio",
+     "name": "audio",
+     "type": "AUDIO",
+     "links": [
+      19
+     ]
+    },
+    {
+     "localized_name": "fps",
+     "name": "fps",
+     "type": "FLOAT",
+     "links": null
+    },
+    {
+     "localized_name": "bit_depth",
+     "name": "bit_depth",
+     "type": "COMBO",
+     "links": null
+    },
+    {
+     "localized_name": "color_space",
+     "name": "color_space",
+     "type": "COMBO",
+     "links": null
+    }
+   ],
+   "title": "Frames and sound of that video",
+   "properties": {
+    "Node name for S&R": "GetVideoComponents"
+   }
+  },
+  {
+   "id": 12,
+   "type": "PROMPTFORGE_H3ContinueFrom",
+   "pos": [
+    3120,
+    388
+   ],
+   "size": [
+    309.8033203125,
+    46
+   ],
+   "flags": {},
+   "order": 18,
+   "mode": 4,
+   "inputs": [
+    {
+     "localized_name": "video",
+     "name": "video",
+     "type": "IMAGE",
+     "link": 18
+    },
+    {
+     "localized_name": "audio",
+     "name": "audio",
+     "shape": 7,
+     "type": "AUDIO",
+     "link": 19
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "continue_from",
+     "name": "continue_from",
+     "type": "PROMPTFORGE_H3_CONTINUE",
+     "links": [
+      21
+     ]
+    }
+   ],
+   "title": "Continue an existing video",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_H3ContinueFrom"
+   }
+  },
+  {
+   "id": 13,
+   "type": "PROMPTFORGE_H3Format",
+   "pos": [
+    3509.8033203125,
+    60
+   ],
+   "size": [
+    300.9244140625,
+    130
+   ],
+   "flags": {},
+   "order": 8,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "aspect_ratio",
+     "name": "aspect_ratio",
+     "type": "COMBO",
+     "widget": {
+      "name": "aspect_ratio"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "orientation",
+     "name": "orientation",
+     "type": "COMBO",
+     "widget": {
+      "name": "orientation"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "megapixels",
+     "name": "megapixels",
+     "type": "FLOAT",
+     "widget": {
+      "name": "megapixels"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "seconds_per_part",
+     "name": "seconds_per_part",
+     "type": "COMBO",
+     "widget": {
+      "name": "seconds_per_part"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "format",
+     "name": "format",
+     "type": "PROMPTFORGE_H3_FORMAT",
+     "links": [
+      22
+     ]
+    }
+   ],
+   "title": "4. Video Format",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_H3Format"
+   },
+   "widgets_values": [
+    "16:9",
+    "landscape",
+    0.5,
+    "5"
+   ],
+   "widgets_values_named": {
+    "aspect_ratio": "16:9",
+    "orientation": "landscape",
+    "megapixels": 0.5,
+    "seconds_per_part": "5"
+   }
+  },
+  {
+   "id": 14,
+   "type": "PROMPTFORGE_H3Continuity",
+   "pos": [
+    3509.8033203125,
+    260
+   ],
+   "size": [
+    280.0337890625,
+    178
+   ],
+   "flags": {},
+   "order": 9,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "how_parts_join",
+     "name": "how_parts_join",
+     "type": "COMBO",
+     "widget": {
+      "name": "how_parts_join"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "story_style",
+     "name": "story_style",
+     "type": "COMBO",
+     "widget": {
+      "name": "story_style"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "carried_frames",
+     "name": "carried_frames",
+     "type": "COMBO",
+     "widget": {
+      "name": "carried_frames"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "smooth_joins",
+     "name": "smooth_joins",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "smooth_joins"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "check_joins",
+     "name": "check_joins",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "check_joins"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "join_retries",
+     "name": "join_retries",
+     "type": "INT",
+     "widget": {
+      "name": "join_retries"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "continuity",
+     "name": "continuity",
+     "type": "PROMPTFORGE_H3_CONTINUITY",
+     "links": [
+      23
+     ]
+    }
+   ],
+   "title": "Continuity (how parts join)",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_H3Continuity"
+   },
+   "widgets_values": [
+    "carry the last frames forward",
+    "continue the same shot",
+    "22",
+    true,
+    false,
+    1
+   ],
+   "widgets_values_named": {
+    "how_parts_join": "carry the last frames forward",
+    "story_style": "continue the same shot",
+    "carried_frames": "22",
+    "smooth_joins": true,
+    "check_joins": false,
+    "join_retries": 1
+   }
+  },
+  {
+   "id": 15,
+   "type": "PROMPTFORGE_H3Sampling",
+   "pos": [
+    3509.8033203125,
+    508
+   ],
+   "size": [
+    273.8267578125,
+    178
+   ],
+   "flags": {},
+   "order": 10,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "sampler_name",
+     "name": "sampler_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "sampler_name"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "scheduler",
+     "name": "scheduler",
+     "type": "COMBO",
+     "widget": {
+      "name": "scheduler"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "steps",
+     "name": "steps",
+     "type": "INT",
+     "widget": {
+      "name": "steps"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "cfg",
+     "name": "cfg",
+     "type": "FLOAT",
+     "widget": {
+      "name": "cfg"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "shift_video",
+     "name": "shift_video",
+     "type": "FLOAT",
+     "widget": {
+      "name": "shift_video"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "shift_audio",
+     "name": "shift_audio",
+     "type": "FLOAT",
+     "widget": {
+      "name": "shift_audio"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "sampling",
+     "name": "sampling",
+     "type": "PROMPTFORGE_H3_SAMPLING",
+     "links": [
+      24
+     ]
+    }
+   ],
+   "title": "Sampling (first stage)",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_H3Sampling"
+   },
+   "widgets_values": [
+    "er_sde",
+    "sgm_uniform",
+    8,
+    1,
+    12,
+    3
+   ],
+   "widgets_values_named": {
+    "sampler_name": "er_sde",
+    "scheduler": "sgm_uniform",
+    "steps": 8,
+    "cfg": 1,
+    "shift_video": 12,
+    "shift_audio": 3
+   }
+  },
+  {
+   "id": 16,
+   "type": "PROMPTFORGE_H3SecondStage",
+   "pos": [
+    3509.8033203125,
+    756
+   ],
+   "size": [
+    507.2935546875,
+    226
+   ],
+   "flags": {},
+   "order": 11,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "upscale_model",
+     "name": "upscale_model",
+     "type": "COMBO",
+     "widget": {
+      "name": "upscale_model"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "size_mode",
+     "name": "size_mode",
+     "type": "COMBO",
+     "widget": {
+      "name": "size_mode"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "scale",
+     "name": "scale",
+     "type": "FLOAT",
+     "widget": {
+      "name": "scale"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "megapixels",
+     "name": "megapixels",
+     "type": "FLOAT",
+     "widget": {
+      "name": "megapixels"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "width",
+     "name": "width",
+     "type": "INT",
+     "widget": {
+      "name": "width"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "height",
+     "name": "height",
+     "type": "INT",
+     "widget": {
+      "name": "height"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "align",
+     "name": "align",
+     "type": "INT",
+     "widget": {
+      "name": "align"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "precision",
+     "name": "precision",
+     "type": "COMBO",
+     "widget": {
+      "name": "precision"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "steps",
+     "name": "steps",
+     "type": "INT",
+     "widget": {
+      "name": "steps"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "start_sigma",
+     "name": "start_sigma",
+     "type": "FLOAT",
+     "widget": {
+      "name": "start_sigma"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sampler_name",
+     "name": "sampler_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "sampler_name"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "second_stage",
+     "name": "second_stage",
+     "type": "PROMPTFORGE_H3_SECOND_STAGE",
+     "links": [
+      25
+     ]
+    }
+   ],
+   "title": "Second Stage (upscale + refine). Bypass for a quick first-pass preview",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_H3SecondStage"
+   },
+   "widgets_values": [
+    "minimax_h3_latent_upscaler_3d_conv_v1_fp16.safetensors",
+    "scale by multiplier",
+    2,
+    1,
+    1280,
+    704,
+    32,
+    "fp16",
+    3,
+    0.9035,
+    "er_sde"
+   ],
+   "widgets_values_named": {
+    "upscale_model": "minimax_h3_latent_upscaler_3d_conv_v1_fp16.safetensors",
+    "size_mode": "scale by multiplier",
+    "scale": 2,
+    "megapixels": 1,
+    "width": 1280,
+    "height": 704,
+    "align": 32,
+    "precision": "fp16",
+    "steps": 3,
+    "start_sigma": 0.9035,
+    "sampler_name": "er_sde"
+   }
+  },
+  {
+   "id": 17,
+   "type": "PROMPTFORGE_H3Preview",
+   "pos": [
+    3509.8033203125,
+    1052
+   ],
+   "size": [
+    296.0025390625,
+    154
+   ],
+   "flags": {},
+   "order": 12,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "mode",
+     "name": "mode",
+     "type": "COMBO",
+     "widget": {
+      "name": "mode"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "frames",
+     "name": "frames",
+     "type": "INT",
+     "widget": {
+      "name": "frames"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "fps",
+     "name": "fps",
+     "type": "INT",
+     "widget": {
+      "name": "fps"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "size",
+     "name": "size",
+     "type": "INT",
+     "widget": {
+      "name": "size"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "decoder",
+     "name": "decoder",
+     "type": "COMBO",
+     "widget": {
+      "name": "decoder"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "preview",
+     "name": "preview",
+     "type": "PROMPTFORGE_H3_PREVIEW",
+     "links": [
+      26
+     ]
+    }
+   ],
+   "title": "Live Preview",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_H3Preview"
+   },
+   "widgets_values": [
+    "live",
+    4,
+    8,
+    512,
+    "taeh3-approx.safetensors"
+   ],
+   "widgets_values_named": {
+    "mode": "live",
+    "frames": 4,
+    "fps": 8,
+    "size": 512,
+    "decoder": "taeh3-approx.safetensors"
+   }
+  },
+  {
+   "id": 18,
+   "type": "PROMPTFORGE_H3Performance",
+   "pos": [
+    3509.8033203125,
+    1276
+   ],
+   "size": [
+    342.3638671875,
+    130
+   ],
+   "flags": {},
+   "order": 13,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "attention",
+     "name": "attention",
+     "type": "COMBO",
+     "widget": {
+      "name": "attention"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "ffn_chunks",
+     "name": "ffn_chunks",
+     "type": "INT",
+     "widget": {
+      "name": "ffn_chunks"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sparse_attention",
+     "name": "sparse_attention",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "sparse_attention"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "keep_percent",
+     "name": "keep_percent",
+     "type": "FLOAT",
+     "widget": {
+      "name": "keep_percent"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "performance",
+     "name": "performance",
+     "type": "PROMPTFORGE_H3_PERFORMANCE",
+     "links": [
+      27
+     ]
+    }
+   ],
+   "title": "Speed and Memory (sparse attention)",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_H3Performance"
+   },
+   "widgets_values": [
+    "comfy kitchen attention",
+    3,
+    true,
+    10
+   ],
+   "widgets_values_named": {
+    "attention": "comfy kitchen attention",
+    "ffn_chunks": 3,
+    "sparse_attention": true,
+    "keep_percent": 10
+   }
+  },
+  {
+   "id": 19,
+   "type": "PROMPTFORGE_H3Generate",
+   "pos": [
+    4097.096875,
+    60
+   ],
+   "size": [
+    480,
+    700
+   ],
+   "flags": {},
+   "order": 19,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "MODEL",
+     "link": 4
+    },
+    {
+     "localized_name": "clip",
+     "name": "clip",
+     "type": "CLIP",
+     "link": 5
+    },
+    {
+     "localized_name": "vae",
+     "name": "vae",
+     "type": "VAE",
+     "link": 6
+    },
+    {
+     "localized_name": "audio_vae",
+     "name": "audio_vae",
+     "type": "VAE",
+     "link": 7
+    },
+    {
+     "localized_name": "writer",
+     "name": "writer",
+     "type": "PROMPTFORGE_MODEL",
+     "link": 9
+    },
+    {
+     "localized_name": "story",
+     "name": "story",
+     "type": "PROMPTFORGE_H3_STORY",
+     "link": 10
+    },
+    {
+     "localized_name": "references",
+     "name": "references",
+     "shape": 7,
+     "type": "PROMPTFORGE_H3_REFERENCES",
+     "link": 20
+    },
+    {
+     "localized_name": "format",
+     "name": "format",
+     "shape": 7,
+     "type": "PROMPTFORGE_H3_FORMAT",
+     "link": 22
+    },
+    {
+     "localized_name": "continuity",
+     "name": "continuity",
+     "shape": 7,
+     "type": "PROMPTFORGE_H3_CONTINUITY",
+     "link": 23
+    },
+    {
+     "localized_name": "sampling",
+     "name": "sampling",
+     "shape": 7,
+     "type": "PROMPTFORGE_H3_SAMPLING",
+     "link": 24
+    },
+    {
+     "localized_name": "second_stage",
+     "name": "second_stage",
+     "shape": 7,
+     "type": "PROMPTFORGE_H3_SECOND_STAGE",
+     "link": 25
+    },
+    {
+     "localized_name": "preview",
+     "name": "preview",
+     "shape": 7,
+     "type": "PROMPTFORGE_H3_PREVIEW",
+     "link": 26
+    },
+    {
+     "localized_name": "performance",
+     "name": "performance",
+     "shape": 7,
+     "type": "PROMPTFORGE_H3_PERFORMANCE",
+     "link": 27
+    },
+    {
+     "localized_name": "continue_from",
+     "name": "continue_from",
+     "shape": 7,
+     "type": "PROMPTFORGE_H3_CONTINUE",
+     "link": 21
+    },
+    {
+     "localized_name": "decode_vae",
+     "name": "decode_vae",
+     "shape": 7,
+     "type": "VAE",
+     "link": 8
+    },
+    {
+     "localized_name": "seed",
+     "name": "seed",
+     "type": "INT",
+     "widget": {
+      "name": "seed"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "frames",
+     "name": "frames",
+     "type": "IMAGE",
+     "links": [
+      28
+     ]
+    },
+    {
+     "localized_name": "audio",
+     "name": "audio",
+     "type": "AUDIO",
+     "links": [
+      30
+     ]
+    },
+    {
+     "localized_name": "prompts",
+     "name": "prompts",
+     "type": "STRING",
+     "links": [
+      31
+     ]
+    },
+    {
+     "localized_name": "report",
+     "name": "report",
+     "type": "STRING",
+     "links": [
+      32
+     ]
+    }
+   ],
+   "title": "5. Generate",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_H3Generate"
+   },
+   "widgets_values": [
+    1,
+    "randomize",
+    "",
+    "",
+    ""
+   ],
+   "widgets_values_named": {
+    "seed": 1,
+    "control_after_generate": "randomize",
+    "live_preview": "",
+    "finished_part": "",
+    "written_prompts": ""
+   }
+  },
+  {
+   "id": 20,
+   "type": "PROMPTFORGE_FrameInterpolate",
+   "pos": [
+    4657.096875,
+    60
+   ],
+   "size": [
+    401.3375,
+    82
+   ],
+   "flags": {},
+   "order": 20,
+   "mode": 4,
+   "inputs": [
+    {
+     "localized_name": "frames",
+     "name": "frames",
+     "type": "IMAGE",
+     "link": 28
+    },
+    {
+     "localized_name": "multiplier",
+     "name": "multiplier",
+     "type": "INT",
+     "widget": {
+      "name": "multiplier"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "ckpt_name",
+     "name": "ckpt_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "ckpt_name"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "IMAGE",
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      29
+     ]
+    }
+   ],
+   "title": "Smoother motion (optional: set Save Video fps to 48)",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_FrameInterpolate"
+   },
+   "widgets_values": [
+    2,
+    "rife_v4.26.safetensors"
+   ],
+   "widgets_values_named": {
+    "multiplier": 2,
+    "ckpt_name": "rife_v4.26.safetensors"
+   }
+  },
+  {
+   "id": 21,
+   "type": "PROMPTFORGE_SaveVideo",
+   "pos": [
+    4657.096875,
+    212
+   ],
+   "size": [
+    302.9751953125,
+    442
+   ],
+   "flags": {},
+   "order": 23,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "images",
+     "name": "images",
+     "type": "IMAGE",
+     "link": 29
+    },
+    {
+     "localized_name": "audio",
+     "name": "audio",
+     "shape": 7,
+     "type": "AUDIO",
+     "link": 30
+    },
+    {
+     "localized_name": "frame_rate",
+     "name": "frame_rate",
+     "type": "FLOAT",
+     "widget": {
+      "name": "frame_rate"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "filename_prefix",
+     "name": "filename_prefix",
+     "type": "STRING",
+     "widget": {
+      "name": "filename_prefix"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "codec",
+     "name": "codec",
+     "type": "COMBO",
+     "widget": {
+      "name": "codec"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "speed",
+     "name": "speed",
+     "type": "COMBO",
+     "widget": {
+      "name": "speed"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "rate_control",
+     "name": "rate_control",
+     "type": "COMBO",
+     "widget": {
+      "name": "rate_control"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "quality",
+     "name": "quality",
+     "type": "INT",
+     "widget": {
+      "name": "quality"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "bitrate_mbit",
+     "name": "bitrate_mbit",
+     "type": "INT",
+     "widget": {
+      "name": "bitrate_mbit"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "bit_depth",
+     "name": "bit_depth",
+     "type": "COMBO",
+     "widget": {
+      "name": "bit_depth"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "save_output",
+     "name": "save_output",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "save_output"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "pingpong",
+     "name": "pingpong",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "pingpong"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "save_metadata",
+     "name": "save_metadata",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "save_metadata"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "audio_bitrate_kbps",
+     "name": "audio_bitrate_kbps",
+     "shape": 7,
+     "type": "INT",
+     "widget": {
+      "name": "audio_bitrate_kbps"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "show_preview",
+     "name": "show_preview",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "show_preview"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "loop_preview",
+     "name": "loop_preview",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "loop_preview"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "autoplay_preview",
+     "name": "autoplay_preview",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "autoplay_preview"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "film_grain",
+     "name": "film_grain",
+     "shape": 7,
+     "type": "FLOAT",
+     "widget": {
+      "name": "film_grain"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [],
+   "title": "6. Save Video",
+   "properties": {
+    "Node name for S&R": "PROMPTFORGE_SaveVideo"
+   },
+   "widgets_values": [
+    24,
+    "PromptForge/h3",
+    "h264 (nvenc)",
+    "balanced",
+    "quality",
+    19,
+    15,
+    "8",
+    true,
+    false,
+    true,
+    192,
+    true,
+    true,
+    true,
+    0.005,
+    ""
+   ],
+   "widgets_values_named": {
+    "frame_rate": 24,
+    "filename_prefix": "PromptForge/h3",
+    "codec": "h264 (nvenc)",
+    "speed": "balanced",
+    "rate_control": "quality",
+    "quality": 19,
+    "bitrate_mbit": 15,
+    "bit_depth": "8",
+    "save_output": true,
+    "pingpong": false,
+    "save_metadata": true,
+    "audio_bitrate_kbps": 192,
+    "show_preview": true,
+    "loop_preview": true,
+    "autoplay_preview": true,
+    "film_grain": 0.005,
+    "video_preview": ""
+   }
+  },
+  {
+   "id": 22,
+   "type": "PreviewAny",
+   "pos": [
+    4097.096875,
+    830
+   ],
+   "size": [
+    210.33359375,
+    122
+   ],
+   "flags": {},
+   "order": 21,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "source",
+     "name": "source",
+     "type": "*",
+     "link": 31
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "STRING",
+     "name": "STRING",
+     "type": "STRING",
+     "links": null
+    }
+   ],
+   "title": "Prompts that were written",
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "widgets_values": [],
+   "widgets_values_named": {}
+  },
+  {
+   "id": 23,
+   "type": "PreviewAny",
+   "pos": [
+    4097.096875,
+    1022
+   ],
+   "size": [
+    210,
+    122
+   ],
+   "flags": {},
+   "order": 22,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "source",
+     "name": "source",
+     "type": "*",
+     "link": 32
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "STRING",
+     "name": "STRING",
+     "type": "STRING",
+     "links": null
+    }
+   ],
+   "title": "Timing report",
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "widgets_values": [],
+   "widgets_values_named": {}
+  },
+  {
+   "id": 24,
+   "type": "Note",
+   "pos": [
+    20,
+    60
+   ],
+   "size": [
+    760,
+    560
+   ],
+   "flags": {},
+   "order": 14,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "title": "READ ME",
+   "properties": {},
+   "widgets_values": [
+    "PromptForge H3 - everything in one workflow (left to right)\n\n1. LOADER: model (10Eros Max beta7 etc.), text encoder, VAEs. The 2x detail VAE decodes every part. 'Prompt writer' is the language model that writes each part's prompt.\n2. STORY: the general prompt + one box per part (press + / -). Everything you write goes here; the prompt writer turns it into H3 prompts.\n3. REFERENCES / FIRST FRAME / VOICE / EXTEND A VIDEO: the optional inputs.\n4. SETTINGS: size and length, how parts join, sampling, second stage, preview, speed.\n5. GENERATE makes the parts and returns the frames and sound. 6. SAVE VIDEO saves them.\n\nMODES - pick one by bypassing nodes (select a node, Ctrl+B). Bypassed nodes are the optional ones:\n- Text to video: bypass all the Load nodes and the Extend nodes; write the Story.\n- Image to video: un-bypass 'First frame' and pick the picture.\n- Characters / reference to video: un-bypass the character pictures (their descriptions go to the prompt writer too). Refer to them as <Picture 1>, <Picture 2> in the story.\n- Voice: un-bypass the voice sample.\n- Extend a video: un-bypass the three 'Video to extend' nodes; the new parts continue it and the result contains both.\n- Quick preview: bypass 'Second Stage' (first pass only, much faster); un-bypass it for the full two-pass result.\n- Endless: raise the number of parts in the Story (each part is 5 or 10 seconds).\n- Smoother motion: un-bypass the interpolation node and set Save Video frame_rate to 48.\n\nDefaults follow the 10Eros Max beta7 recommendations: er_sde + sgm_uniform, 8 steps, cfg 1, shift 12/3, 90% sparse attention (VSA), second pass 3 steps from sigma 0.9035. For other H3 models turn 'sparse_attention' off in Speed and Memory."
+   ],
+   "widgets_values_named": {
+    "text": "PromptForge H3 - everything in one workflow (left to right)\n\n1. LOADER: model (10Eros Max beta7 etc.), text encoder, VAEs. The 2x detail VAE decodes every part. 'Prompt writer' is the language model that writes each part's prompt.\n2. STORY: the general prompt + one box per part (press + / -). Everything you write goes here; the prompt writer turns it into H3 prompts.\n3. REFERENCES / FIRST FRAME / VOICE / EXTEND A VIDEO: the optional inputs.\n4. SETTINGS: size and length, how parts join, sampling, second stage, preview, speed.\n5. GENERATE makes the parts and returns the frames and sound. 6. SAVE VIDEO saves them.\n\nMODES - pick one by bypassing nodes (select a node, Ctrl+B). Bypassed nodes are the optional ones:\n- Text to video: bypass all the Load nodes and the Extend nodes; write the Story.\n- Image to video: un-bypass 'First frame' and pick the picture.\n- Characters / reference to video: un-bypass the character pictures (their descriptions go to the prompt writer too). Refer to them as <Picture 1>, <Picture 2> in the story.\n- Voice: un-bypass the voice sample.\n- Extend a video: un-bypass the three 'Video to extend' nodes; the new parts continue it and the result contains both.\n- Quick preview: bypass 'Second Stage' (first pass only, much faster); un-bypass it for the full two-pass result.\n- Endless: raise the number of parts in the Story (each part is 5 or 10 seconds).\n- Smoother motion: un-bypass the interpolation node and set Save Video frame_rate to 48.\n\nDefaults follow the 10Eros Max beta7 recommendations: er_sde + sgm_uniform, 8 steps, cfg 1, shift 12/3, 90% sparse attention (VSA), second pass 3 steps from sigma 0.9035. For other H3 models turn 'sparse_attention' off in Speed and Memory."
+   },
+   "color": "#432",
+   "bgcolor": "#653"
+  }
+ ],
+ "links": [
+  [
+   1,
+   1,
+   0,
+   2,
+   0,
+   "MODEL"
+  ],
+  [
+   2,
+   1,
+   1,
+   2,
+   1,
+   "CLIP"
+  ],
+  [
+   3,
+   1,
+   6,
+   2,
+   2,
+   "PROMPTFORGE_PIPE"
+  ],
+  [
+   4,
+   2,
+   0,
+   19,
+   0,
+   "MODEL"
+  ],
+  [
+   5,
+   2,
+   1,
+   19,
+   1,
+   "CLIP"
+  ],
+  [
+   6,
+   1,
+   2,
+   19,
+   2,
+   "VAE"
+  ],
+  [
+   7,
+   1,
+   3,
+   19,
+   3,
+   "VAE"
+  ],
+  [
+   8,
+   1,
+   4,
+   19,
+   14,
+   "VAE"
+  ],
+  [
+   9,
+   3,
+   0,
+   19,
+   4,
+   "PROMPTFORGE_MODEL"
+  ],
+  [
+   10,
+   4,
+   0,
+   19,
+   5,
+   "PROMPTFORGE_H3_STORY"
+  ],
+  [
+   11,
+   5,
+   0,
+   9,
+   0,
+   "IMAGE"
+  ],
+  [
+   12,
+   6,
+   0,
+   9,
+   1,
+   "IMAGE"
+  ],
+  [
+   13,
+   6,
+   2,
+   9,
+   5,
+   "STRING"
+  ],
+  [
+   14,
+   7,
+   0,
+   9,
+   2,
+   "IMAGE"
+  ],
+  [
+   15,
+   7,
+   2,
+   9,
+   6,
+   "STRING"
+  ],
+  [
+   16,
+   8,
+   0,
+   9,
+   4,
+   "AUDIO"
+  ],
+  [
+   17,
+   10,
+   0,
+   11,
+   0,
+   "VIDEO"
+  ],
+  [
+   18,
+   11,
+   0,
+   12,
+   0,
+   "IMAGE"
+  ],
+  [
+   19,
+   11,
+   1,
+   12,
+   1,
+   "AUDIO"
+  ],
+  [
+   20,
+   9,
+   0,
+   19,
+   6,
+   "PROMPTFORGE_H3_REFERENCES"
+  ],
+  [
+   21,
+   12,
+   0,
+   19,
+   13,
+   "PROMPTFORGE_H3_CONTINUE"
+  ],
+  [
+   22,
+   13,
+   0,
+   19,
+   7,
+   "PROMPTFORGE_H3_FORMAT"
+  ],
+  [
+   23,
+   14,
+   0,
+   19,
+   8,
+   "PROMPTFORGE_H3_CONTINUITY"
+  ],
+  [
+   24,
+   15,
+   0,
+   19,
+   9,
+   "PROMPTFORGE_H3_SAMPLING"
+  ],
+  [
+   25,
+   16,
+   0,
+   19,
+   10,
+   "PROMPTFORGE_H3_SECOND_STAGE"
+  ],
+  [
+   26,
+   17,
+   0,
+   19,
+   11,
+   "PROMPTFORGE_H3_PREVIEW"
+  ],
+  [
+   27,
+   18,
+   0,
+   19,
+   12,
+   "PROMPTFORGE_H3_PERFORMANCE"
+  ],
+  [
+   28,
+   19,
+   0,
+   20,
+   0,
+   "IMAGE"
+  ],
+  [
+   29,
+   20,
+   0,
+   21,
+   0,
+   "IMAGE"
+  ],
+  [
+   30,
+   19,
+   1,
+   21,
+   1,
+   "AUDIO"
+  ],
+  [
+   31,
+   19,
+   2,
+   22,
+   0,
+   "STRING"
+  ],
+  [
+   32,
+   19,
+   3,
+   23,
+   0,
+   "STRING"
+  ]
+ ],
+ "groups": [
+  {
+   "id": 1,
+   "title": "Read me",
+   "bounding": [
+    10,
+    10,
+    140,
+    80
+   ],
+   "color": "#3f789e",
+   "flags": {}
+  },
+  {
+   "id": 2,
+   "title": "1. Models",
+   "bounding": [
+    10,
+    10,
+    140,
+    80
+   ],
+   "color": "#88A",
+   "flags": {}
+  },
+  {
+   "id": 3,
+   "title": "LoRAs",
+   "bounding": [
+    10,
+    10,
+    140,
+    80
+   ],
+   "color": "#88A",
+   "flags": {}
+  },
+  {
+   "id": 4,
+   "title": "2. Story - what the video is about",
+   "bounding": [
+    10,
+    10,
+    140,
+    80
+   ],
+   "color": "#8A8",
+   "flags": {}
+  },
+  {
+   "id": 5,
+   "title": "3. References (optional)",
+   "bounding": [
+    10,
+    10,
+    140,
+    80
+   ],
+   "color": "#a1309b",
+   "flags": {}
+  },
+  {
+   "id": 6,
+   "title": "Extend an existing video (optional)",
+   "bounding": [
+    10,
+    10,
+    140,
+    80
+   ],
+   "color": "#b58b2a",
+   "flags": {}
+  },
+  {
+   "id": 7,
+   "title": "4. Settings",
+   "bounding": [
+    10,
+    10,
+    140,
+    80
+   ],
+   "color": "#3f789e",
+   "flags": {}
+  },
+  {
+   "id": 8,
+   "title": "5. Generate",
+   "bounding": [
+    10,
+    10,
+    140,
+    80
+   ],
+   "color": "#8A8",
+   "flags": {}
+  },
+  {
+   "id": 9,
+   "title": "6. Output",
+   "bounding": [
+    10,
+    10,
+    140,
+    80
+   ],
+   "color": "#88A",
+   "flags": {}
+  }
+ ],
+ "config": {},
+ "extra": {
+  "ds": {
+   "scale": 1,
+   "offset": [
+    0,
+    0
+   ]
+  }
+ },
+ "version": 0.4
+}

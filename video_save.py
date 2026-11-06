@@ -47,9 +47,11 @@ def _ffmpeg():
     return path
 
 
-def _to_yuv(frames, bit_depth, device):
+def _to_yuv(frames, bit_depth, device, grain=0.0):
     """[B,H,W,C] float images -> [B, planar yuv420 samples] uint8 (8-bit) or int16 (10-bit), BT.709 limited range."""
     x = frames.to(device=device, dtype=torch.float32)[..., :3].clamp(0, 1)
+    if grain:
+        x = (x + torch.randn_like(x) * grain).clamp(0, 1)
     if x.shape[1] % 2:
         x = torch.cat([x, x[:, -1:]], 1)
     if x.shape[2] % 2:
@@ -109,6 +111,7 @@ class PROMPTFORGE_SaveVideo:
                 "show_preview": ("BOOLEAN", {"default": True, "tooltip": "Show the video inside the node after it is saved."}),
                 "loop_preview": ("BOOLEAN", {"default": True, "tooltip": "Loop the preview. Takes effect straight away, no rerun needed."}),
                 "autoplay_preview": ("BOOLEAN", {"default": True, "tooltip": "Start the preview playing when a video finishes. Off leaves it paused until you press play."}),
+                "film_grain": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 0.1, "step": 0.001, "tooltip": "Fine grain added while encoding; hides the plastic look of AI video. 0 = off, 0.005 to 0.01 is subtle."}),
             },
             "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
         }
@@ -120,7 +123,7 @@ class PROMPTFORGE_SaveVideo:
     DESCRIPTION = "VHS-style video save with GPU colour conversion and a single ffmpeg pass for video and audio."
 
     def save(self, images, frame_rate, filename_prefix, codec, speed, rate_control, quality, bitrate_mbit, bit_depth,
-             save_output, pingpong, save_metadata, audio=None, audio_bitrate_kbps=192, show_preview=True, loop_preview=True, autoplay_preview=True, prompt=None, extra_pnginfo=None):
+             save_output, pingpong, save_metadata, audio=None, audio_bitrate_kbps=192, show_preview=True, loop_preview=True, autoplay_preview=True, film_grain=0.0, prompt=None, extra_pnginfo=None):
         count, height, width = (int(size) for size in images.shape[:3])
         bits = int(bit_depth)
         encoder, presets, quality_flag, pix_fmt_10 = CODECS[codec]
@@ -167,7 +170,7 @@ class PROMPTFORGE_SaveVideo:
                 args += ["-x265-params", "log-level=error"]
             args += ["-movflags", "+faststart", str(target)]
 
-            self._encode(args, images, order, bits, len(order))
+            self._encode(args, images, order, bits, len(order), film_grain)
         except BaseException:
             target.unlink(missing_ok=True)
             raise
@@ -177,7 +180,7 @@ class PROMPTFORGE_SaveVideo:
         preview = {"filename": filename, "subfolder": subfolder, "type": "output" if save_output else "temp"}
         return {"ui": {"promptforge_video": [preview]}}
 
-    def _encode(self, args, images, order, bits, total):
+    def _encode(self, args, images, order, bits, total, grain):
         device = model_management.get_torch_device()
         height, width = int(images.shape[1]), int(images.shape[2])
         chunk = max(1, min(32, CHUNK_BYTES // (height * width * 12)))
@@ -191,7 +194,7 @@ class PROMPTFORGE_SaveVideo:
                 while position < total and not stop.is_set():
                     try:
                         batch = images[order[position:position + chunk]]
-                        data = _to_yuv(batch, bits, device)
+                        data = _to_yuv(batch, bits, device, grain)
                     except (torch.OutOfMemoryError, RuntimeError) as exc:
                         if not (isinstance(exc, torch.OutOfMemoryError) or "out of memory" in str(exc).lower()):
                             raise

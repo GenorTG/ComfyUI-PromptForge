@@ -56,7 +56,7 @@ RIFE / FILM frame interpolation for large frames (for example the 2x-decoded Min
 A faster stand-in for VHS Video Combine. Frames are converted to BT.709 YUV on the GPU while ffmpeg encodes, and video, audio and the embedded workflow go into one ffmpeg run. About 2x faster than the VHS path on 1920x1088 clips (240 frames in ~1.7 s on an RTX 5080 against ~3.2 s).
 
 - **Codecs**: h264 / h265 / av1 on nvenc (GPU) or x264 / x265 / SVT-AV1 (CPU), `speed` preset, `quality` (crf/cq) or `bitrate`, 8 or 10-bit.
-- **Options**: `pingpong`, `save_output` (off writes to temp), `save_metadata` (workflow in the file), optional `audio` with `audio_bitrate_kbps`.
+- **Options**: `film_grain` (fine grain added while encoding, 0.005-0.01 is subtle), `pingpong`, `save_output` (off writes to temp), `save_metadata` (workflow in the file), optional `audio` with `audio_bitrate_kbps`.
 - Odd sizes are padded by one pixel to an even size. Needs `ffmpeg` on PATH (or `VHS_FORCE_FFMPEG_PATH`). nvenc rejects very small frames (under about 150 px); use a CPU codec for those.
 - Keep the interpolation node's `output_precision` on float32 when feeding this node or VHS.
 
@@ -109,7 +109,7 @@ The Choose image picker, and an **Images** tab in the left sidebar, share one li
 - The **i** button on a tile edits keywords, theme, NSFW flag and description by hand.
 
 ### Endless Video (category `🔮 PromptForge/Endless Video`)
-Makes a long MiniMax H3 video part by part. One node does the generating (**PromptForge H3 Endless Video**); small nodes plug into it, and every one of them is optional except the Story. The generator saves nothing: it outputs `frames` (IMAGE), `audio`, `prompts` and `report`, so you save them with PromptForge Save Video (or anything else) afterwards. A ready workflow is in `workflows/PromptForge_H3_Endless.json`. (The old `H3 Endless` and `H3 Options` nodes are gone; workflows built with them need rewiring.)
+Makes a long MiniMax H3 video part by part. One node does the generating (**PromptForge H3 Endless Video**); small nodes plug into it, and every one of them is optional except the Story. The generator saves nothing: it outputs `frames` (IMAGE), `audio`, `prompts` and `report`, so you save them with PromptForge Save Video (or anything else) afterwards. A ready all-in-one workflow is in `workflows/PromptForge_H3_AllInOne.json`: text to video, image to video, characters / references, voice, extending an existing video, first-pass preview and endless multi-part video in one graph; you switch modes by bypassing the optional nodes (its READ ME note lists which). (The old `H3 Endless` and `H3 Options` nodes are gone; workflows built with them need rewiring.)
 
 | Node | What it holds |
 |---|---|
@@ -117,10 +117,11 @@ Makes a long MiniMax H3 video part by part. One node does the generating (**Prom
 | **H3 References** | First frame, up to three character images with descriptions, a voice clip. |
 | **H3 Video Format** | Aspect ratio, orientation, megapixels, seconds per part (5 or 10). |
 | **H3 Continuity** | How parts join (carry the last frames forward / give the ending as a reference video / independent parts), story style, carried frames, join smoothing, join check and retries. |
-| **H3 Sampling** | Sampler, scheduler, steps, cfg of the first pass. |
+| **H3 Sampling** | Sampler, scheduler, steps, cfg of the first pass and the video / audio sigma shifts (12 / 3; no separate shift node needed). Defaults follow 10Eros Max: er_sde + sgm_uniform, 8 steps. |
 | **H3 Second Stage (upscale)** | Connect it to turn on two-stage sampling: latent upscale model (MiniMax H3 3D upscaler, `models/latent_upscale_models`), size by multiplier / megapixels / dimensions, steps (3), start sigma (0.9035), sampler (er_sde). 3 steps give 0.9035, 0.6316, 0.3158, 0. |
 | **H3 Preview** | Live preview mode, frames (up to 99999 = all), fps, size, tiny decoder from `models/vae_approx`. |
-| **H3 Performance** | Attention backend and feed-forward chunking. |
+| **H3 Performance** | Attention backend, feed-forward chunking and video sparse attention (VSA, 10% kept: faster, and what FastH3-based checkpoints such as 10Eros Max betas are trained for; without it they can flicker. Turn it off for other H3 checkpoints). |
+| **H3 Continue Existing Video** | Frames and sound of a video you already have: the first part continues from its ending and the result is the old video followed by the new parts. |
 
 The generator itself takes the model, CLIP, VAE, audio VAE, the prompt-writer model (PromptForge Model), the story, a seed, and optionally `decode_vae` (e.g. the Loader's 2x `extra_vae`). Defaults apply for every settings node you leave out.
 - **How each part is written:** from its own box, with the general prompt as context and the other parts listed as things to keep out; an empty box continues the story. The written prompt appears on the node before the part is sampled; with `review_prompts` the run waits for you to edit, *Approve*, *Regenerate* or *Approve this and all following*.

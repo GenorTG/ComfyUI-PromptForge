@@ -20,6 +20,7 @@ from comfy_extras.nodes_frame_interpolation import FrameInterpolate, FrameInterp
 BLEND = "blend (no model, instant)"
 NO_CKPT = "(no frame interpolation model found)"
 MIN_RUN = 4
+RUN = 24
 
 
 def _checkpoints():
@@ -69,7 +70,7 @@ class PROMPTFORGE_FrameInterpolate:
         total = (count - 1) * multiplier + 1
         available = psutil.virtual_memory().available
         values = total * frames.shape[1] * frames.shape[2] * 3
-        dtype = torch.float32 if values * 4 < 0.4 * available else torch.float16
+        dtype = torch.float32 if values * 4 < 0.1 * available else torch.float16
         if values * 2 > 0.9 * available:
             raise ValueError(f"[PromptForge] the interpolated clip needs {values * 2 / 1024 ** 3:.1f} GB of RAM even in half precision and only {available / 1024 ** 3:.1f} GB is free. Use a lower multiplier or fewer frames.")
         out = torch.empty((total, *frames.shape[1:]), dtype=dtype)
@@ -81,7 +82,7 @@ class PROMPTFORGE_FrameInterpolate:
             raise ValueError("[PromptForge] no frame interpolation model was found. Put a RIFE 4.25+ or FILM model in models/frame_interpolation (for example rife_v4.26.safetensors), or choose blend.")
         patcher = _load(paths[ckpt_name])
 
-        start, span, filled = 0, count, 0
+        start, span, filled = 0, min(count, RUN), 0
         pbar = comfy.utils.ProgressBar(count - 1)
         while start < count - 1:
             model_management.throw_exception_if_processing_interrupted()
