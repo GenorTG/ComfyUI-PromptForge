@@ -49,9 +49,9 @@ function hide(widget) {
 
 function setShown(widget, shown) {
   if (!widget) return;
-  if (widget.promptforgeSize === undefined) widget.promptforgeSize = widget.computeSize;
+  if (!("promptforgeSize" in widget)) widget.promptforgeSize = widget.computeSize || null;  // kept once; a widget may have no computeSize at all
   widget.hidden = !shown;
-  widget.computeSize = shown ? widget.promptforgeSize : () => [0, -4];
+  if (widget.promptforgeSize) widget.computeSize = shown ? widget.promptforgeSize : () => [0, -4];
   if (widget.element) widget.element.style.display = shown ? "" : "none";
 }
 
