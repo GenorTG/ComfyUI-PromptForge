@@ -76,7 +76,7 @@ def _mp4(frames, fps):
     return buffer.getvalue()
 
 
-def _encode(frames, fps, quality):
+def encode(frames, fps, quality):
     """(mime, bytes) of the preview: an mp4 for several frames (animated WebP without PyAV), a JPEG for one."""
     if len(frames) > 1:
         try:
@@ -141,7 +141,7 @@ class PreviewOverrideWrapper:
             payload = {"node": self.node_id, "label": self.label, "step": step + 1, "total": total, "fps": self.fps, "w": frames.shape[2], "h": frames.shape[1]}
 
             def send():
-                mime, data = _encode(frames, self.fps, self.quality)
+                mime, data = encode(frames, self.fps, self.quality)
                 PromptServer.instance.send_sync("promptforge.preview", {**payload, "mime": mime, "image": base64.b64encode(data).decode()}, PromptServer.instance.client_id)
             encoder.submit(send)
 
@@ -190,7 +190,7 @@ class PROMPTFORGE_PreviewOverride:
     RETURN_TYPES = ("MODEL",)
     RETURN_NAMES = ("model",)
     FUNCTION = "patch"
-    CATEGORY = "🔮 PromptForge"
+    CATEGORY = "🔮 PromptForge/Sampling"
     DESCRIPTION = "Live preview of any sampler, shown in this node: a short animation of the latent frames, drawn by a tiny decoder or latent2rgb."
 
     def patch(self, model, max_resolution, jpeg_quality, suppress_default_preview, preview_frames, preview_fps, tiny_vae, unique_id=None):

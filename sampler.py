@@ -127,7 +127,7 @@ class PROMPTFORGE_Sampler:
     RETURN_TYPES = ("LATENT", "SIGMAS", "STRING")
     RETURN_NAMES = ("LATENT", "SIGMAS", "INFO")
     FUNCTION = "sample"
-    CATEGORY = "🔮 PromptForge"
+    CATEGORY = "🔮 PromptForge/Sampling"
     DESCRIPTION = "KSampler with family-aware schedules, custom sigmas, multiple seeds per run and saved presets."
 
     @staticmethod

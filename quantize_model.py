@@ -105,7 +105,7 @@ class PROMPTFORGE_QuantizeModel:
     RETURN_NAMES = ("INFO",)
     FUNCTION = "convert"
     OUTPUT_NODE = True
-    CATEGORY = "🔮 PromptForge"
+    CATEGORY = "🔮 PromptForge/Tools"
     DESCRIPTION = "Converts a diffusion model to NVFP4 or INT8 ConvRot and saves it next to the source. Refresh the model lists afterwards (r) to see the new file."
 
     def convert(self, model, format, family, keep_edge_blocks, extra_keep, output_name, overwrite):

@@ -116,7 +116,7 @@ class PROMPTFORGE_SaveVideo:
     RETURN_TYPES = ()
     FUNCTION = "save"
     OUTPUT_NODE = True
-    CATEGORY = "PromptForge"
+    CATEGORY = "🔮 PromptForge/Video"
     DESCRIPTION = "VHS-style video save with GPU colour conversion and a single ffmpeg pass for video and audio."
 
     def save(self, images, frame_rate, filename_prefix, codec, speed, rate_control, quality, bitrate_mbit, bit_depth,

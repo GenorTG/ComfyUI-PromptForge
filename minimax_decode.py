@@ -137,7 +137,7 @@ class PROMPTFORGE_MiniMaxDecode:
     RETURN_TYPES = ("IMAGE", "STRING")
     RETURN_NAMES = ("images", "INFO")
     FUNCTION = "decode"
-    CATEGORY = "🔮 PromptForge"
+    CATEGORY = "🔮 PromptForge/Video"
     DESCRIPTION = "MiniMax H3 video decode with 256px tiles that steps down to shorter passes on out-of-memory instead of failing, and remembers what worked."
 
     def decode(self, samples, vae, tile_size, frames_per_pass, output_device, retry_on_oom):

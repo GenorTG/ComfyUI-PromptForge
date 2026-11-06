@@ -1,8 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { addLivePreview } from "./promptforge_preview.js";
 
-const NODES = ["PROMPTFORGE_SaveVideo", "PROMPTFORGE_H3Endless"];
+const NODES = ["PROMPTFORGE_SaveVideo"];
 const HEIGHT = 260;
 
 app.registerExtension({
@@ -40,27 +39,8 @@ app.registerExtension({
         const callback = toggle.callback;
         toggle.callback = function () { callback?.apply(this, arguments); apply(); };
       }
-      if (nodeData.name === "PROMPTFORGE_H3Endless") {
-        // every part's prompt, added as soon as it has been written
-        const box = document.createElement("textarea");
-        Object.assign(box.style, { width: "100%", height: "100%", resize: "none", boxSizing: "border-box", padding: "6px 8px", fontSize: "12px", borderRadius: "4px", border: "1px solid var(--border-color, #555)", background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)" });
-        Object.assign(box, { readOnly: true, placeholder: "The prompt written for each part appears here as it is made." });
-        box.addEventListener("wheel", (event) => event.stopPropagation());
-        box.addEventListener("pointerdown", (event) => event.stopPropagation());
-        const holder = document.createElement("div");
-        Object.assign(holder.style, { width: "100%", height: "100%" });
-        holder.append(box);
-        const prompts = node.addDOMWidget("written_prompts", "promptforge_written_prompts", holder, { serialize: false, getMinHeight: () => 220 });
-        Object.defineProperty(prompts, "width", { get: () => node.size[0], set: () => {}, configurable: true });
-        addLivePreview(node);
-        node.promptforgeShowPrompt = ({ index, text }) => {
-          box.value = (index === 0 ? "" : box.value) + `=== Part ${index + 1} ===\n${text}\n\n`;
-          box.scrollTop = box.scrollHeight;
-        };
-      }
       node.promptforgeShowVideo = (preview) => {
         const query = new URLSearchParams({ filename: preview.filename, subfolder: preview.subfolder, type: preview.type, t: String(Date.now()) });
-        node.promptforgeLiveHide?.();
         video.src = api.apiURL("/view?" + query);
         apply();
         if (video.autoplay) video.play().catch(() => {});
@@ -71,7 +51,6 @@ app.registerExtension({
       onExecuted?.apply(this, arguments);
       const preview = message?.promptforge_video?.[0];
       if (preview) this.promptforgeShowVideo(preview);
-      for (const entry of message?.promptforge_prompt || []) this.promptforgeShowPrompt?.(entry);
     };
   },
 });

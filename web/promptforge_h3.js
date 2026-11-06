@@ -1,10 +1,11 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import { addLivePreview } from "./promptforge_preview.js";
 
-const ENDLESS = "PROMPTFORGE_H3Endless";
-const OPTIONS = "PROMPTFORGE_H3Options";
-// prompting lives on the Endless node; an Options node from an older workflow keeps these values but does not show them
-const MOVED = ["parts", "part_ideas", "negative_prompt", "dialogue", "dialogue_language", "dialogue_language_other", "preset_style", "seconds_per_part"];
+const STORY = "PROMPTFORGE_H3Story";
+const SECOND_STAGE = "PROMPTFORGE_H3SecondStage";
+const GENERATE = "PROMPTFORGE_H3Generate";
+const SIZE_WIDGETS = { "scale by multiplier": ["scale"], megapixels: ["megapixels"], "target dimensions": ["width", "height"] };
 const BOX_HEIGHT = 96;
 const LABEL_HEIGHT = 18;
 
@@ -41,6 +42,14 @@ function hide(widget) {
   if (widget.element) widget.element.style.display = "none";
 }
 
+function setShown(widget, shown) {
+  if (!widget) return;
+  if (widget.promptforgeSize === undefined) widget.promptforgeSize = widget.computeSize;
+  widget.hidden = !shown;
+  widget.computeSize = shown ? widget.promptforgeSize : () => [0, -4];
+  if (widget.element) widget.element.style.display = shown ? "" : "none";
+}
+
 // the prompt of a part, waiting for you: edit it, approve it, or ask for another one
 let reviewPanel = null;
 function closeReview() { reviewPanel?.remove(); reviewPanel = null; }
@@ -63,46 +72,94 @@ function showReview(detail) {
 }
 
 app.registerExtension({
-  name: "PromptForge.H3Endless",
+  name: "PromptForge.H3",
   setup() {
     api.addEventListener("promptforge.review", (event) => showReview(event.detail));
     for (const name of ["execution_success", "execution_error", "execution_interrupted"]) api.addEventListener(name, closeReview);
+    const node = (event) => app.graph.getNodeById(Number(event.detail.node));
+    api.addEventListener("promptforge.prompt", (event) => node(event)?.promptforgeShowPrompt?.(event.detail));
+    api.addEventListener("promptforge.part", (event) => node(event)?.promptforgeShowPart?.(event.detail));
   },
   async beforeRegisterNodeDef(nodeType, nodeData) {
-    if (nodeData.name === OPTIONS) {
+    if (nodeData.name === SECOND_STAGE) {
+      // only the size setting that matches the size mode is shown
       const onCreated = nodeType.prototype.onNodeCreated;
+      const refresh = (node) => {
+        const wanted = SIZE_WIDGETS[node.widgets.find((widget) => widget.name === "size_mode")?.value] || [];
+        for (const name of Object.values(SIZE_WIDGETS).flat()) setShown(node.widgets.find((widget) => widget.name === name), wanted.includes(name));
+        node.setSize([node.size[0], node.computeSize()[1]]);
+        node.setDirtyCanvas(true, true);
+      };
       nodeType.prototype.onNodeCreated = function () {
         onCreated?.apply(this, arguments);
-        const node = this;
-        for (const name of MOVED) {
-          const widget = node.widgets.find((entry) => entry.name === name);
-          if (widget) hide(widget);
-        }
-        node.setSize([node.size[0], node.computeSize()[1]]);
+        const mode = this.widgets.find((widget) => widget.name === "size_mode");
+        const callback = mode.callback;
+        mode.callback = (...args) => { callback?.apply(mode, args); refresh(this); };
+        refresh(this);
       };
-      // a node saved before options were added is too short to show them: grow it to fit
-      const onConfigureOptions = nodeType.prototype.onConfigure;
+      const onConfigure = nodeType.prototype.onConfigure;
       nodeType.prototype.onConfigure = function () {
-        const result = onConfigureOptions?.apply(this, arguments);
-        this.setSize([this.size[0], Math.max(this.size[1], this.computeSize()[1])]);
+        const result = onConfigure?.apply(this, arguments);
+        refresh(this);
         return result;
       };
       return;
     }
-    if (nodeData.name !== ENDLESS) return;
 
+    if (nodeData.name === GENERATE) {
+      const onCreated = nodeType.prototype.onNodeCreated;
+      nodeType.prototype.onNodeCreated = function () {
+        onCreated?.apply(this, arguments);
+        const node = this;
+        addLivePreview(node);
+
+        // the finished part, as a short clip (it is not saved anywhere)
+        const holder = el("div", { position: "relative", width: "100%", height: "100%", overflow: "hidden", display: "none" });
+        const video = el("video", { position: "absolute", inset: "0", width: "100%", height: "100%", objectFit: "contain", background: "rgba(0,0,0,.25)", borderRadius: "4px" }, { controls: true, muted: true, loop: true, autoplay: true, playsInline: true });
+        const caption = el("div", { position: "absolute", left: "6px", top: "4px", padding: "1px 6px", fontSize: "11px", borderRadius: "3px", background: "rgba(0,0,0,.55)", color: "#fff", zIndex: 1 });
+        holder.append(video, caption);
+        holder.addEventListener("pointerdown", (event) => event.stopPropagation());
+        let partShown = false;
+        const part = node.addDOMWidget("finished_part", "promptforge_finished_part", holder, { serialize: false, getMinHeight: () => (partShown ? 240 : 0) });
+        Object.defineProperty(part, "width", { get: () => node.size[0], set: () => {}, configurable: true });
+        node.promptforgeShowPart = ({ index, mime, image }) => {
+          node.promptforgeLiveHide?.();
+          if (!partShown) { partShown = true; holder.style.display = ""; node.setSize([node.size[0], node.computeSize()[1]]); }
+          caption.textContent = `part ${index + 1} finished`;
+          video.src = `data:${mime};base64,${image}`;
+          video.play().catch(() => {});
+        };
+
+        // every part's prompt, added as soon as it has been written
+        const box = el("textarea", { width: "100%", height: "100%", resize: "none", boxSizing: "border-box", padding: "6px 8px", fontSize: "12px", borderRadius: "4px", border: "1px solid var(--border-color, #555)", background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)" },
+          { readOnly: true, placeholder: "The prompt written for each part appears here as it is made." });
+        box.addEventListener("wheel", (event) => event.stopPropagation());
+        box.addEventListener("pointerdown", (event) => event.stopPropagation());
+        const wrapper = el("div", { width: "100%", height: "100%" });
+        wrapper.append(box);
+        const prompts = node.addDOMWidget("written_prompts", "promptforge_written_prompts", wrapper, { serialize: false, getMinHeight: () => 200 });
+        Object.defineProperty(prompts, "width", { get: () => node.size[0], set: () => {}, configurable: true });
+        node.promptforgeShowPrompt = ({ index, text }) => {
+          box.value = (index === 0 ? "" : box.value) + `=== Part ${index + 1} ===\n${text}\n\n`;
+          box.scrollTop = box.scrollHeight;
+        };
+        node.setSize([Math.max(node.size[0], 420), node.computeSize()[1]]);
+      };
+      return;
+    }
+
+    if (nodeData.name !== STORY) return;
     const onCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
       onCreated?.apply(this, arguments);
       const node = this;
       const find = (name) => node.widgets.find((widget) => widget.name === name);
-      const general = find("instructions");
+      const general = find("general_prompt");
       const countWidget = find("parts");
       const store = find("part_prompts");
       hide(countWidget);
       hide(store);
-      general.label = "general prompt";
-      for (const [name, fallback] of [["instructions", 90], ["negative_prompt", 60], ["dialogue", 60]]) makeResizable(node, find(name), name, fallback);
+      for (const [name, fallback] of [["general_prompt", 90], ["negative_prompt", 60], ["dialogue", 60]]) makeResizable(node, find(name), name, fallback);
 
       let texts = [];
       const frame = el("div", { position: "relative", width: "100%", height: "100%", minWidth: "0", overflow: "hidden", contain: "layout paint" });

@@ -276,7 +276,7 @@ class PROMPTFORGE_LoraLoader:
     RETURN_TYPES = ("MODEL", "CLIP", "STRING", "STRING")
     RETURN_NAMES = ("MODEL", "CLIP", "TRIGGER_WORDS", "REPORT")
     FUNCTION = "load"
-    CATEGORY = "🔮 PromptForge"
+    CATEGORY = "🔮 PromptForge/Load"
     DESCRIPTION = "Searchable LoRA list with per-LoRA strengths, random strengths and random groups."
 
     def load(self, model, loras, seed, skip_mismatched, clip=None, pipe=None, balance=False, balance_floor=0.0):

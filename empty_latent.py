@@ -93,7 +93,7 @@ class PROMPTFORGE_EmptyLatent:
     RETURN_TYPES = ("LATENT", "INT", "INT", "INT", "STRING")
     RETURN_NAMES = ("LATENT", "WIDTH", "HEIGHT", "FRAMES", "INFO")
     FUNCTION = "make"
-    CATEGORY = "🔮 PromptForge"
+    CATEGORY = "🔮 PromptForge/Sampling"
     DESCRIPTION = "Empty latent for any model family: custom size, preset or aspect ratio + megapixels, image or video."
 
     def make(self, family, kind, res_mode, aspect_ratio, megapixels, preset, width, height, orientation, randomize_ratio, ratio_pool, randomize_orientation, seed, frames, seconds, fps, batch_size, model=None, pipe=None):

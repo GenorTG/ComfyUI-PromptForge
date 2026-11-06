@@ -58,7 +58,7 @@ class PROMPTFORGE_FrameInterpolate:
 
     RETURN_TYPES = ("IMAGE",)
     FUNCTION = "interpolate"
-    CATEGORY = "PromptForge"
+    CATEGORY = "🔮 PromptForge/Video"
     DESCRIPTION = "RIFE / FILM frame interpolation with ComfyUI's own models that interpolates in shorter runs, or cross-fades, instead of running out of memory."
 
     def interpolate(self, frames, multiplier, ckpt_name):

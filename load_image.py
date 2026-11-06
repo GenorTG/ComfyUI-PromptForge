@@ -101,7 +101,7 @@ class PROMPTFORGE_LoadImage:
     RETURN_TYPES = ("IMAGE", "MASK", "STRING", "STRING")
     RETURN_NAMES = ("IMAGE", "MASK", "DESCRIPTION", "NAME")
     FUNCTION = "load"
-    CATEGORY = "🔮 PromptForge"
+    CATEGORY = "🔮 PromptForge/Load"
     DESCRIPTION = "Load an image from a thumbnail browser of the input folder and output a per-image description (stored, or typed in the node) as text."
 
     @classmethod

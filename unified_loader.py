@@ -124,7 +124,7 @@ class PROMPTFORGE_Loader:
     RETURN_TYPES = ("MODEL", "CLIP", "VAE", "VAE", "VAE", "STRING", "PROMPTFORGE_PIPE")
     RETURN_NAMES = ("MODEL", "CLIP", "VAE", "AUDIO_VAE", "EXTRA_VAE", "INFO", "PIPE")
     FUNCTION = "load"
-    CATEGORY = "🔮 PromptForge"
+    CATEGORY = "🔮 PromptForge/Load"
     DESCRIPTION = "Loads a model, its text encoders and VAEs in one node, choosing the text encoder type and weight settings automatically."
 
     def load(self, model, family, weight_dtype, optimize_for, clip_1, clip_2, clip_3, clip_4, clip_type, clip_device, vae, audio_vae, extra_vae):
