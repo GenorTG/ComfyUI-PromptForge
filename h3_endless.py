@@ -14,10 +14,8 @@ continuing; the part is sampled, decoded with the tiled H3 decoder, previewed, a
 between the stages so the language model, the diffusion model and the decoders never sit in VRAM together.
 Parts are encoded as they finish and joined at the end with one audio track, so the length is only limited by disk.
 """
-import base64
 import gc
 import importlib
-import io
 import json
 import os
 import re
@@ -29,8 +27,6 @@ import time
 from pathlib import Path
 
 import torch
-import torch.nn.functional as F
-from PIL import Image
 from aiohttp import web
 from server import PromptServer
 
@@ -44,7 +40,7 @@ import folder_paths
 from comfy_extras import nodes_audio, nodes_minimax_h3
 from comfy_extras.nodes_model_advanced import ModelAttentionBackend
 
-from . import empty_latent, h3_upscaler, minimax_decode, sampler, video_save
+from . import empty_latent, h3_upscaler, minimax_decode, preview_decoder, preview_override, sampler, video_save
 
 FPS = 24
 GRID = 17
@@ -59,7 +55,7 @@ DIALOGUE_AUTO = "auto (from the instructions)"
 DEFAULT_OPTIONS = {
     "parts": 3, "seconds": 5, "aspect_ratio": "16:9", "orientation": "landscape", "megapixels": 0.5, "transition": TRANSITIONS[0],
     "continuity": CONTINUITY[0], "context_frames": 22, "part_ideas": "", "preset_style": "standard", "negative_prompt": "",
-    "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "temperature": 0.8, "preview": "live", "preview_frames": 4, "attention": "comfy kitchen attention", "ffn_chunks": 3, "two_stage": False, "upscale_model": "", "upscale_mode": h3_upscaler.MODES[0], "upscale_scale": 2.0, "upscale_megapixels": 1.0, "upscale_width": 1280, "upscale_height": 704, "upscale_align": 32, "upscale_precision": "fp16", "stage2_steps": 3, "stage2_start": 0.9, "seam_blend": True, "seam_check": False, "seam_retries": 1, "steps": 8, "cfg": 1.0,
+    "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "temperature": 0.8, "preview": "live", "preview_frames": 4, "preview_decoder": "", "preview_fps": 8, "preview_size": 512, "attention": "comfy kitchen attention", "ffn_chunks": 3, "two_stage": False, "upscale_model": "", "upscale_mode": h3_upscaler.MODES[0], "upscale_scale": 2.0, "upscale_megapixels": 1.0, "upscale_width": 1280, "upscale_height": 704, "upscale_align": 32, "upscale_precision": "fp16", "stage2_steps": 3, "stage2_start": 0.9, "seam_blend": True, "seam_check": False, "seam_retries": 1, "steps": 8, "cfg": 1.0,
     "sampler_name": "euler", "scheduler": "simple", "codec": "h264 (nvenc)", "quality": 19, "keep_parts": False,
 }
 TRANSITION_TEXT = {
@@ -140,36 +136,6 @@ def chunk_feed_forward(model, chunks, threshold=4096):
     for index, block in enumerate(blocks):
         patched.add_object_patch(f"diffusion_model.blocks.{index}.mlp.forward", forward_of(block.mlp))
     return patched
-
-
-def live_preview(model, steps, unique_id, label, frames=4, size=384):
-    """A sampler callback that draws the latents itself: a few frames of the video latent through the model's own latent-to-RGB factors, sent to the node as small JPEGs."""
-    latent_format = model.model.latent_format
-    factors = torch.tensor(latent_format.latent_rgb_factors, dtype=torch.float32)
-    bias = torch.tensor(latent_format.latent_rgb_factors_bias, dtype=torch.float32) if latent_format.latent_rgb_factors_bias is not None else None
-    progress = comfy.utils.ProgressBar(steps)
-
-    def callback(step, x0, x, total):
-        progress.update_absolute(step + 1, total)
-        if unique_id is None:
-            return
-        video = x0.tensors[0] if x0.is_nested else x0
-        indices = sorted({round(i * (video.shape[2] - 1) / max(1, frames - 1)) for i in range(frames)}) if video.ndim == 5 else [0]
-        picked = video[0][:, indices] if video.ndim == 5 else video[0][:, None]
-        rgb = torch.einsum("cthw,cr->thwr", picked.float().cpu(), factors)
-        if bias is not None:
-            rgb = rgb + bias
-        rgb = ((rgb + 1) / 2).clamp(0, 1)
-        scale = size / max(rgb.shape[1], rgb.shape[2])
-        if scale < 1:
-            rgb = F.interpolate(rgb.permute(0, 3, 1, 2), scale_factor=scale, mode="area").permute(0, 2, 3, 1)
-        shots = []
-        for frame in (rgb * 255).byte().numpy():
-            buffer = io.BytesIO()
-            Image.fromarray(frame).save(buffer, "JPEG", quality=70)
-            shots.append("data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode())
-        PromptServer.instance.send_sync("promptforge.preview", {"node": str(unique_id), "label": label, "step": step + 1, "total": total, "frames": shots}, PromptServer.instance.client_id)
-    return callback
 
 
 _pending = {}
@@ -329,7 +295,10 @@ class PROMPTFORGE_H3Options:
                 "upscale_precision": (list(h3_upscaler.PRECISIONS), {"default": "fp16"}),
                 "stage2_steps": ("INT", {"default": 3, "min": 1, "max": 100, "tooltip": "Steps of the second stage. 6 first-stage steps plus 3 here is 9 steps per part."}),
                 "stage2_start": ("FLOAT", {"default": 0.9, "min": 0.05, "max": 1.0, "step": 0.01, "tooltip": "How much noise the upscaled latent gets before the second stage (the first sigma, falling in a straight line to 0). Lower keeps more of the first stage."}),
-                "preview_frames": ("INT", {"default": 4, "min": 1, "max": 8, "tooltip": "How many frames of the part the live preview shows while sampling (they play as a short loop)."}),
+                "preview_frames": ("INT", {"default": 4, "min": 1, "max": 99999, "tooltip": "How many latent frames the live preview shows while sampling; they play as a loop. 99999 shows every frame."}),
+                "preview_decoder": (preview_decoder.decoder_names(), {"default": preview_decoder.default_decoder(), "tooltip": "What draws the preview: latent2rgb is instant and needs no file; a tiny decoder from models/vae_approx (taeh3 for MiniMax H3) gives real colours and detail."}),
+                "preview_fps": ("INT", {"default": 8, "min": 1, "max": 60, "tooltip": "Playback speed of the preview loop."}),
+                "preview_size": ("INT", {"default": 512, "min": 64, "max": 2048, "step": 16, "tooltip": "Longest side of the preview frames in pixels."}),
             },
         }
 
@@ -592,11 +561,12 @@ class PROMPTFORGE_H3Endless:
                                                          "prompt_id": next((item[1] for item in PromptServer.instance.prompt_queue.currently_running.values()), None)}, PromptServer.instance.client_id)
 
     def _stage(self, model, positive, negative, latent, seed, steps, opts, unique_id, label, custom_sigmas=""):
-        """One sampling stage: with PromptForge's own live preview unless it is switched off (or handed to ComfyUI)."""
+        """One sampling stage, previewed in this node by PromptForge's preview override unless the preview is off (or left to ComfyUI)."""
         mode = opts["preview"]
-        callback = live_preview(model, steps, unique_id, label, int(opts["preview_frames"])) if mode not in ("none", "default") else None
+        if mode not in ("none", "default"):
+            model = preview_override.apply(model, unique_id, label=label, max_resolution=int(opts["preview_size"]), frames=int(opts["preview_frames"]), fps=int(opts["preview_fps"]), tiny_vae=opts["preview_decoder"])
         return sampler.PROMPTFORGE_Sampler().sample(model, positive, negative, latent, seed, steps, opts["cfg"], opts["sampler_name"], opts["scheduler"], 1.0, 1,
-                                                    custom_sigmas=custom_sigmas, preview="none" if mode == "none" else "default", callback=callback)[0]
+                                                    custom_sigmas=custom_sigmas, preview="default" if mode == "default" else "none")[0]
 
     def _review(self, unique_id, index, total, prompt, rewrite, review):
         """Waits for the page: approve the prompt (edited or not), regenerate it, or approve this and all that follow."""

@@ -152,7 +152,7 @@ class PROMPTFORGE_Sampler:
 
     def sample(self, model, positive, negative, latent_image, seed, steps, cfg, sampler_name, scheduler, denoise, runs,
                pipe=None, sigmas=None, custom_sigmas="", step_cache="off", cache_threshold=0.2, cache_start=0.15, cache_end=0.95,
-               start_at_step=0, end_at_step=10000, add_noise=True, ltxv_max_shift=2.05, ltxv_base_shift=0.95, ltxv_terminal=0.1, preview="default", callback=None):
+               start_at_step=0, end_at_step=10000, add_noise=True, ltxv_max_shift=2.05, ltxv_base_shift=0.95, ltxv_terminal=0.1, preview="default"):
         family = self._family(model, pipe)
         if step_cache == "auto":
             step_cache = "easycache" if steps >= AUTO_CACHE_MIN_STEPS else "off"
@@ -172,7 +172,7 @@ class PROMPTFORGE_Sampler:
         latent_preview.set_preview_method(None if preview == "default" else preview)
         try:
             try:
-                callback = callback or latent_preview.prepare_callback(model, steps)
+                callback = latent_preview.prepare_callback(model, steps)
             except AttributeError:
                 # the tiny decoder file is not a loadable VAE; the colour preview needs no file
                 print("[PromptForge] the tiny preview decoder could not be loaded; using latent2rgb previews.")
