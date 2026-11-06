@@ -1,5 +1,5 @@
 {
- "id": "ec46b48b-3496-46b3-acbb-128fe75d6e8a",
+ "id": "96a29193-34c0-420e-93bd-a70946d52b24",
  "revision": 0,
  "last_node_id": 9,
  "last_link_id": 15,
@@ -723,7 +723,7 @@
    ],
    "size": [
     400,
-    538
+    562
    ],
    "flags": {},
    "order": 7,
@@ -999,6 +999,126 @@
       "name": "ffn_chunks"
      },
      "link": null
+    },
+    {
+     "localized_name": "two_stage",
+     "name": "two_stage",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "two_stage"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "upscale_model",
+     "name": "upscale_model",
+     "shape": 7,
+     "type": "COMBO",
+     "widget": {
+      "name": "upscale_model"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "upscale_mode",
+     "name": "upscale_mode",
+     "shape": 7,
+     "type": "COMBO",
+     "widget": {
+      "name": "upscale_mode"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "upscale_scale",
+     "name": "upscale_scale",
+     "shape": 7,
+     "type": "FLOAT",
+     "widget": {
+      "name": "upscale_scale"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "upscale_megapixels",
+     "name": "upscale_megapixels",
+     "shape": 7,
+     "type": "FLOAT",
+     "widget": {
+      "name": "upscale_megapixels"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "upscale_width",
+     "name": "upscale_width",
+     "shape": 7,
+     "type": "INT",
+     "widget": {
+      "name": "upscale_width"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "upscale_height",
+     "name": "upscale_height",
+     "shape": 7,
+     "type": "INT",
+     "widget": {
+      "name": "upscale_height"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "upscale_align",
+     "name": "upscale_align",
+     "shape": 7,
+     "type": "INT",
+     "widget": {
+      "name": "upscale_align"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "upscale_precision",
+     "name": "upscale_precision",
+     "shape": 7,
+     "type": "COMBO",
+     "widget": {
+      "name": "upscale_precision"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "stage2_steps",
+     "name": "stage2_steps",
+     "shape": 7,
+     "type": "INT",
+     "widget": {
+      "name": "stage2_steps"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "stage2_start",
+     "name": "stage2_start",
+     "shape": 7,
+     "type": "FLOAT",
+     "widget": {
+      "name": "stage2_start"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "preview_frames",
+     "name": "preview_frames",
+     "shape": 7,
+     "type": "INT",
+     "widget": {
+      "name": "preview_frames"
+     },
+     "link": null
     }
    ],
    "outputs": [
@@ -1040,9 +1160,21 @@
     true,
     false,
     1,
-    "taesd",
+    "live",
     "comfy kitchen attention",
-    3
+    3,
+    false,
+    "minimax_h3_latent_upscaler_3d_conv_v1_fp16.safetensors",
+    "scale by multiplier",
+    2,
+    1,
+    1280,
+    704,
+    32,
+    "fp16",
+    3,
+    0.9,
+    4
    ],
    "widgets_values_named": {
     "parts": 3,
@@ -1070,9 +1202,21 @@
     "seam_blend": true,
     "seam_check": false,
     "seam_retries": 1,
-    "preview": "taesd",
+    "preview": "live",
     "attention": "comfy kitchen attention",
-    "ffn_chunks": 3
+    "ffn_chunks": 3,
+    "two_stage": false,
+    "upscale_model": "minimax_h3_latent_upscaler_3d_conv_v1_fp16.safetensors",
+    "upscale_mode": "scale by multiplier",
+    "upscale_scale": 2,
+    "upscale_megapixels": 1,
+    "upscale_width": 1280,
+    "upscale_height": 704,
+    "upscale_align": 32,
+    "upscale_precision": "fp16",
+    "stage2_steps": 3,
+    "stage2_start": 0.9,
+    "preview_frames": 4
    }
   },
   {
@@ -1084,7 +1228,7 @@
    ],
    "size": [
     520,
-    1240
+    1352
    ],
    "flags": {},
    "order": 8,
@@ -1286,6 +1430,26 @@
       "name": "preset_style"
      },
      "link": null
+    },
+    {
+     "localized_name": "seconds_per_part",
+     "name": "seconds_per_part",
+     "shape": 7,
+     "type": "COMBO",
+     "widget": {
+      "name": "seconds_per_part"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "approve_prompts",
+     "name": "approve_prompts",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "approve_prompts"
+     },
+     "link": null
     }
    ],
    "outputs": [
@@ -1303,7 +1467,9 @@
     }
    ],
    "properties": {
-    "Node name for S&R": "PROMPTFORGE_H3Endless"
+    "Node name for S&R": "PROMPTFORGE_H3Endless",
+    "heights": {},
+    "partHeights": []
    },
    "widgets_values": [
     "",
@@ -1318,6 +1484,9 @@
     "auto (from the instructions)",
     "",
     "standard",
+    "5",
+    false,
+    "",
     "",
     ""
    ],
@@ -1334,8 +1503,11 @@
     "dialogue_language": "auto (from the instructions)",
     "dialogue_language_other": "",
     "preset_style": "standard",
+    "seconds_per_part": "5",
+    "approve_prompts": false,
     "video_preview": "",
-    "written_prompts": ""
+    "written_prompts": "",
+    "live_preview": ""
    }
   }
  ],

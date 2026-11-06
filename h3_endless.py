@@ -14,21 +14,29 @@ continuing; the part is sampled, decoded with the tiled H3 decoder, previewed, a
 between the stages so the language model, the diffusion model and the decoders never sit in VRAM together.
 Parts are encoded as they finish and joined at the end with one audio track, so the length is only limited by disk.
 """
+import base64
 import gc
 import importlib
+import io
 import json
 import os
 import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 from pathlib import Path
 
 import torch
+import torch.nn.functional as F
+from PIL import Image
+from aiohttp import web
 from server import PromptServer
 
 import comfy.model_management as model_management
+import comfy.model_prefetch
+import comfy.nested_tensor
 import comfy.ops
 import comfy.samplers
 import comfy.utils
@@ -36,7 +44,7 @@ import folder_paths
 from comfy_extras import nodes_audio, nodes_minimax_h3
 from comfy_extras.nodes_model_advanced import ModelAttentionBackend
 
-from . import empty_latent, minimax_decode, sampler, video_save
+from . import empty_latent, h3_upscaler, minimax_decode, sampler, video_save
 
 FPS = 24
 GRID = 17
@@ -51,7 +59,7 @@ DIALOGUE_AUTO = "auto (from the instructions)"
 DEFAULT_OPTIONS = {
     "parts": 3, "seconds": 5, "aspect_ratio": "16:9", "orientation": "landscape", "megapixels": 0.5, "transition": TRANSITIONS[0],
     "continuity": CONTINUITY[0], "context_frames": 22, "part_ideas": "", "preset_style": "standard", "negative_prompt": "",
-    "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "temperature": 0.8, "preview": "taesd", "attention": "comfy kitchen attention", "ffn_chunks": 3, "seam_blend": True, "seam_check": False, "seam_retries": 1, "steps": 8, "cfg": 1.0,
+    "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "temperature": 0.8, "preview": "live", "preview_frames": 4, "attention": "comfy kitchen attention", "ffn_chunks": 3, "two_stage": False, "upscale_model": "", "upscale_mode": h3_upscaler.MODES[0], "upscale_scale": 2.0, "upscale_megapixels": 1.0, "upscale_width": 1280, "upscale_height": 704, "upscale_align": 32, "upscale_precision": "fp16", "stage2_steps": 3, "stage2_start": 0.9, "seam_blend": True, "seam_check": False, "seam_retries": 1, "steps": 8, "cfg": 1.0,
     "sampler_name": "euler", "scheduler": "simple", "codec": "h264 (nvenc)", "quality": 19, "keep_parts": False,
 }
 TRANSITION_TEXT = {
@@ -132,6 +140,50 @@ def chunk_feed_forward(model, chunks, threshold=4096):
     for index, block in enumerate(blocks):
         patched.add_object_patch(f"diffusion_model.blocks.{index}.mlp.forward", forward_of(block.mlp))
     return patched
+
+
+def live_preview(model, steps, unique_id, label, frames=4, size=384):
+    """A sampler callback that draws the latents itself: a few frames of the video latent through the model's own latent-to-RGB factors, sent to the node as small JPEGs."""
+    latent_format = model.model.latent_format
+    factors = torch.tensor(latent_format.latent_rgb_factors, dtype=torch.float32)
+    bias = torch.tensor(latent_format.latent_rgb_factors_bias, dtype=torch.float32) if latent_format.latent_rgb_factors_bias is not None else None
+    progress = comfy.utils.ProgressBar(steps)
+
+    def callback(step, x0, x, total):
+        progress.update_absolute(step + 1, total)
+        if unique_id is None:
+            return
+        video = x0.tensors[0] if x0.is_nested else x0
+        indices = sorted({round(i * (video.shape[2] - 1) / max(1, frames - 1)) for i in range(frames)}) if video.ndim == 5 else [0]
+        picked = video[0][:, indices] if video.ndim == 5 else video[0][:, None]
+        rgb = torch.einsum("cthw,cr->thwr", picked.float().cpu(), factors)
+        if bias is not None:
+            rgb = rgb + bias
+        rgb = ((rgb + 1) / 2).clamp(0, 1)
+        scale = size / max(rgb.shape[1], rgb.shape[2])
+        if scale < 1:
+            rgb = F.interpolate(rgb.permute(0, 3, 1, 2), scale_factor=scale, mode="area").permute(0, 2, 3, 1)
+        shots = []
+        for frame in (rgb * 255).byte().numpy():
+            buffer = io.BytesIO()
+            Image.fromarray(frame).save(buffer, "JPEG", quality=70)
+            shots.append("data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode())
+        PromptServer.instance.send_sync("promptforge.preview", {"node": str(unique_id), "label": label, "step": step + 1, "total": total, "frames": shots}, PromptServer.instance.client_id)
+    return callback
+
+
+_pending = {}
+
+
+@PromptServer.instance.routes.post("/promptforge/review")
+async def _review_route(request):
+    body = await request.json()
+    slot = _pending.get(str(body.get("node")))
+    if slot is None:
+        return web.json_response({"error": "nothing is waiting for a review"}, status=404)
+    slot["action"], slot["text"] = str(body.get("action", "approve")), str(body.get("text", ""))
+    slot["event"].set()
+    return web.json_response({})
 
 
 def part_boxes(text):
@@ -263,9 +315,21 @@ class PROMPTFORGE_H3Options:
                 "seam_blend": ("BOOLEAN", {"default": True, "tooltip": "Evens out the brief light flash at the join: the first third of a second of the new part is brought onto a straight brightness/colour line from the previous part's last frame. Skipped when the change is large enough to be a real cut."}),
                 "seam_check": ("BOOLEAN", {"default": False, "tooltip": "When a part is meant to continue the same shot, compare its first frame with the previous part's last frame and generate it again with another seed if the picture jumps. Not used when cuts are allowed."}),
                 "seam_retries": ("INT", {"default": 1, "min": 0, "max": 5, "tooltip": "How many times a jumping part is generated again."}),
-                "preview": (["taesd", "latent2rgb", "none", "default"], {"default": "taesd", "tooltip": "Live preview while a part is sampled. taesd uses the tiny H3 decoder (taeh3 in models/vae_approx) and falls back to latent2rgb; default follows ComfyUI's --preview-method."}),
+                "preview": (["live", "none", "latent2rgb", "taesd", "default"], {"default": "live", "tooltip": "Live preview while a part is sampled. live is PromptForge's own preview, drawn in this node from the latents (no ComfyUI previewer, no extra node). none turns it off; default hands over to ComfyUI's own previewer. (latent2rgb and taesd are older names for live.)"}),
                 "attention": (["comfy kitchen attention", "pytorch attention", "as connected"], {"default": "comfy kitchen attention", "tooltip": "Attention used while sampling. comfy kitchen is INT8 attention: about 40% faster for MiniMax H3 here, with a tiny precision cost (it falls back to pytorch where it is not available). as connected leaves what the model already has."}),
                 "ffn_chunks": ("INT", {"default": 3, "min": 1, "max": 64, "tooltip": "Splits MiniMax H3's feed-forward layers into this many chunks, which lowers peak VRAM without changing the result. 1 = off."}),
+                "two_stage": ("BOOLEAN", {"default": False, "tooltip": "Two-stage sampling for every part: sample at the size above with `steps`, upscale the latent with the MiniMax H3 3D latent upscaler, then sample again for stage2_steps and keep that as the result."}),
+                "upscale_model": (h3_upscaler.model_names(), {"default": h3_upscaler.default_model(), "tooltip": "H3 latent upscaler model from models/latent_upscale_models."}),
+                "upscale_mode": (list(h3_upscaler.MODES), {"default": h3_upscaler.MODES[0], "tooltip": "How the size of the second stage is chosen: a multiplier of the first stage, a megapixel count, or fixed pixel dimensions."}),
+                "upscale_scale": ("FLOAT", {"default": 2.0, "min": 1.0, "max": 4.0, "step": 0.05}),
+                "upscale_megapixels": ("FLOAT", {"default": 1.0, "min": 0.1, "max": 16.0, "step": 0.1}),
+                "upscale_width": ("INT", {"default": 1280, "min": 64, "max": 8192, "step": 8}),
+                "upscale_height": ("INT", {"default": 704, "min": 64, "max": 8192, "step": 8}),
+                "upscale_align": ("INT", {"default": 32, "min": 1, "max": 512, "tooltip": "Pixel alignment of the second stage; 32 is recommended."}),
+                "upscale_precision": (list(h3_upscaler.PRECISIONS), {"default": "fp16"}),
+                "stage2_steps": ("INT", {"default": 3, "min": 1, "max": 100, "tooltip": "Steps of the second stage. 6 first-stage steps plus 3 here is 9 steps per part."}),
+                "stage2_start": ("FLOAT", {"default": 0.9, "min": 0.05, "max": 1.0, "step": 0.01, "tooltip": "How much noise the upscaled latent gets before the second stage (the first sigma, falling in a straight line to 0). Lower keeps more of the first stage."}),
+                "preview_frames": ("INT", {"default": 4, "min": 1, "max": 8, "tooltip": "How many frames of the part the live preview shows while sampling (they play as a short loop)."}),
             },
         }
 
@@ -314,6 +378,8 @@ class PROMPTFORGE_H3Endless:
                 "dialogue_language": ([DIALOGUE_AUTO, "Arabic", "Chinese", "English", "French", "German", "Italian", "Japanese", "Korean", "Portuguese", "Russian", "Spanish", "other (type below)"], {"default": DIALOGUE_AUTO}),
                 "dialogue_language_other": ("STRING", {"default": ""}),
                 "preset_style": (list(PRESET_STYLES), {"default": "standard", "tooltip": "Which family of MiniMax H3 prompt presets the Enhancer uses."}),
+                "seconds_per_part": (list(SECONDS), {"default": "5", "tooltip": "New seconds of video per part. A part box can start with (8s) to give that part its own length."}),
+                "approve_prompts": ("BOOLEAN", {"default": False, "tooltip": "Pause after each part's prompt is written and wait for you: approve it (you can edit the text first), or regenerate it."}),
             },
             "hidden": {"unique_id": "UNIQUE_ID"},
         }
@@ -327,7 +393,7 @@ class PROMPTFORGE_H3Endless:
 
     def generate(self, model, clip, vae, audio_vae, enhancer, instructions, seed, filename_prefix, options=None, decode_vae=None, first_frame=None,
                  ref_image_1=None, ref_image_2=None, ref_image_3=None, ref_text_1="", ref_text_2="", ref_text_3="", voice_audio=None, parts=0, part_prompts="", negative_prompt="", dialogue="",
-                 dialogue_language=DIALOGUE_AUTO, dialogue_language_other="", preset_style="standard", unique_id=None):
+                 dialogue_language=DIALOGUE_AUTO, dialogue_language_other="", preset_style="standard", seconds_per_part="5", approve_prompts=False, unique_id=None):
         opts = {**DEFAULT_OPTIONS, **(options or {})}
         # the prompting lives on this node; an older Options node's prompt fields are only the fallback
         if negative_prompt.strip():
@@ -338,7 +404,7 @@ class PROMPTFORGE_H3Endless:
             opts["dialogue_language"], opts["dialogue_language_other"] = dialogue_language, dialogue_language_other
         if preset_style != "standard":
             opts["preset_style"] = preset_style
-        default_seconds = int(opts["seconds"])
+        default_seconds = int(seconds_per_part) if seconds_per_part != "5" else int(opts["seconds"])
         mode = "none" if opts["transition"] == TRANSITIONS[2] else opts["continuity"]
         context = int(opts["context_frames"])
         if mode == "reference video":
@@ -381,6 +447,9 @@ class PROMPTFORGE_H3Endless:
         scratch = tempfile.mkdtemp(prefix="promptforge_endless_")
         parts_video, parts_audio, prompts, notes = [], [], [], []
         tail, tail_wave, last_shot, sample_rate, previous = None, None, "", 0, None
+        review = {"on": bool(approve_prompts) and unique_id is not None and PromptServer.instance.client_id is not None}
+        if approve_prompts and not review["on"]:
+            print("[PromptForge] endless video: approve_prompts needs the ComfyUI page (run it from the browser); continuing without approval.")
         self._status(unique_id, "Starting")
         try:
             for index in range(total):
@@ -395,8 +464,13 @@ class PROMPTFORGE_H3Endless:
                 if idea.lower().startswith("raw:"):
                     prompt = idea[4:].strip()
                 else:
-                    prompt = self._prompt(enhancer, opts, mode, continuing, index, total, seconds, seed + index, part_text(index, total, brief, reference_lines, plan, seconds),
-                                          pictures, tail if continuing else None, notes, last_shot, prefix)
+                    ask = lambda attempt: self._prompt(enhancer, opts, mode, continuing, index, total, seconds, seed + index + 500 * attempt,
+                                                       part_text(index, total, brief, reference_lines, plan, seconds), pictures, tail if continuing else None, notes, last_shot, prefix)
+                    prompt = ask(0)
+                    if review["on"]:
+                        clock_wait = time.time()
+                        prompt = self._review(unique_id, index, total, prompt, ask, review)
+                        clock += time.time() - clock_wait  # waiting for you is not generation time
                 marks["prompt"] = time.time() - clock
                 prompts.append(prompt)
                 self._prompt_preview(unique_id, index, prompt)
@@ -416,8 +490,29 @@ class PROMPTFORGE_H3Endless:
                     self._status(unique_id, f"Part {index + 1}/{total}: sampling" + (f" (try {attempt + 1})" if attempt else ""))
                     self._release()
                     clock_sample = time.time()
-                    latent_out = sampler.PROMPTFORGE_Sampler().sample(model, positive, negative, latent, seed + index + 1000 * attempt, opts["steps"], opts["cfg"], opts["sampler_name"], opts["scheduler"], 1.0, 1, preview=opts["preview"])[0]
+                    latent_out = self._stage(model, positive, negative, latent, seed + index + 1000 * attempt, opts["steps"], opts, unique_id, f"part {index + 1}, first stage")
                     marks["sample"] = time.time() - clock_sample
+                    if opts["two_stage"]:
+                        self._status(unique_id, f"Part {index + 1}/{total}: upscaling the latent")
+                        self._release()
+                        clock_up = time.time()
+                        video, audio_latent = latent_out["samples"].unbind()
+                        video = h3_upscaler.upscale(video, opts["upscale_model"], opts["upscale_mode"], opts["upscale_scale"], opts["upscale_megapixels"], opts["upscale_width"],
+                                                    opts["upscale_height"], opts["upscale_align"], opts["upscale_precision"])
+                        marks["upscale"] = time.time() - clock_up
+                        self._release()
+                        positive2, _ = self._conditioning(clip, vae, audio_vae, prompt, video.shape[-1] * 16, video.shape[-2] * 16, length, pictures, first_frame if index == 0 else None,
+                                                          tail if continuing else None, (tail_wave, sample_rate) if continuing else None, mode, voice_audio, continuing)
+                        negative2 = positive2 if opts["cfg"] == 1.0 else clip.encode_from_tokens_scheduled(clip.tokenize(""))
+                        steps2, start = int(opts["stage2_steps"]), float(opts["stage2_start"])
+                        sigmas = ", ".join(f"{start * (steps2 - i) / steps2:.4f}" for i in range(steps2)) + ", 0"
+                        self._status(unique_id, f"Part {index + 1}/{total}: sampling the second stage")
+                        self._release()
+                        clock_second = time.time()
+                        latent_out = self._stage(model, positive2, negative2, {"samples": comfy.nested_tensor.NestedTensor((video, audio_latent))}, seed + index + 1000 * attempt + 7, steps2, opts, unique_id,
+                                                 f"part {index + 1}, second stage", sigmas)
+                        marks["sample2"] = time.time() - clock_second
+                        del positive2, negative2, video, audio_latent
                     self._status(unique_id, f"Part {index + 1}/{total}: decoding")
                     self._release()
                     clock_decode = time.time()
@@ -475,6 +570,8 @@ class PROMPTFORGE_H3Endless:
     @staticmethod
     def _release():
         """Everything ComfyUI holds goes, so the next stage (language model, sampler, decoder) has the whole GPU. Returns the free VRAM in GB."""
+        # ComfyUI drops the model compiler's CUDA graphs when a node finishes; this node runs for a whole video, so it does it between the stages
+        comfy.model_prefetch.cleanup_prefetch_queues()
         model_management.unload_all_models()
         gc.collect()
         model_management.soft_empty_cache()
@@ -482,7 +579,9 @@ class PROMPTFORGE_H3Endless:
             torch.cuda.synchronize()
             if os.environ.get("PROMPTFORGE_DEBUG_VRAM"):
                 live = sorted(((obj.numel() * obj.element_size(), tuple(obj.shape), str(obj.dtype)) for obj in gc.get_objects() if torch.is_tensor(obj) and obj.is_cuda), reverse=True)[:6]
-                print(f"[PromptForge] VRAM debug: allocated {torch.cuda.memory_allocated() / 1024 ** 3:.2f} GB, reserved {torch.cuda.memory_reserved() / 1024 ** 3:.2f} GB, largest live tensors {live}")
+                mine = subprocess.run(["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"], capture_output=True, text=True).stdout
+                held = next((line.split(",")[1].strip() for line in mine.splitlines() if line.split(",")[0].strip() == str(os.getpid())), "?")
+                print(f"[PromptForge] VRAM debug: this process holds {held} MiB on the GPU; allocated {torch.cuda.memory_allocated() / 1024 ** 3:.2f} GB, reserved {torch.cuda.memory_reserved() / 1024 ** 3:.2f} GB, largest live tensors {live}")
             return torch.cuda.mem_get_info()[0] / 1024 ** 3
         return 0.0
 
@@ -491,6 +590,35 @@ class PROMPTFORGE_H3Endless:
         if unique_id is not None:
             PromptServer.instance.send_sync("executed", {"node": str(unique_id), "display_node": str(unique_id), "output": {"promptforge_video": [preview]},
                                                          "prompt_id": next((item[1] for item in PromptServer.instance.prompt_queue.currently_running.values()), None)}, PromptServer.instance.client_id)
+
+    def _stage(self, model, positive, negative, latent, seed, steps, opts, unique_id, label, custom_sigmas=""):
+        """One sampling stage: with PromptForge's own live preview unless it is switched off (or handed to ComfyUI)."""
+        mode = opts["preview"]
+        callback = live_preview(model, steps, unique_id, label, int(opts["preview_frames"])) if mode not in ("none", "default") else None
+        return sampler.PROMPTFORGE_Sampler().sample(model, positive, negative, latent, seed, steps, opts["cfg"], opts["sampler_name"], opts["scheduler"], 1.0, 1,
+                                                    custom_sigmas=custom_sigmas, preview="none" if mode == "none" else "default", callback=callback)[0]
+
+    def _review(self, unique_id, index, total, prompt, rewrite, review):
+        """Waits for the page: approve the prompt (edited or not), regenerate it, or approve this and all that follow."""
+        attempt = 0
+        while True:
+            slot = {"event": threading.Event(), "action": None, "text": prompt}
+            _pending[str(unique_id)] = slot
+            PromptServer.instance.send_sync("promptforge.review", {"node": str(unique_id), "index": index, "total": total, "text": prompt, "attempt": attempt}, PromptServer.instance.client_id)
+            self._status(unique_id, f"Part {index + 1}/{total}: waiting for you to approve the prompt")
+            try:
+                while not slot["event"].wait(0.5):
+                    model_management.throw_exception_if_processing_interrupted()
+            finally:
+                _pending.pop(str(unique_id), None)
+            if slot["action"] == "regenerate":
+                attempt += 1
+                self._status(unique_id, f"Part {index + 1}/{total}: writing the prompt again")
+                prompt = rewrite(attempt)
+                continue
+            if slot["action"] == "approve_all":
+                review["on"] = False
+            return slot["text"].strip() or prompt
 
     @staticmethod
     def _prompt_preview(unique_id, index, prompt):
@@ -509,7 +637,10 @@ class PROMPTFORGE_H3Endless:
             free = self._release()
             print(f"[PromptForge] endless video: {free:.1f} GB of VRAM free for the prompt writer.")
             try:
-                settings = dict(enhancer, context_size=8192, kv_cache_type="q8_0") if attempt else enhancer
+                # a CUDA error inside llama.cpp cannot be caught and ends ComfyUI, so with little free VRAM the writer starts smaller
+                settings = enhancer
+                if attempt or free < 10:
+                    settings = dict(enhancer, kv_cache_type="q8_0", **({"context_size": 12288} if attempt or free < 8.5 else {}))
                 answer, _ = package.PROMPTFORGE_PromptEnhancer().enhance(
                     settings, text, "inputs" if (pictures or context is not None) else "text_only", preset, seed + attempt * 1000, 2048, opts["temperature"], 0.95, 40, 1, 1.1, "",
                     video_seconds=max(1, round(seconds + prefix / FPS)), image=refs[0], image2=refs[1], image3=refs[2],
