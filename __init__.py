@@ -406,8 +406,8 @@ def _dialogue_block(instructions, language, other, seconds):
     budget = max(3, round(max(seconds - 1.0, 1.0) * rate))
     name = chosen or "LANGUAGE"
     where = f"in {chosen}" if chosen else "in the language the dialogue instructions imply (English when they do not say)"
-    topic = f"Dialogue instructions from the user: {instructions}" if instructions else "The user gave no dialogue instructions: invent short natural dialogue that fits the scene."
-    return f"""# Dialogue (required in this video)
+    topic = f"Dialogue instructions from the user: {instructions}" if instructions else "The user gave no dialogue instructions, so dialogue is optional: write spoken lines only when the scene calls for them. A video without speech is fine."
+    return f"""# Dialogue ({"required in this video" if instructions else "optional, only the language is set"})
 {topic}
 Write every spoken line {where}. Only the spoken words are in that language; the rest of the prompt stays in English. The words are what a native speaker would really say, never a translation.
 
@@ -1897,13 +1897,13 @@ class PROMPTFORGE_PromptEnhancer:
                 min_chars=min_chars,
             )
         enhanced = run(seed, system_prompt)
-        if dialogue_block and auto_retry:
+        if dialogue_block and auto_retry and (dialogue or "").strip():
             language = _dialogue_language(dialogue_language, dialogue_language_other)
-            for attempt in range(1, 3):
+            for attempt in range(1, 2):
                 problem = _dialogue_problem(_split_thinking(enhanced)[0], language)
                 if not problem:
                     break
-                print(f"[PromptForge] dialogue rejected ({problem}); retrying ({attempt}/2).")
+                print(f"[PromptForge] dialogue rejected ({problem}); retrying once.")
                 seed = _next_seed(seed)
                 enhanced = run(seed, system_prompt + f"\n\n# Correction\nYour previous answer broke the dialogue format: {problem}. Write the whole prompt again and follow the Dialogue section exactly.")
         answer, thinking = _split_thinking(enhanced)

@@ -45,7 +45,7 @@ ATTENTION = ("comfy kitchen attention", "pytorch attention", "as connected")
 
 DEFAULTS = {
     "idea": {"general_prompt": "", "negative_prompt": "", "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "use_prompt_writer": True, "prompt_style": "standard",
-             "prompt_template": AUTOMATIC_TEMPLATE, "writer_creativity": 0.8, "review_prompts": False},
+             "prompt_template": AUTOMATIC_TEMPLATE, "writer_creativity": 0.8, "review_prompts": False, "check_prompts": False},
     "parts": {"parts": 1, "part_prompts": ""},
     "references": {},
     "modes": {"mode": MODES[0], "generation": GENERATIONS[0], "extend_existing_video": False, "two_stage_upscale": True},
@@ -100,6 +100,7 @@ class PROMPTFORGE_H3Idea(_Settings):
                 "prompt_template": (templates, {"default": AUTOMATIC_TEMPLATE, "tooltip": "The prompt writer's template. Automatic picks the one of the mode (T2VA, I2VA, L2VA, FL2VA, Ref2VA) in the style set above."}),
                 "writer_creativity": ("FLOAT", {"default": 0.8, "min": 0.1, "max": 1.0, "step": 0.05, "tooltip": "How freely the prompt writer words things. Lower sticks closer to your text."}),
                 "review_prompts": ("BOOLEAN", {"default": False, "tooltip": "Pause after each prompt is written: a panel lets you edit it, approve it, or have it written again. Needs the ComfyUI page open."}),
+                "check_prompts": ("BOOLEAN", {"default": False, "tooltip": "Write the prompt again (new seed, up to 3 tries) when a check finds a problem: empty, repeated, a refusal, or wrong dialogue tags when you gave dialogue instructions. Off = the first answer is used. Every retry costs a full writing pass."}),
             },
         }
 

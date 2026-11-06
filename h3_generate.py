@@ -576,7 +576,7 @@ class PROMPTFORGE_H3Generate:
                     settings, text, "inputs" if (pictures or context is not None) else "text_only", preset, seed + attempt * 1000, 2048, story["writer_creativity"], 0.95, 40, 1, 1.1, "",
                     video_seconds=max(1, round(seconds + prefix / FPS)), image=refs[0], image2=refs[1], image3=refs[2],
                     video=context if mode == "reference video" else None, frame_count=6 - 2 * attempt,
-                    negative_prompt=story["negative_prompt"], auto_retry=True, dialogue=story["dialogue"], dialogue_language=story["dialogue_language"],
+                    negative_prompt=story["negative_prompt"], auto_retry=story["check_prompts"], dialogue=story["dialogue"], dialogue_language=story["dialogue_language"],
                     dialogue_language_other=story["dialogue_language_other"], continuation=continuation,
                     context_video=context if mode == "anchor tail" else None)
                 return answer
