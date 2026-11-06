@@ -1,5 +1,5 @@
 {
- "id": "2ddb733f-bcde-491d-b754-aca94492be28",
+ "id": "82ac5a1d-e60c-43b7-b561-8811e2dba292",
  "revision": 0,
  "last_node_id": 12,
  "last_link_id": 20,
@@ -9,11 +9,11 @@
    "type": "Note",
    "pos": [
     0,
-    -340
+    -360
    ],
    "size": [
-    520,
-    300
+    560,
+    330
    ],
    "flags": {},
    "order": 0,
@@ -23,10 +23,10 @@
    "title": "READ ME",
    "properties": {},
    "widgets_values": [
-    "PromptForge H3 Endless Video\n\n1. Pick your MiniMax H3 model, text encoder and VAEs in the Loader (left).\n2. Pick the vision/language model that writes the prompts in 'PromptForge Model' (a Qwen3-VL GGUF works well).\n3. Write what the whole video is about in 'instructions' on the Endless node. Optional: choose reference images (the Load Image nodes) and describe them.\n4. In 'Endless Options' write what happens in each part, one line per part: Part 1: ... / Part 2: ... / Part 3 (10s): ... (or 0-5s: ... / 5-10s: ...). Start a part with raw: to use your own finished prompt. Also set size and how parts continue there.\n5. Queue. The prompt of each part shows in the node as it is written, and every part is previewed when it finishes; the joined video lands in the output folder.\n\nTurn on the LoRAs you want in the LoRA loader (a turbo LoRA wants steps 6-8, cfg 1). Attention backend and chunked feed-forward are speed/VRAM options; bypass them (Ctrl+B) if a result looks off. The Loader's extra VAE (the MiniMax H3 2x detail decoder) decodes the video, so it comes out at twice the generation size."
+    "PromptForge H3 Endless Video\n\n1. Pick your MiniMax H3 model, text encoder and VAEs in the Loader (left). The Loader's extra VAE (the 2x detail decoder) decodes the video, so it comes out at twice the generation size.\n2. Pick the model that writes the prompts in 'Prompt writer model' (a Qwen3-VL GGUF works well).\n3. All prompting is on the Endless node: the general prompt (what the whole video is about) and one box per part (what happens in that part). Press + / - to change the number of parts. Start a part box with (10s) for a longer part, or raw: to use your own finished prompt. Dialogue and the negative prompt are on the same node.\n4. Optional: choose character images (Load Image nodes) and describe them; they are used in every part.\n5. 'Endless Options' only holds the technical settings: seconds per part, size, how parts continue, sampling, saving.\n6. Queue. The prompt of each part shows in the node as it is written, and every part is previewed when it finishes; the joined video lands in the output folder.\n\nTurn on the LoRAs you want in the LoRA loader (a turbo LoRA wants steps 6-8, cfg 1). Attention backend and chunked feed-forward are speed/VRAM options; bypass them (Ctrl+B) if a result looks off."
    ],
    "widgets_values_named": {
-    "text": "PromptForge H3 Endless Video\n\n1. Pick your MiniMax H3 model, text encoder and VAEs in the Loader (left).\n2. Pick the vision/language model that writes the prompts in 'PromptForge Model' (a Qwen3-VL GGUF works well).\n3. Write what the whole video is about in 'instructions' on the Endless node. Optional: choose reference images (the Load Image nodes) and describe them.\n4. In 'Endless Options' write what happens in each part, one line per part: Part 1: ... / Part 2: ... / Part 3 (10s): ... (or 0-5s: ... / 5-10s: ...). Start a part with raw: to use your own finished prompt. Also set size and how parts continue there.\n5. Queue. The prompt of each part shows in the node as it is written, and every part is previewed when it finishes; the joined video lands in the output folder.\n\nTurn on the LoRAs you want in the LoRA loader (a turbo LoRA wants steps 6-8, cfg 1). Attention backend and chunked feed-forward are speed/VRAM options; bypass them (Ctrl+B) if a result looks off. The Loader's extra VAE (the MiniMax H3 2x detail decoder) decodes the video, so it comes out at twice the generation size."
+    "text": "PromptForge H3 Endless Video\n\n1. Pick your MiniMax H3 model, text encoder and VAEs in the Loader (left). The Loader's extra VAE (the 2x detail decoder) decodes the video, so it comes out at twice the generation size.\n2. Pick the model that writes the prompts in 'Prompt writer model' (a Qwen3-VL GGUF works well).\n3. All prompting is on the Endless node: the general prompt (what the whole video is about) and one box per part (what happens in that part). Press + / - to change the number of parts. Start a part box with (10s) for a longer part, or raw: to use your own finished prompt. Dialogue and the negative prompt are on the same node.\n4. Optional: choose character images (Load Image nodes) and describe them; they are used in every part.\n5. 'Endless Options' only holds the technical settings: seconds per part, size, how parts continue, sampling, saving.\n6. Queue. The prompt of each part shows in the node as it is written, and every part is previewed when it finishes; the joined video lands in the output folder.\n\nTurn on the LoRAs you want in the LoRA loader (a turbo LoRA wants steps 6-8, cfg 1). Attention backend and chunked feed-forward are speed/VRAM options; bypass them (Ctrl+B) if a result looks off."
    },
    "color": "#432",
    "bgcolor": "#653"
@@ -223,12 +223,12 @@
     }
    ],
    "properties": {
-    "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "4fb80270d842520faf782821a2fd23974c40c7b1",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
+    "aux_id": "GenorTG/ComfyUI-PromptForge",
+    "ver": "f3a4ecc801d3a26896a8bd388ce39960ae0a10c4",
     "Node name for S&R": "PROMPTFORGE_Loader"
    },
    "widgets_values": [
@@ -356,12 +356,12 @@
     }
    ],
    "properties": {
-    "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "4fb80270d842520faf782821a2fd23974c40c7b1",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
+    "aux_id": "GenorTG/ComfyUI-PromptForge",
+    "ver": "f3a4ecc801d3a26896a8bd388ce39960ae0a10c4",
     "Node name for S&R": "PROMPTFORGE_LoraLoader"
    },
    "widgets_values": [
@@ -430,12 +430,12 @@
     }
    ],
    "properties": {
-    "cnr_id": "comfy-core",
-    "ver": "0.43.0",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
+    "cnr_id": "comfy-core",
+    "ver": "0.43.0",
     "Node name for S&R": "MiniMaxH3SigmaShift"
    },
    "widgets_values": [
@@ -489,12 +489,12 @@
     }
    ],
    "properties": {
-    "cnr_id": "comfy-core",
-    "ver": "0.43.0",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
+    "cnr_id": "comfy-core",
+    "ver": "0.43.0",
     "Node name for S&R": "ModelAttentionBackend"
    },
    "widgets_values": [
@@ -555,8 +555,6 @@
     }
    ],
    "properties": {
-    "cnr_id": "comfyui-workflow-encrypt",
-    "ver": "1.0.0",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
@@ -675,8 +673,6 @@
    ],
    "title": "Latent preview (per part)",
    "properties": {
-    "cnr_id": "comfyui-workflow-encrypt",
-    "ver": "1.0.0",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
@@ -788,12 +784,12 @@
    ],
    "title": "Prompt writer model",
    "properties": {
-    "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "4fb80270d842520faf782821a2fd23974c40c7b1",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
+    "aux_id": "GenorTG/ComfyUI-PromptForge",
+    "ver": "f3a4ecc801d3a26896a8bd388ce39960ae0a10c4",
     "Node name for S&R": "PROMPTFORGE_Model"
    },
    "widgets_values": [
@@ -879,12 +875,12 @@
    ],
    "title": "Character 1",
    "properties": {
-    "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "4fb80270d842520faf782821a2fd23974c40c7b1",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
+    "aux_id": "GenorTG/ComfyUI-PromptForge",
+    "ver": "f3a4ecc801d3a26896a8bd388ce39960ae0a10c4",
     "Node name for S&R": "PROMPTFORGE_LoadImage"
    },
    "widgets_values": [
@@ -903,7 +899,7 @@
    "type": "PROMPTFORGE_LoadImage",
    "pos": [
     1100,
-    760
+    700
    ],
    "size": [
     400,
@@ -964,12 +960,12 @@
    ],
    "title": "Character 2 (optional)",
    "properties": {
-    "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "4fb80270d842520faf782821a2fd23974c40c7b1",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
+    "aux_id": "GenorTG/ComfyUI-PromptForge",
+    "ver": "f3a4ecc801d3a26896a8bd388ce39960ae0a10c4",
     "Node name for S&R": "PROMPTFORGE_LoadImage"
    },
    "widgets_values": [
@@ -992,7 +988,7 @@
    ],
    "size": [
     400,
-    724
+    466
    ],
    "flags": {},
    "order": 10,
@@ -1251,12 +1247,12 @@
     }
    ],
    "properties": {
-    "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "4fb80270d842520faf782821a2fd23974c40c7b1",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
+    "aux_id": "GenorTG/ComfyUI-PromptForge",
+    "ver": "f3a4ecc801d3a26896a8bd388ce39960ae0a10c4",
     "Node name for S&R": "PROMPTFORGE_H3Options"
    },
    "widgets_values": [
@@ -1322,8 +1318,8 @@
     0
    ],
    "size": [
-    420,
-    560
+    520,
+    1240
    ],
    "flags": {},
    "order": 11,
@@ -1455,6 +1451,76 @@
       "name": "filename_prefix"
      },
      "link": null
+    },
+    {
+     "localized_name": "parts",
+     "name": "parts",
+     "shape": 7,
+     "type": "INT",
+     "widget": {
+      "name": "parts"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "part_prompts",
+     "name": "part_prompts",
+     "shape": 7,
+     "type": "STRING",
+     "widget": {
+      "name": "part_prompts"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "negative_prompt",
+     "name": "negative_prompt",
+     "shape": 7,
+     "type": "STRING",
+     "widget": {
+      "name": "negative_prompt"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "dialogue",
+     "name": "dialogue",
+     "shape": 7,
+     "type": "STRING",
+     "widget": {
+      "name": "dialogue"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "dialogue_language",
+     "name": "dialogue_language",
+     "shape": 7,
+     "type": "COMBO",
+     "widget": {
+      "name": "dialogue_language"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "dialogue_language_other",
+     "name": "dialogue_language_other",
+     "shape": 7,
+     "type": "STRING",
+     "widget": {
+      "name": "dialogue_language_other"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "preset_style",
+     "name": "preset_style",
+     "shape": 7,
+     "type": "COMBO",
+     "widget": {
+      "name": "preset_style"
+     },
+     "link": null
     }
    ],
    "outputs": [
@@ -1472,29 +1538,45 @@
     }
    ],
    "properties": {
-    "aux_id": "GenorTG/ComfyUI-PromptForge",
-    "ver": "4fb80270d842520faf782821a2fd23974c40c7b1",
     "ue_properties": {
      "widget_ue_connectable": {},
      "input_ue_unconnectable": {}
     },
+    "aux_id": "GenorTG/ComfyUI-PromptForge",
+    "ver": "f3a4ecc801d3a26896a8bd388ce39960ae0a10c4",
     "Node name for S&R": "PROMPTFORGE_H3Endless"
    },
    "widgets_values": [
-    "A short adventure with the characters from the reference images. Describe the whole idea here, then write what happens in each part in the Options node.",
+    "",
+    "",
     1,
     "randomize",
     "PromptForge/endless",
+    3,
+    "[\"\",\"\",\"\"]",
+    "",
+    "",
+    "auto (from the instructions)",
+    "",
+    "standard",
     "",
     ""
    ],
    "widgets_values_named": {
-    "instructions": "A short adventure with the characters from the reference images. Describe the whole idea here, then write what happens in each part in the Options node.",
+    "instructions": "",
+    "part_boxes": "",
     "seed": 1,
     "control_after_generate": "randomize",
     "filename_prefix": "PromptForge/endless",
+    "parts": 3,
+    "part_prompts": "[\"\",\"\",\"\"]",
+    "negative_prompt": "",
+    "dialogue": "",
+    "dialogue_language": "auto (from the instructions)",
+    "dialogue_language_other": "",
+    "preset_style": "standard",
     "video_preview": "",
-    "part_prompts": ""
+    "written_prompts": ""
    }
   }
  ],

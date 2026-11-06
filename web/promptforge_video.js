@@ -49,7 +49,7 @@ app.registerExtension({
         const holder = document.createElement("div");
         Object.assign(holder.style, { width: "100%", height: "100%" });
         holder.append(box);
-        const prompts = node.addDOMWidget("part_prompts", "promptforge_part_prompts", holder, { serialize: false, getMinHeight: () => 220 });
+        const prompts = node.addDOMWidget("written_prompts", "promptforge_written_prompts", holder, { serialize: false, getMinHeight: () => 220 });
         Object.defineProperty(prompts, "width", { get: () => node.size[0], set: () => {}, configurable: true });
         node.promptforgeShowPrompt = ({ index, text }) => {
           box.value = (index === 0 ? "" : box.value) + `=== Part ${index + 1} ===\n${text}\n\n`;

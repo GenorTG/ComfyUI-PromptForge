@@ -16,6 +16,7 @@ Parts are encoded as they finish and joined at the end with one audio track, so 
 """
 import gc
 import importlib
+import json
 import os
 import re
 import shutil
@@ -105,6 +106,20 @@ def parse_plan(text, leading_is_part):
     if leading is not None and not marked and any(piece.strip() for piece in leading["text"]):
         parts.insert(0, leading)
     return "\n".join(brief).strip(), [{"text": " ".join(piece.strip() for piece in part["text"] if piece.strip()), "seconds": part["seconds"]} for part in parts]
+
+
+def part_boxes(text):
+    """The parts written in the node's part boxes (a JSON list of strings). A box may start with (10s) to give that part its own length."""
+    try:
+        values = json.loads(text) if text and text.strip() else []
+    except ValueError:
+        return []
+    plan = []
+    for value in values if isinstance(values, list) else []:
+        value = str(value).strip()
+        match = re.match(r"\(\s*(\d+(?:\.\d+)?)\s*s(?:ec(?:onds?)?)?\s*\)\s*", value, re.I)
+        plan.append({"text": value[match.end():].strip() if match else value, "seconds": float(match.group(1)) if match else None})
+    return plan
 
 
 def part_text(index, total, brief, reference_lines, plan, seconds):
@@ -229,7 +244,7 @@ class PROMPTFORGE_H3Options:
     RETURN_NAMES = ("OPTIONS",)
     FUNCTION = "build"
     CATEGORY = "🔮 PromptForge"
-    DESCRIPTION = "Settings for the PromptForge H3 Endless Video node: parts, length, size, how parts continue, an idea per part, dialogue and sampling."
+    DESCRIPTION = "Technical settings for the PromptForge H3 Endless Video node: part length, size, how parts continue, sampling and saving. The prompts are written on the Endless node."
 
     def build(self, parts, seconds_per_part, aspect_ratio, orientation, megapixels, transition, continuity, context_frames, part_ideas, **optional):
         options = dict(DEFAULT_OPTIONS)
@@ -248,7 +263,7 @@ class PROMPTFORGE_H3Endless:
                 "vae": ("VAE", {"tooltip": "The MiniMax H3 video VAE."}),
                 "audio_vae": ("VAE", {"tooltip": "The MiniMax H3 audio VAE."}),
                 "enhancer": ("PROMPTFORGE_MODEL", {"tooltip": "From a PromptForge Model node: the language model that writes every part's prompt."}),
-                "instructions": ("STRING", {"default": "", "multiline": True, "tooltip": "What the whole video is about. For reference images, say who or what each one is."}),
+                "instructions": ("STRING", {"default": "", "multiline": True, "placeholder": "General prompt: what the whole video is about, who is in it, the style. What happens in each part goes in the part boxes below.", "tooltip": "The general prompt: what the whole video is about. For reference images, say who or what each one is. It is context for every part; what each part shows is written in its own box."}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 2 ** 32 - 1, "tooltip": "Part n uses seed + n for the prompt and for the sampler."}),
                 "filename_prefix": ("STRING", {"default": "PromptForge/endless"}),
             },
@@ -263,6 +278,13 @@ class PROMPTFORGE_H3Endless:
                 "ref_text_2": ("STRING", {"forceInput": True}),
                 "ref_text_3": ("STRING", {"forceInput": True}),
                 "voice_audio": ("AUDIO", {"tooltip": "Optional voice reference, used in every part (<Audio 1>)."}),
+                "parts": ("INT", {"default": 0, "min": 0, "max": 200, "tooltip": "Number of parts. Set it with the part boxes on the node."}),
+                "part_prompts": ("STRING", {"default": "", "multiline": True, "tooltip": "What each part shows (a JSON list, kept by the part boxes on the node)."}),
+                "negative_prompt": ("STRING", {"default": "", "multiline": True, "tooltip": "What the video must not contain."}),
+                "dialogue": ("STRING", {"default": "", "multiline": True, "tooltip": "What the dialogue should be about and how it sounds. Written fresh for every part, sized to its length."}),
+                "dialogue_language": ([DIALOGUE_AUTO, "Arabic", "Chinese", "English", "French", "German", "Italian", "Japanese", "Korean", "Portuguese", "Russian", "Spanish", "other (type below)"], {"default": DIALOGUE_AUTO}),
+                "dialogue_language_other": ("STRING", {"default": ""}),
+                "preset_style": (list(PRESET_STYLES), {"default": "standard", "tooltip": "Which family of MiniMax H3 prompt presets the Enhancer uses."}),
             },
             "hidden": {"unique_id": "UNIQUE_ID"},
         }
@@ -275,8 +297,18 @@ class PROMPTFORGE_H3Endless:
     DESCRIPTION = "Makes a long MiniMax H3 video part by part: writes each part's prompt, continues from the previous ending, previews every part and joins them into one video."
 
     def generate(self, model, clip, vae, audio_vae, enhancer, instructions, seed, filename_prefix, options=None, decode_vae=None, first_frame=None,
-                 ref_image_1=None, ref_image_2=None, ref_image_3=None, ref_text_1="", ref_text_2="", ref_text_3="", voice_audio=None, unique_id=None):
+                 ref_image_1=None, ref_image_2=None, ref_image_3=None, ref_text_1="", ref_text_2="", ref_text_3="", voice_audio=None, parts=0, part_prompts="", negative_prompt="", dialogue="",
+                 dialogue_language=DIALOGUE_AUTO, dialogue_language_other="", preset_style="standard", unique_id=None):
         opts = {**DEFAULT_OPTIONS, **(options or {})}
+        # the prompting lives on this node; an older Options node's prompt fields are only the fallback
+        if negative_prompt.strip():
+            opts["negative_prompt"] = negative_prompt
+        if dialogue.strip():
+            opts["dialogue"] = dialogue
+        if dialogue_language != DIALOGUE_AUTO:
+            opts["dialogue_language"], opts["dialogue_language_other"] = dialogue_language, dialogue_language_other
+        if preset_style != "standard":
+            opts["preset_style"] = preset_style
         default_seconds = int(opts["seconds"])
         mode = "none" if opts["transition"] == TRANSITIONS[2] else opts["continuity"]
         context = int(opts["context_frames"])
@@ -284,13 +316,20 @@ class PROMPTFORGE_H3Endless:
             context = max(5, context)
         width, height = empty_latent.resolve_size("aspect + megapixels", 0, 0, "", opts["aspect_ratio"], opts["megapixels"], opts["orientation"], 32)
 
-        brief, plan = parse_plan(instructions, False)
-        listed = parse_plan(opts["part_ideas"], True)[1]
-        plan = [part for part in (listed or plan)]
-        brief = brief if plan and not listed else instructions.strip()
-        total = max(int(opts["parts"]), len(plan))
-        if len(plan) > int(opts["parts"]):
-            print(f"[PromptForge] endless video: {len(plan)} parts were described, so {len(plan)} parts will be made.")
+        entered = part_boxes(part_prompts)
+        if any(part["text"] for part in entered):
+            brief, plan = instructions.strip(), entered
+            total = int(parts) if parts > 0 else len(entered)
+            plan = plan[:total]
+        else:
+            # older workflows: the parts were written as markers in the instructions or in the Options node
+            brief, plan = parse_plan(instructions, False)
+            listed = parse_plan(opts["part_ideas"], True)[1]
+            plan = [part for part in (listed or plan)]
+            brief = brief if plan and not listed else instructions.strip()
+            total = max(int(parts) if parts > 0 else int(opts["parts"]), len(plan))
+        if len(plan) > total:
+            total = len(plan)
         plan += [{"text": "", "seconds": None}] * (total - len(plan))
         lengths = [float(part["seconds"] or default_seconds) for part in plan]
 
