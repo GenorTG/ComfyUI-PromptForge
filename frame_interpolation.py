@@ -67,18 +67,21 @@ class PROMPTFORGE_FrameInterpolate:
             return (frames,)
         frames = frames[..., :3]
         total = (count - 1) * multiplier + 1
-        needed = total * frames.shape[1] * frames.shape[2] * 3 * 4
         available = psutil.virtual_memory().available
-        if needed > 0.9 * available:
-            raise ValueError(f"[PromptForge] the interpolated clip needs {needed / 1024 ** 3:.1f} GB of RAM and only {available / 1024 ** 3:.1f} GB is free. Use a lower multiplier or fewer frames.")
+        values = total * frames.shape[1] * frames.shape[2] * 3
+        dtype = torch.float32 if values * 4 < 0.4 * available else torch.float16
+        if values * 2 > 0.9 * available:
+            raise ValueError(f"[PromptForge] the interpolated clip needs {values * 2 / 1024 ** 3:.1f} GB of RAM even in half precision and only {available / 1024 ** 3:.1f} GB is free. Use a lower multiplier or fewer frames.")
+        out = torch.empty((total, *frames.shape[1:]), dtype=dtype)
         if ckpt_name == BLEND:
-            return (_blend(frames, multiplier),)
+            out.copy_(_blend(frames, multiplier))
+            return (out,)
         paths = _checkpoints()
         if ckpt_name not in paths:
             raise ValueError("[PromptForge] no frame interpolation model was found. Put a RIFE 4.25+ or FILM model in models/frame_interpolation (for example rife_v4.26.safetensors), or choose blend.")
         patcher = _load(paths[ckpt_name])
 
-        pieces, start, span = [], 0, count
+        start, span, filled = 0, count, 0
         pbar = comfy.utils.ProgressBar(count - 1)
         while start < count - 1:
             model_management.throw_exception_if_processing_interrupted()
@@ -95,13 +98,15 @@ class PROMPTFORGE_FrameInterpolate:
                     continue
                 print("[PromptForge] frame interpolation ran out of memory even in short runs; cross-fading the rest.")
                 result = _blend(run, multiplier)
-            pieces.append(result if not pieces else result[1:])
+            result = result if filled == 0 else result[1:]
+            out[filled:filled + len(result)] = result
+            filled += len(result)
             pbar.update(end - 1 - start)
             start = end - 1
         del patcher
         gc.collect()
         model_management.soft_empty_cache()
-        return (torch.cat(pieces),)
+        return (out,)
 
 
 NODE_CLASS_MAPPINGS = {"PROMPTFORGE_FrameInterpolate": PROMPTFORGE_FrameInterpolate}
