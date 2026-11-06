@@ -232,6 +232,7 @@ class PROMPTFORGE_H3Generate:
                 "second_stage": ("PROMPTFORGE_H3_SECOND_STAGE", {"tooltip": "Connect to upscale every part and sample it again. Not connected: one stage."}),
                 "preview": ("PROMPTFORGE_H3_PREVIEW", {"tooltip": "Settings of the live preview. Default: a 4-frame loop."}),
                 "performance": ("PROMPTFORGE_H3_PERFORMANCE", {"tooltip": "Attention backend and feed-forward chunking. Default: the fast settings."}),
+                "modes": ("PROMPTFORGE_H3_MODES", {"tooltip": "Switches for what is used: first frame, reference pictures / videos / sounds, extending a video, the second stage. Default: everything that is connected."}),
                 "continue_from": ("PROMPTFORGE_H3_CONTINUE", {"tooltip": "An existing video to extend: the first part continues from its ending and the result starts with that video."}),
                 "decode_vae": ("VAE", {"tooltip": "Decode with this VAE instead of the video VAE, for example the MiniMax H3 2x detail decoder (the Loader's extra VAE). The frames then come out twice as large."}),
             },
@@ -239,13 +240,16 @@ class PROMPTFORGE_H3Generate:
         }
 
     def generate(self, model, clip, vae, audio_vae, writer, story, seed, references=None, format=None, continuity=None, sampling=None, second_stage=None,
-                 preview=None, performance=None, continue_from=None, decode_vae=None, unique_id=None):
+                 preview=None, performance=None, continue_from=None, modes=None, decode_vae=None, unique_id=None):
         story = h3_settings.settings("story", story)
         refs = h3_settings.settings("references", references)
         fmt = h3_settings.settings("format", format)
         join = h3_settings.settings("continuity", continuity)
         sampling = h3_settings.settings("sampling", sampling)
-        second = h3_settings.settings("second_stage", second_stage) if second_stage is not None else None
+        modes = h3_settings.settings("modes", modes)
+        second = h3_settings.settings("second_stage", second_stage) if second_stage is not None and modes["two_stage_upscale"] else None
+        if not modes["extend_existing_video"]:
+            continue_from = None
         preview = h3_settings.settings("preview", preview)
         perf = h3_settings.settings("performance", performance)
 
@@ -268,17 +272,33 @@ class PROMPTFORGE_H3Generate:
         lengths = [float(part["seconds"] or default_seconds) for part in plan]
         brief = story["general_prompt"].strip()
 
-        first_frame, voice = refs.get("first_frame"), refs.get("voice")
-        numbered = [(number, refs.get(f"image_{number}")) for number in (1, 2, 3) if refs.get(f"image_{number}") is not None]
-        pictures = ([first_frame] if first_frame is not None else []) + [image for _, image in numbered]
-        pictures = pictures[:3]
+        text_of = lambda key: refs.get(key, "").strip()
+        first_frame = refs.get("first_frame") if modes["use_first_frame"] else None
+        images = [(number, refs.get(f"image_{number}")) for number in range(1, 10) if modes["use_reference_images"] and refs.get(f"image_{number}") is not None]
+        pictures = ([first_frame] if first_frame is not None else []) + [image for _, image in images]
         reference_lines = ["<Picture 1> is the exact first frame of the video."] if first_frame is not None else []
-        for position, (number, _) in enumerate(numbered, start=len(reference_lines) + 1):
-            text = refs[f"description_{number}"].strip()
-            if text and position <= len(pictures):
-                reference_lines.append(f"<Picture {position}>: {text}")
-        if voice is not None:
-            reference_lines.append("<Audio 1> is the voice-timbre reference for the main speaker (S1).")
+        for position, (number, _) in enumerate(images, start=len(reference_lines) + 1):
+            reference_lines.append(f"<Picture {position}>: {text_of(f'description_{number}')}" if text_of(f"description_{number}") else f"<Picture {position}> is a reference picture.")
+        extras = {"ref_videos": {}, "ref_video_audios": {}, "ref_audios": {}}
+        video_lines, audio_lines = [], []
+        for number in range(1, 4):
+            video = refs.get(f"video_{number}")
+            if video is None or not modes["use_reference_videos"]:
+                continue
+            position = len(extras["ref_videos"]) + 1
+            extras["ref_videos"][f"ref_video_{position}"] = video
+            video_lines.append(f"<Video {position}>: {text_of(f'video_description_{number}') or 'a reference video.'}")
+            soundtrack = refs.get(f"video_audio_{number}")
+            if soundtrack is not None:
+                extras["ref_video_audios"][f"ref_video_audio_{position}"] = soundtrack
+                audio_lines.append(f"<Audio {len(extras['ref_video_audios'])}> is the soundtrack of <Video {position}>.")
+        for number in range(1, 4):
+            sound = refs.get(f"audio_{number}")
+            if sound is None or not modes["use_reference_audio"]:
+                continue
+            extras["ref_audios"][f"ref_audio_{len(extras['ref_audios']) + 1}"] = sound
+            audio_lines.append(f"<Audio {len(extras['ref_video_audios']) + len(extras['ref_audios'])}>: {text_of(f'audio_description_{number}') or 'a sound reference.'}")
+        reference_lines += video_lines + audio_lines
 
         parts_frames, parts_audio, prompts, notes, report = [], [], [], [], []
         tail, tail_wave, last_shot, sample_rate, previous = None, None, "", 0, None
@@ -308,7 +328,7 @@ class PROMPTFORGE_H3Generate:
                     prompt = idea[4:].strip()
                 else:
                     ask = lambda attempt: self._prompt(writer, story, mode, join["story_style"], continuing, index, total, seconds, seed + index + 500 * attempt,
-                                                       part_text(index, total, brief, reference_lines, plan, seconds), pictures, tail if continuing else None, notes, last_shot, prefix)
+                                                       part_text(index, total, brief, reference_lines, plan, seconds), pictures, extras, tail if continuing else None, notes, last_shot, prefix)
                     prompt = ask(0)
                     if review["on"]:
                         clock_wait = time.time()
@@ -324,7 +344,7 @@ class PROMPTFORGE_H3Generate:
                 self._status(unique_id, f"Part {index + 1}/{total}: encoding the prompt")
                 length = nearest_grid(prefix + seconds * FPS)
                 carried = (tail if continuing else None, (tail_wave, sample_rate) if continuing else None)
-                positive, latent = self._conditioning(clip, vae, audio_vae, prompt, width, height, length, pictures, first_frame if index == 0 else None, *carried, mode, voice, continuing)
+                positive, latent = self._conditioning(clip, vae, audio_vae, prompt, width, height, length, pictures, first_frame if index == 0 else None, *carried, mode, extras, continuing)
                 negative = positive if sampling["cfg"] == 1.0 else clip.encode_from_tokens_scheduled(clip.tokenize(""))
 
                 marks["encode"] = time.time() - clock - marks["prompt"]
@@ -337,7 +357,7 @@ class PROMPTFORGE_H3Generate:
                     marks["sample"] = time.time() - clock_sample
                     if second is not None:
                         latent_out = self._second_stage(model, clip, vae, audio_vae, prompt, latent_out, second, sampling, preview, unique_id, index, total, seed + index + 1000 * attempt + 7,
-                                                        length, pictures, first_frame if index == 0 else None, carried, mode, voice, continuing, marks)
+                                                        length, pictures, first_frame if index == 0 else None, carried, mode, extras, continuing, marks)
                     self._status(unique_id, f"Part {index + 1}/{total}: decoding")
                     self._release()
                     clock_decode = time.time()
@@ -459,7 +479,7 @@ class PROMPTFORGE_H3Generate:
         return sampler.PROMPTFORGE_Sampler().sample(model, positive, negative, latent, seed, steps, sampling["cfg"], sampler_name or sampling["sampler_name"], sampling["scheduler"], 1.0, 1,
                                                     custom_sigmas=custom_sigmas, preview="default" if preview["mode"] == "ComfyUI's own" else "none")[0]
 
-    def _second_stage(self, model, clip, vae, audio_vae, prompt, latent_out, second, sampling, preview, unique_id, index, total, seed, length, pictures, first_frame, carried, mode, voice, continuing, marks):
+    def _second_stage(self, model, clip, vae, audio_vae, prompt, latent_out, second, sampling, preview, unique_id, index, total, seed, length, pictures, first_frame, carried, mode, extras, continuing, marks):
         """Upscales the first stage's video latent and samples it again; the sound latent is kept."""
         self._status(unique_id, f"Part {index + 1}/{total}: upscaling the latent")
         self._release()
@@ -468,7 +488,7 @@ class PROMPTFORGE_H3Generate:
         video = h3_upscaler.upscale(video, second["upscale_model"], second["size_mode"], second["scale"], second["megapixels"], second["width"], second["height"], second["align"], second["precision"])
         marks["upscale"] = time.time() - clock
         self._release()
-        positive, _ = self._conditioning(clip, vae, audio_vae, prompt, video.shape[-1] * 16, video.shape[-2] * 16, length, pictures, first_frame, *carried, mode, voice, continuing)
+        positive, _ = self._conditioning(clip, vae, audio_vae, prompt, video.shape[-1] * 16, video.shape[-2] * 16, length, pictures, first_frame, *carried, mode, extras, continuing)
         negative = positive if sampling["cfg"] == 1.0 else clip.encode_from_tokens_scheduled(clip.tokenize(""))
         steps = int(second["steps"])
         sigmas = ", ".join(f"{value:.4f}" for value in stage2_sigmas(steps, float(second["start_sigma"])))
@@ -507,10 +527,10 @@ class PROMPTFORGE_H3Generate:
         if unique_id is not None:
             PromptServer.instance.send_sync("promptforge.prompt", {"node": str(unique_id), "index": index, "text": prompt}, PromptServer.instance.client_id)
 
-    def _prompt(self, writer, story, mode, story_style, continuing, index, total, seconds, seed, text, pictures, tail, notes, last_shot, prefix):
+    def _prompt(self, writer, story, mode, story_style, continuing, index, total, seconds, seed, text, pictures, extras, tail, notes, last_shot, prefix):
         package = _package()
-        refs = list(pictures) + [None] * (3 - len(pictures))
-        have_refs = bool(pictures) or (continuing and mode == "reference video")
+        refs = (list(pictures) + [None] * 3)[:3]
+        have_refs = bool(pictures) or bool(extras["ref_videos"] or extras["ref_audios"]) or (continuing and mode == "reference video")
         preset = ("NSFW › " if story["prompt_style"] == "NSFW" else "") + ("MiniMax H3 Ref2VA" if have_refs else "MiniMax H3 T2VA")
         continuation = continuation_brief(index, total, seconds, notes[-4:], last_shot, mode, prefix / FPS, story_style) if continuing else ""
         context = small(tail) if (continuing and tail is not None) else None
@@ -536,13 +556,14 @@ class PROMPTFORGE_H3Generate:
                 print("[PromptForge] endless video: the prompt writer could not start (out of VRAM?); freeing memory and trying again with a smaller context.")
                 time.sleep(3)
 
-    def _conditioning(self, clip, vae, audio_vae, prompt, width, height, length, pictures, first_frame, tail, tail_wave, mode, voice, continuing):
+    def _conditioning(self, clip, vae, audio_vae, prompt, width, height, length, pictures, first_frame, tail, tail_wave, mode, extras, continuing):
         refs = {f"ref_image_{number + 1}": image for number, image in enumerate(pictures)}
-        videos = {"ref_video_1": tail} if continuing and mode == "reference video" else {}
-        voices = {"ref_audio_1": voice} if voice is not None else {}
-        if refs or videos or voices:
+        videos = dict(extras["ref_videos"])
+        if continuing and mode == "reference video" and len(videos) < 3:
+            videos[f"ref_video_{len(videos) + 1}"] = tail
+        if refs or videos or extras["ref_audios"]:
             positive, latent = nodes_minimax_h3.MiniMaxH3ReferenceToVideo.execute(
-                clip, prompt, width, height, length, "match", vae=vae, audio_vae=audio_vae, ref_images=refs, ref_videos=videos, ref_video_audios={}, ref_audios=voices).args
+                clip, prompt, width, height, length, "match", vae=vae, audio_vae=audio_vae, ref_images=refs, ref_videos=videos, ref_video_audios=extras["ref_video_audios"], ref_audios=extras["ref_audios"]).args
         else:
             positive, latent = nodes_minimax_h3.MiniMaxH3ImageToVideo.execute(clip, vae, prompt, width, height, length).args
         if first_frame is not None:

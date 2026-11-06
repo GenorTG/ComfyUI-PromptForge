@@ -40,7 +40,8 @@ ATTENTION = ("comfy kitchen attention", "pytorch attention", "as connected")
 DEFAULTS = {
     "story": {"general_prompt": "", "parts": 3, "part_prompts": "", "negative_prompt": "", "dialogue": "", "dialogue_language": DIALOGUE_AUTO,
               "dialogue_language_other": "", "prompt_style": "standard", "writer_creativity": 0.8, "review_prompts": False},
-    "references": {"description_1": "", "description_2": "", "description_3": ""},
+    "references": {},
+    "modes": {"use_first_frame": True, "use_reference_images": True, "use_reference_videos": True, "use_reference_audio": True, "extend_existing_video": True, "two_stage_upscale": True},
     "format": {"aspect_ratio": "16:9", "orientation": "landscape", "megapixels": 0.5, "seconds_per_part": "5"},
     "continuity": {"how_parts_join": next(iter(JOIN_MODES)), "story_style": STORY_STYLES[0], "carried_frames": "22", "smooth_joins": True, "check_joins": False, "join_retries": 1},
     "sampling": {"sampler_name": "er_sde", "scheduler": "sgm_uniform", "steps": 8, "cfg": 1.0, "shift_video": 12.0, "shift_audio": 3.0},
@@ -98,21 +99,47 @@ class PROMPTFORGE_H3References(_Settings):
     KEY = "references"
     RETURN_TYPES = ("PROMPTFORGE_H3_REFERENCES",)
     RETURN_NAMES = ("references",)
-    DESCRIPTION = "Who is in the video: up to three character pictures with a description of each, an optional exact first frame and an optional voice. Used in every part so the characters stay the same."
+    DESCRIPTION = ("Everything the video is built from besides the story: pictures, videos and sounds, each with a description. They are numbered in the order of the slots: "
+                   "<Picture 1> is the first connected picture (the first frame counts as Picture 1 when it is used), <Video 1> the first video, <Audio 1> the first sound (the soundtracks of the videos come before the standalone sounds). "
+                   "The prompt writer is told which number is what, so you can name them in the story. Used in every part, so the subjects stay the same.")
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        optional = {"first_frame": ("IMAGE", {"tooltip": "The exact first frame of the video (the first part only). Also used as a reference picture."})}
+        for number in range(1, 10):
+            optional[f"image_{number}"] = ("IMAGE", {"tooltip": "A character, place or object that must look the same in every part. Wire a Load Image node's DESCRIPTION to the description below."})
+            if number <= 3:
+                optional[f"description_{number}"] = ("STRING", {"default": "", "multiline": True, "tooltip": f"Who or what picture {number} is. Can come from the DESCRIPTION output of a Load Image node."})
+        for number in range(1, 4):
+            optional[f"video_{number}"] = ("IMAGE", {"tooltip": "A reference video as frames at 24 fps (2 to 15 seconds)."})
+            optional[f"video_audio_{number}"] = ("AUDIO", {"tooltip": "The soundtrack of that video."})
+        for number in range(1, 4):
+            optional[f"audio_{number}"] = ("AUDIO", {"tooltip": "A sound reference: a voice, an instrument, an effect. Provided to the model as it is."})
+        for number in range(4, 10):
+            optional[f"description_{number}"] = ("STRING", {"default": "", "multiline": True, "tooltip": f"Who or what picture {number} is."})
+        for number in range(1, 4):
+            optional[f"video_description_{number}"] = ("STRING", {"default": "", "multiline": True, "tooltip": f"What video {number} shows."})
+        for number in range(1, 4):
+            optional[f"audio_description_{number}"] = ("STRING", {"default": "", "multiline": True, "tooltip": f"What sound {number} is, for example 'the voice of the woman (S1)'."})
+        return {"required": {}, "optional": optional}
+
+
+class PROMPTFORGE_H3Modes(_Settings):
+    KEY = "modes"
+    RETURN_TYPES = ("PROMPTFORGE_H3_MODES",)
+    RETURN_NAMES = ("modes",)
+    DESCRIPTION = "One place to switch what the video uses, without rewiring or bypassing: every switch only turns off something that is connected. All on = use everything that is connected."
 
     @classmethod
     def INPUT_TYPES(cls):
         return {
-            "required": {},
-            "optional": {
-                "first_frame": ("IMAGE", {"tooltip": "The exact first frame of the video (the first part only)."}),
-                "image_1": ("IMAGE", {"tooltip": "A character, place or object that must look the same in every part."}),
-                "description_1": ("STRING", {"default": "", "multiline": True, "tooltip": "Who or what image_1 is. Can come from the DESCRIPTION output of a Load Image node."}),
-                "image_2": ("IMAGE",),
-                "description_2": ("STRING", {"default": "", "multiline": True}),
-                "image_3": ("IMAGE",),
-                "description_3": ("STRING", {"default": "", "multiline": True}),
-                "voice": ("AUDIO", {"tooltip": "A voice sample: the main speaker keeps its sound in every part."}),
+            "required": {
+                "use_first_frame": ("BOOLEAN", {"default": True, "tooltip": "Image to video: the video starts exactly with the first frame from the References node."}),
+                "use_reference_images": ("BOOLEAN", {"default": True, "tooltip": "Reference to video: use the pictures from the References node."}),
+                "use_reference_videos": ("BOOLEAN", {"default": True, "tooltip": "Use the reference videos (and their soundtracks) from the References node."}),
+                "use_reference_audio": ("BOOLEAN", {"default": True, "tooltip": "Use the sounds from the References node."}),
+                "extend_existing_video": ("BOOLEAN", {"default": True, "tooltip": "Continue the video from the Continue Existing Video node."}),
+                "two_stage_upscale": ("BOOLEAN", {"default": True, "tooltip": "Run the Second Stage (upscale and refine). Off = first pass only, much faster, for trying prompts."}),
             },
         }
 
@@ -255,6 +282,7 @@ NODES = {
     "PROMPTFORGE_H3Story": ("PromptForge H3 Story", PROMPTFORGE_H3Story),
     "PROMPTFORGE_H3References": ("PromptForge H3 References", PROMPTFORGE_H3References),
     "PROMPTFORGE_H3ContinueFrom": ("PromptForge H3 Continue Existing Video", PROMPTFORGE_H3ContinueFrom),
+    "PROMPTFORGE_H3Modes": ("PromptForge H3 Mode Switches", PROMPTFORGE_H3Modes),
     "PROMPTFORGE_H3Format": ("PromptForge H3 Video Format", PROMPTFORGE_H3Format),
     "PROMPTFORGE_H3Continuity": ("PromptForge H3 Continuity", PROMPTFORGE_H3Continuity),
     "PROMPTFORGE_H3Sampling": ("PromptForge H3 Sampling", PROMPTFORGE_H3Sampling),

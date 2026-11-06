@@ -102,11 +102,13 @@ class PROMPTFORGE_LoadImage:
     RETURN_NAMES = ("IMAGE", "MASK", "DESCRIPTION", "NAME")
     FUNCTION = "load"
     CATEGORY = "🔮 PromptForge/Load"
-    DESCRIPTION = "Load an image from a thumbnail browser of the input folder and output a per-image description (stored, or typed in the node) as text."
+    DESCRIPTION = "Load an image from a thumbnail browser of the input folder and output a per-image description (stored, or typed in the node) as text. With no image chosen the image output is empty, so the node can stay in a workflow unused."
 
     @classmethod
     def IS_CHANGED(cls, image, description):
         try:
+            if not image:
+                return description
             path = _resolve(image)
             return f"{path.stat().st_mtime_ns}|{description}|{_descriptions().get(image, '')}"
         except (ValueError, OSError):
@@ -122,6 +124,8 @@ class PROMPTFORGE_LoadImage:
             return str(error)
 
     def load(self, image, description):
+        if not image:
+            return (None, None, description.strip(), "")
         path = _resolve(image)
         with node_helpers.pillow(Image.open, str(path)) as opened:
             frame = node_helpers.pillow(ImageOps.exif_transpose, opened)

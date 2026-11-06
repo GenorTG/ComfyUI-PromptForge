@@ -97,6 +97,9 @@ Converts a bf16 / fp16 diffusion model to **NVFP4** (about 3.5x smaller, native 
 ### PromptForge MiniMax H3 VAE Decode (`PROMPTFORGE_MiniMaxDecode`)
 Decodes MiniMax H3 video latents with H3's own decoder. It always tiles at 256 px (whole-frame and larger tiles look fried and banded with H3) and, on an out-of-memory error, steps down to 85 / 34 / 17 frames per pass, without the generic tiler that ignores H3's blend rules. The step that worked is remembered per latent size. Frames are written into one preallocated buffer, non-finite pixels are repaired and reported, and `tile_size` / `frames_per_pass` can be forced. Works with the 2x packed-projection decoders too.
 
+### PromptForge Load Audio (`PROMPTFORGE_LoadAudio`)
+A sound from the input folder with a description; empty = no sound, so the node can stay in a workflow unused (Load Image works the same way).
+
 ### PromptForge Load Image (`PROMPTFORGE_LoadImage`)
 Loads an image from the input folder through a thumbnail browser (search, folder filter, upload). Each image can have a stored description (`user/promptforge/image_descriptions.json`): *Save description* stores the text typed in the node (picking another image never changes that box; the stored text shows as its placeholder), and the node outputs it as `DESCRIPTION` next to `IMAGE`, `MASK` and `NAME`. Text typed in the node is used as is; an empty box falls back to the stored description. Handy for switching a character and its description together in reference-to-video workflows.
 
@@ -114,7 +117,8 @@ Makes a long MiniMax H3 video part by part. One node does the generating (**Prom
 | Node | What it holds |
 |---|---|
 | **H3 Story** (required) | General prompt, one box per part (+ / − changes the count; start a box with `(10s)` for its own length or `raw:` to use it as the finished prompt), negative prompt, dialogue and language, prompt style, writer creativity, prompt approval. |
-| **H3 References** | First frame, up to three character images with descriptions, a voice clip. |
+| **H3 Mode Switches** | One place to switch what is used: first frame, reference pictures / videos / sounds, extending a video, the second stage. Everything stays wired; you flip switches. |
+| **H3 References** | The first frame, up to 9 reference pictures, 3 reference videos (with soundtracks) and 3 reference sounds, each with a description (wire a Load Image / Load Audio DESCRIPTION, or type it). The prompt writer is told what `<Picture N>`, `<Video N>` and `<Audio N>` are, so the Story can name them; the descriptions stay put while you rewrite the Story. |
 | **H3 Video Format** | Aspect ratio, orientation, megapixels, seconds per part (5 or 10). |
 | **H3 Continuity** | How parts join (carry the last frames forward / give the ending as a reference video / independent parts), story style, carried frames, join smoothing, join check and retries. |
 | **H3 Sampling** | Sampler, scheduler, steps, cfg of the first pass and the video / audio sigma shifts (12 / 3; no separate shift node needed). Defaults follow 10Eros Max: er_sde + sgm_uniform, 8 steps. |

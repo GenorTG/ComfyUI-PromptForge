@@ -5,6 +5,9 @@ import { addLivePreview } from "./promptforge_preview.js";
 const STORY = "PROMPTFORGE_H3Story";
 const SECOND_STAGE = "PROMPTFORGE_H3SecondStage";
 const GENERATE = "PROMPTFORGE_H3Generate";
+const REFERENCES = "PROMPTFORGE_H3References";
+// the description box of a slot is shown only while its picture / video / sound is connected and the description is not itself wired
+const DESCRIPTIONS = { description_: "image_", video_description_: "video_", audio_description_: "audio_" };
 const SIZE_WIDGETS = { "scale by multiplier": ["scale"], megapixels: ["megapixels"], "target dimensions": ["width", "height"] };
 const BOX_HEIGHT = 96;
 const LABEL_HEIGHT = 18;
@@ -103,6 +106,27 @@ app.registerExtension({
         refresh(this);
         return result;
       };
+      return;
+    }
+
+    if (nodeData.name === REFERENCES) {
+      const refresh = (node) => {
+        const linked = (name) => node.inputs?.find((input) => input.name === name)?.link != null;
+        for (const widget of node.widgets) {
+          const prefix = Object.keys(DESCRIPTIONS).find((key) => widget.name.startsWith(key));
+          if (!prefix) continue;
+          const number = widget.name.slice(prefix.length);
+          setShown(widget, linked(DESCRIPTIONS[prefix] + number) && !linked(widget.name));
+        }
+        node.setSize([node.size[0], node.computeSize()[1]]);
+        node.setDirtyCanvas(true, true);
+      };
+      const onCreated = nodeType.prototype.onNodeCreated;
+      nodeType.prototype.onNodeCreated = function () { onCreated?.apply(this, arguments); refresh(this); };
+      const onConnections = nodeType.prototype.onConnectionsChange;
+      nodeType.prototype.onConnectionsChange = function () { const result = onConnections?.apply(this, arguments); refresh(this); return result; };
+      const onConfigure = nodeType.prototype.onConfigure;
+      nodeType.prototype.onConfigure = function () { const result = onConfigure?.apply(this, arguments); refresh(this); return result; };
       return;
     }
 
