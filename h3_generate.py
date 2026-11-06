@@ -573,7 +573,7 @@ class PROMPTFORGE_H3Generate:
                 if attempt or free < 10:
                     settings = dict(writer, kv_cache_type="q8_0", **({"context_size": 12288} if attempt or free < 8.5 else {}))
                 answer, _ = package.PROMPTFORGE_PromptEnhancer().enhance(
-                    settings, text, "inputs" if (pictures or context is not None) else "text_only", preset, seed + attempt * 1000, 2048, story["writer_creativity"], 0.95, 40, 1, 1.1, "",
+                    settings, text, "inputs" if (pictures or context is not None) else "text_only", preset, seed + attempt * 1000, story["writer_max_tokens"], story["writer_creativity"], story["writer_top_p"], story["writer_top_k"], 1, story["writer_repetition_penalty"], "",
                     video_seconds=max(1, round(seconds + prefix / FPS)), image=refs[0], image2=refs[1], image3=refs[2],
                     video=context if mode == "reference video" else None, frame_count=6 - 2 * attempt,
                     negative_prompt=story["negative_prompt"], auto_retry=story["check_prompts"], dialogue=story["dialogue"], dialogue_language=story["dialogue_language"],

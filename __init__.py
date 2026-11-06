@@ -352,6 +352,32 @@ def _bad_output_reason(text, min_chars=20):
     return ""
 
 
+RUNAWAY_LOOP = 6        # the same word this many times in a row
+RUNAWAY_SENTENCE = 110  # words in one sentence; real prompt sentences are far shorter
+RUNAWAY_KEEP = 35       # words of a runaway sentence that are still kept
+
+
+def _cut_runaway_tail(text):
+    """Cut the degenerate tail of a prompt the model lost track of: a looping word, or one endless run-on sentence. Returns (text, whether something was cut)."""
+    cut = None
+    words = list(re.finditer(r"\S+", text))
+    run = 1
+    for index in range(1, len(words)):
+        run = run + 1 if words[index].group().lower().strip(".,;:!?") == words[index - 1].group().lower().strip(".,;:!?") else 1
+        if run >= RUNAWAY_LOOP:
+            cut = words[index - run + 2].start()  # one copy of the word stays
+            break
+    for sentence in re.finditer(r"[^.!?\n]+", text):
+        inside = list(re.finditer(r"\S+", sentence.group()))
+        if len(inside) > RUNAWAY_SENTENCE:
+            start = sentence.start() + inside[RUNAWAY_KEEP].start()
+            cut = start if cut is None else min(cut, start)
+            break
+    if cut is None:
+        return text, False
+    return text[:cut].rstrip(" ,;:-") + ".", True
+
+
 def _generate_checked(attempt, seed, min_chars, auto_retry, tries=3):
     """Run attempt(seed) until the output passes the checks, up to `tries` seeds; keep the best on failure."""
     texts = []
@@ -1908,6 +1934,9 @@ class PROMPTFORGE_PromptEnhancer:
                 enhanced = run(seed, system_prompt + f"\n\n# Correction\nYour previous answer broke the dialogue format: {problem}. Write the whole prompt again and follow the Dialogue section exactly.")
         answer, thinking = _split_thinking(enhanced)
         answer = _clean_prompt_output(answer)
+        answer, cut = _cut_runaway_tail(answer)
+        if cut:
+            print("[PromptForge] the prompt writer lost track near the end (a looping word or an endless sentence); the runaway tail was cut. A lower temperature, a higher repetition penalty or a smaller max_tokens helps.")
         if minimax_key:
             answer = _drop_absent_references(answer, sum(value is not None for value in (image, image2, image3)), labelled_video, user_text)
         preset_lower = (enhancement_preset or "").lower()
