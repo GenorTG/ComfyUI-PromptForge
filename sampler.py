@@ -120,6 +120,7 @@ class PROMPTFORGE_Sampler:
                 "ltxv_max_shift": ("FLOAT", {"default": 2.05, "min": 0.0, "max": 100.0, "step": 0.01, "advanced": True}),
                 "ltxv_base_shift": ("FLOAT", {"default": 0.95, "min": 0.0, "max": 100.0, "step": 0.01, "advanced": True}),
                 "ltxv_terminal": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 0.99, "step": 0.01, "advanced": True}),
+                "preview": (["default", "taesd", "latent2rgb", "none"], {"default": "default", "tooltip": "Live preview while sampling. default follows ComfyUI's --preview-method; taesd uses the model's tiny decoder when it is in models/vae_approx (taeh3 for MiniMax H3) and latent2rgb otherwise."}),
             },
         }
 
@@ -151,7 +152,7 @@ class PROMPTFORGE_Sampler:
 
     def sample(self, model, positive, negative, latent_image, seed, steps, cfg, sampler_name, scheduler, denoise, runs,
                pipe=None, sigmas=None, custom_sigmas="", step_cache="off", cache_threshold=0.2, cache_start=0.15, cache_end=0.95,
-               start_at_step=0, end_at_step=10000, add_noise=True, ltxv_max_shift=2.05, ltxv_base_shift=0.95, ltxv_terminal=0.1):
+               start_at_step=0, end_at_step=10000, add_noise=True, ltxv_max_shift=2.05, ltxv_base_shift=0.95, ltxv_terminal=0.1, preview="default"):
         family = self._family(model, pipe)
         if step_cache == "auto":
             step_cache = "easycache" if steps >= AUTO_CACHE_MIN_STEPS else "off"
@@ -168,17 +169,21 @@ class PROMPTFORGE_Sampler:
         device = comfy.model_management.get_torch_device()
         if device.type == "cuda":
             torch.cuda.reset_peak_memory_stats(device)
-        callback = latent_preview.prepare_callback(model, steps)
-        progress = comfy.utils.PROGRESS_BAR_ENABLED
-        results = []
-        for index in range(runs):
-            current = seed + index
-            noise = comfy.sample.prepare_empty_noise(samples) if not add_noise else comfy.sample.prepare_noise(samples, current, latent_image.get("batch_index"))
-            results.append(comfy.sample.sample(
-                model, noise, steps, cfg, sampler_name, scheduler, positive, negative, samples,
-                denoise=denoise, disable_noise=not add_noise, start_step=start_at_step or None,
-                last_step=end_at_step if end_at_step < steps else None, force_full_denoise=end_at_step >= steps,
-                noise_mask=latent_image.get("noise_mask"), sigmas=used, callback=callback, disable_pbar=not progress, seed=current))
+        latent_preview.set_preview_method(None if preview == "default" else preview)
+        try:
+            callback = latent_preview.prepare_callback(model, steps)
+            progress = comfy.utils.PROGRESS_BAR_ENABLED
+            results = []
+            for index in range(runs):
+                current = seed + index
+                noise = comfy.sample.prepare_empty_noise(samples) if not add_noise else comfy.sample.prepare_noise(samples, current, latent_image.get("batch_index"))
+                results.append(comfy.sample.sample(
+                    model, noise, steps, cfg, sampler_name, scheduler, positive, negative, samples,
+                    denoise=denoise, disable_noise=not add_noise, start_step=start_at_step or None,
+                    last_step=end_at_step if end_at_step < steps else None, force_full_denoise=end_at_step >= steps,
+                    noise_mask=latent_image.get("noise_mask"), sigmas=used, callback=callback, disable_pbar=not progress, seed=current))
+        finally:
+            latent_preview.set_preview_method()
         merged = results[0] if runs == 1 else torch.cat(results)
 
         out = latent_image.copy()

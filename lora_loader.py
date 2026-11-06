@@ -4,18 +4,23 @@ The list is drawn by web/promptforge_lora.js; this file holds the state format, 
 (served at /promptforge/loras) and the node. The state is one JSON string:
 
     {"filter": "all", "items": [{"name": "sub/a.safetensors", "on": true, "model": 1.0, "clip": null,
-                                 "random": false, "min": 0.6, "max": 1.0, "group": ""}]}
+                                 "random": false, "min": 0.6, "max": 1.0, "group": "", "part": "all"}]}
 
 * `clip` null means "same as model".
 * `random` draws the strength between `min` and `max`, seeded by the node seed.
 * Items sharing a non-empty `group` are alternatives: one of the enabled ones is picked per run.
+* `part` limits a LoRA to the video layers or the audio layers of an audio+video model (MiniMax H3, LTX-2).
+* With two or more LoRAs on, the report says how much they overlap and how hard they push together; `balance`
+  lowers all strengths by the same factor when together they push harder than the strongest one alone.
 """
 import json
 import os
 import random
 import re
 
+import torch
 from aiohttp import web
+from safetensors import safe_open
 from server import PromptServer
 
 import comfy.lora
@@ -82,6 +87,29 @@ def _plain(html):
     return re.sub(r"\n{3,}", "\n\n", re.sub(r"<[^>]+>", "", re.sub(r"<(?:br|/p|/li)\s*/?>", "\n", html or ""))).strip()
 
 
+TRAINING_FIELDS = (("ss_network_module", "Network"), ("ss_network_dim", "Rank"), ("ss_network_alpha", "Alpha"), ("ss_base_model_version", "Trained on"), ("modelspec.architecture", "Architecture"),
+                   ("ss_resolution", "Resolution"), ("ss_num_epochs", "Epochs"), ("ss_max_train_steps", "Steps"), ("ss_learning_rate", "Learning rate"), ("ss_optimizer", "Optimizer"),
+                   ("ss_num_train_images", "Training images"), ("modelspec.title", "Title"), ("ss_training_comment", "Comment"))
+
+
+def _training_info(path):
+    """What the file itself says about its training: [(label, value)] and the most common training tags."""
+    try:
+        with safe_open(path, framework="pt") as handle:
+            metadata = handle.metadata() or {}
+    except (OSError, ValueError):
+        return [], []
+    fields = [(label, str(metadata[key])[:200]) for key, label in TRAINING_FIELDS if metadata.get(key) not in (None, "", "None")]
+    counts = {}
+    try:
+        for dataset in json.loads(metadata.get("ss_tag_frequency") or "{}").values():
+            for tag, count in dataset.items():
+                counts[tag.strip()] = counts.get(tag.strip(), 0) + int(count)
+    except (ValueError, AttributeError, TypeError):
+        pass
+    return fields, [tag for tag, _ in sorted(counts.items(), key=lambda entry: -entry[1])[:24] if tag]
+
+
 @PromptServer.instance.routes.get("/promptforge/lora_info")
 async def _info_route(request):
     name = request.query.get("name", "")
@@ -96,6 +124,7 @@ async def _info_route(request):
     civitai = sidecar.get("civitai") or {}
     model_id = civitai.get("modelId")
     model = civitai.get("model") or {}
+    training, training_tags = _training_info(path)
     images = []
     for image in civitai.get("images") or []:
         meta = image.get("meta") or {}
@@ -114,6 +143,8 @@ async def _info_route(request):
         "downloads": (civitai.get("stats") or {}).get("downloadCount"),
         "likes": (civitai.get("stats") or {}).get("thumbsUpCount"),
         "words": _trigger_words(sidecar),
+        "training": training,
+        "training_tags": training_tags,
         "tips": sidecar.get("usage_tips") or "",
         "notes": sidecar.get("notes") or "",
         "tags": sidecar.get("tags") or [],
@@ -162,6 +193,68 @@ def choose(items, seed):
     return chosen
 
 
+AUDIO_KEY = "audio"
+
+
+def in_part(key, part):
+    """Whether a patched weight belongs to the chosen part of an audio+video model."""
+    return part == "all" or (AUDIO_KEY in str(key).lower()) == (part == "audio")
+
+
+def _factors(adapter):
+    """(up, down, scale) of a plain LoRA patch, or None for other kinds of patches."""
+    if getattr(adapter, "name", "") != "lora":
+        return None
+    up, down, alpha, mid, dora, _ = adapter.weights
+    if mid is not None or dora is not None:
+        return None
+    down = down.flatten(1).float()
+    return up.float(), down, (alpha if alpha is not None else down.shape[0]) / down.shape[0]
+
+
+def stack_stats(stack, limit=160):
+    """Energy of every LoRA's change and the overlap of each pair, from the low-rank factors (no full weight matrices).
+
+    stack: [(name, strength, patches)]. Returns (norms2, dots) where dots[(i, j)] is the inner product of the two changes
+    over the layers both touch, and norms2[i] the squared size of change i over its own layers; each is measured on at
+    most `limit` layers per LoRA.
+    """
+    factors = []
+    for _, _, patches in stack:
+        layers = {key: f for key, adapter in patches.items() if (f := _factors(adapter)) is not None}
+        keys = sorted(layers, key=str)
+        step = max(1, len(keys) // limit)
+        factors.append({key: layers[key] for key in keys[::step]})
+    norms2 = [0.0] * len(stack)
+    dots = {}
+    for i, mine in enumerate(factors):
+        for key, (up, down, scale) in mine.items():
+            norms2[i] += float(scale ** 2 * ((up.T @ up) * (down @ down.T)).sum())
+        for j in range(i + 1, len(stack)):
+            total, shared = 0.0, 0
+            for key, (up, down, scale) in mine.items():
+                other = factors[j].get(key)
+                if other is None or other[0].shape[0] != up.shape[0] or other[1].shape[1] != down.shape[1]:
+                    continue
+                total += float(scale * other[2] * ((up.T @ other[0]) * (down @ other[1].T)).sum())
+                shared += 1
+            dots[(i, j)] = (total, shared)
+    return norms2, dots
+
+
+def balance_factor(strengths, norms2, dots, floor):
+    """(factor, combined/strongest energy ratio): the uniform scale that brings the combined push down to that of the strongest LoRA alone."""
+    single = max(s * s * n for s, n in zip(strengths, norms2))
+    combined = sum(s * s * n for s, n in zip(strengths, norms2)) + 2 * sum(strengths[i] * strengths[j] * dot for (i, j), (dot, _) in dots.items())
+    if single <= 0 or combined <= 0:
+        return 1.0, 1.0
+    return min(1.0, max(floor, (single / combined) ** 0.5)), combined / single
+
+
+def overlap_words(cosine):
+    return "opposing" if cosine < -0.15 else "aligned" if cosine > 0.4 else "partly aligned" if cosine > 0.15 else "independent"
+
+
 class PROMPTFORGE_LoraLoader:
     @classmethod
     def INPUT_TYPES(cls):
@@ -175,6 +268,8 @@ class PROMPTFORGE_LoraLoader:
             "optional": {
                 "clip": ("CLIP",),
                 "pipe": ("PROMPTFORGE_PIPE", {"tooltip": "From a PromptForge Loader: the list switches to that model's family."}),
+                "balance": ("BOOLEAN", {"default": False, "tooltip": "When the LoRAs together push harder than the strongest one alone, lower all strengths by the same factor (the report shows the numbers). Image models can go down to 0.85 of the set strengths; video and audio models are left alone unless balance_floor is set."}),
+                "balance_floor": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05, "tooltip": "Lowest factor balance may apply. 0 = by model kind: 0.85 for image models, 1.0 (no change) for video and audio."}),
             },
         }
 
@@ -184,7 +279,7 @@ class PROMPTFORGE_LoraLoader:
     CATEGORY = "🔮 PromptForge"
     DESCRIPTION = "Searchable LoRA list with per-LoRA strengths, random strengths and random groups."
 
-    def load(self, model, loras, seed, skip_mismatched, clip=None, pipe=None):
+    def load(self, model, loras, seed, skip_mismatched, clip=None, pipe=None, balance=False, balance_floor=0.0):
         try:
             items = json.loads(loras or "{}").get("items", [])
         except ValueError as exc:
@@ -192,8 +287,8 @@ class PROMPTFORGE_LoraLoader:
         target = _model_family(model) if skip_mismatched else None
 
         report, words = [], []
-        patched_model, patched_clip = model, clip
         key_map = None
+        stack = []  # (name, model strength, clip strength, patches, metadata)
         for item, strength_model, strength_clip in choose(items, seed):
             name = item["name"]
             entry = _describe(name)
@@ -210,20 +305,51 @@ class PROMPTFORGE_LoraLoader:
                 if clip is not None:
                     key_map = comfy.lora.model_lora_keys_clip(clip.cond_stage_model, key_map)
             patches = comfy.lora.load_lora(comfy.lora_convert.convert_lora(lora), key_map)
+            part = item.get("part") or "all"
+            if part != "all":
+                patches = {key: patch for key, patch in patches.items() if in_part(key, part)}
+                if not patches:
+                    report.append(f"skipped {name}: it has no {part} layers")
+                    continue
+            stack.append((name, strength_model, strength_clip, patches, metadata, part))
+            words.extend(word for word in entry["words"] if word not in words)
+
+        factor = 1.0
+        if stack:
+            norms2, dots = stack_stats([(name, strength, patches) for name, strength, _, patches, _, _ in stack])
+            if balance and len(stack) > 1:
+                floor = balance_floor or (0.85 if target is None or target.kind == "image" else 1.0)
+                factor, ratio = balance_factor([strength for _, strength, *_ in stack], norms2, dots, floor)
+            for (name, strength_model, strength_clip, patches, _, part), norm2 in zip(stack, norms2):
+                rank = next((a.weights[1].shape[0] for a in patches.values() if getattr(a, "name", "") == "lora"), 0)
+                report.append(f"{name}: model {strength_model * factor:g}, clip {strength_clip * factor:g}" + (f" ({part} layers only)" if part != "all" else "")
+                              + f", {len(patches)} layers" + (f", rank {rank}" if rank else "") + (f", strength-weighted size {strength_model * norm2 ** 0.5:.3g}" if norm2 else ""))
+            for (i, j), (dot, shared) in dots.items():
+                size = (norms2[i] * norms2[j]) ** 0.5
+                if shared and size:
+                    cosine = dot / size
+                    report.append(f"overlap {stack[i][0]} / {stack[j][0]}: {shared} shared layers, similarity {cosine:+.2f} ({overlap_words(cosine)})")
+            if len(stack) > 1:
+                single = max(s * s * n for (_, s, *_), n in zip(stack, norms2))
+                combined = sum(s * s * n for (_, s, *_), n in zip(stack, norms2)) + 2 * sum(stack[i][1] * stack[j][1] * dot for (i, j), (dot, _) in dots.items())
+                if single > 0:
+                    report.append(f"together they push {max(combined, 0) / single:.2f}x as hard as the strongest alone"
+                                  + (f"; balance lowered every strength to {factor:.2f}x" if factor < 1 else "; turn on balance to even this out" if combined / single > 1.5 else ""))
+
+        patched_model, patched_clip = model, clip
+        for name, strength_model, strength_clip, patches, metadata, _ in stack:
             if strength_model:
                 if patched_model is model:
                     patched_model = model.clone()
-                patched_model.add_patches(patches, strength_model)
+                patched_model.add_patches(patches, strength_model * factor)
                 if metadata:
                     patched_model.set_attachments("lora_metadata", metadata)
             if clip is not None and strength_clip:
                 if patched_clip is clip:
                     patched_clip = clip.clone()
-                patched_clip.add_patches(patches, strength_clip)
+                patched_clip.add_patches(patches, strength_clip * factor)
                 if metadata:
                     patched_clip.patcher.set_attachments("lora_metadata", metadata)
-            report.append(f"{name}: model {strength_model:g}, clip {strength_clip:g}")
-            words.extend(word for word in entry["words"] if word not in words)
         return (patched_model, patched_clip, ", ".join(words), "\n".join(report))
 
 

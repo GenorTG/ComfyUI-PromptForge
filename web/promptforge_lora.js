@@ -3,6 +3,7 @@ import { api } from "../../scripts/api.js";
 
 const NODE = "PROMPTFORGE_LoraLoader";
 const MAX_ROWS = 120;
+const AUDIO_VIDEO = ["minimax_h3", "ltxv"];
 
 let libraryRequest = null;
 function loadLibrary(refresh = false) {
@@ -118,27 +119,29 @@ async function showInfo(name) {
   row("Hash (sha256)", info.sha256);
   if (info.size) row("Size", (info.size / 1024 ** 2).toFixed(0) + " MB");
   if (info.url) row("Civitai", el("a", {}, { href: info.url, target: "_blank", rel: "noopener", textContent: "View on Civitai" }));
-  if (info.words?.length) {
+  const chipRow = (label, words, hint) => {
     const box = el("div", {}, { className: "pf-words" });
     const status = el("span");
-    const chosen = () => [...box.querySelectorAll(".pf-on")].map((chip) => chip.dataset.word);
     const update = () => {
       status.replaceChildren();
-      const picked = chosen();
+      const picked = [...box.querySelectorAll(".pf-on")].map((chip) => chip.dataset.word);
       if (!picked.length) return;
       status.append(`${picked.length} selected`, el("span", {}, { className: "pf-copy", textContent: "Copy" }));
       status.lastChild.addEventListener("click", async () => { await navigator.clipboard.writeText(picked.join(", ")); status.textContent = "Copied ✓"; });
     };
-    info.words.forEach((word) => {
-      const chip = el("span", {}, { className: "pf-word", textContent: word, title: "Click to select for copying" });
+    words.forEach((word) => {
+      const chip = el("span", {}, { className: "pf-word", textContent: word, title: hint });
       chip.dataset.word = word;
       chip.addEventListener("click", () => { chip.classList.toggle("pf-on"); update(); });
       box.append(chip);
     });
     const all = el("span", {}, { className: "pf-copy", textContent: "Copy all" });
-    all.addEventListener("click", async () => { await navigator.clipboard.writeText(info.words.join(", ")); all.textContent = "Copied ✓"; });
-    row("Trained words", [box, el("div", { marginTop: "4px" }), status, all]);
-  }
+    all.addEventListener("click", async () => { await navigator.clipboard.writeText(words.join(", ")); all.textContent = "Copied ✓"; });
+    row(label, [box, el("div", { marginTop: "4px" }), status, all]);
+  };
+  if (info.words?.length) chipRow("Trained words", info.words, "Click to select for copying");
+  if (info.training?.length) row("Training", text(info.training.map(([label, value]) => `${label}: ${value}`).join("\n")));
+  if (info.training_tags?.length) chipRow(info.words?.length ? "Common training tags" : "Training tags", info.training_tags, "A tag that is common in the training data, from the file itself. Click to select for copying");
   row("Usage tips", text(typeof info.tips === "string" ? info.tips : JSON.stringify(info.tips)));
   row("Tags", (info.tags || []).join(", "));
   row("Notes", info.notes && text(info.notes));
@@ -199,7 +202,7 @@ function buildList(node, stateWidget) {
   root.append(bar, list);
 
   const commit = () => {
-    state.items = state.items.filter((item) => item.on || item.random || item.group || item.model !== 1 || item.clip != null);
+    state.items = state.items.filter((item) => item.on || item.random || item.group || item.model !== 1 || item.clip != null || (item.part && item.part !== "all"));
     stateWidget.value = JSON.stringify(state);
     node.setDirtyCanvas?.(true, true);
   };
@@ -237,6 +240,13 @@ function buildList(node, stateWidget) {
       const dice = el("button", { cursor: "pointer", opacity: item.random ? "1" : "0.4" }, { textContent: "🎲", title: "Random strength between min and max" });
       dice.addEventListener("click", () => { item.random = !item.random; commit(); render(); });
       line.append(group, dice);
+      if (AUDIO_VIDEO.includes(entry.family)) {
+        const part = el("select", { ...INPUT_STYLE, width: "64px", flex: "0 0 auto" }, { title: "Which layers of this audio+video model the LoRA changes" });
+        part.append(new Option("all", "all"), new Option("video", "video"), new Option("audio", "audio"));
+        part.value = item.part || "all";
+        part.addEventListener("change", () => { item.part = part.value; commit(); });
+        line.append(part);
+      }
       if (item.random) {
         line.append(numberInput(item.min, (v) => set("min")(v ?? 0)), "–", numberInput(item.max, (v) => set("max")(v ?? 1)));
       } else {

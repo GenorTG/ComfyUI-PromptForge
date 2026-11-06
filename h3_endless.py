@@ -29,10 +29,12 @@ import torch
 from server import PromptServer
 
 import comfy.model_management as model_management
+import comfy.ops
 import comfy.samplers
 import comfy.utils
 import folder_paths
 from comfy_extras import nodes_audio, nodes_minimax_h3
+from comfy_extras.nodes_model_advanced import ModelAttentionBackend
 
 from . import empty_latent, minimax_decode, sampler, video_save
 
@@ -49,7 +51,7 @@ DIALOGUE_AUTO = "auto (from the instructions)"
 DEFAULT_OPTIONS = {
     "parts": 3, "seconds": 5, "aspect_ratio": "16:9", "orientation": "landscape", "megapixels": 0.5, "transition": TRANSITIONS[0],
     "continuity": CONTINUITY[0], "context_frames": 22, "part_ideas": "", "preset_style": "standard", "negative_prompt": "",
-    "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "temperature": 0.8, "seam_blend": True, "seam_check": False, "seam_retries": 1, "steps": 8, "cfg": 1.0,
+    "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "temperature": 0.8, "preview": "taesd", "attention": "comfy kitchen attention", "ffn_chunks": 3, "seam_blend": True, "seam_check": False, "seam_retries": 1, "steps": 8, "cfg": 1.0,
     "sampler_name": "euler", "scheduler": "simple", "codec": "h264 (nvenc)", "quality": 19, "keep_parts": False,
 }
 TRANSITION_TEXT = {
@@ -106,6 +108,30 @@ def parse_plan(text, leading_is_part):
     if leading is not None and not marked and any(piece.strip() for piece in leading["text"]):
         parts.insert(0, leading)
     return "\n".join(brief).strip(), [{"text": " ".join(piece.strip() for piece in part["text"] if piece.strip()), "seconds": part["seconds"]} for part in parts]
+
+
+def chunk_feed_forward(model, chunks, threshold=4096):
+    """A copy of the MiniMax H3 model whose feed-forward layers run over the packed tokens in `chunks` pieces (exact: rows are independent)."""
+    patched = model.clone()
+    blocks = getattr(patched.get_model_object("diffusion_model"), "blocks", None)
+    if not blocks or not hasattr(blocks[0], "mlp") or not hasattr(blocks[0].mlp, "fc1"):
+        return model
+
+    def forward_of(mlp):
+        def forward(x):
+            if x.shape[0] <= threshold:
+                return comfy.ops.linear_input_act(mlp.fc2, mlp.fc1(x), "swiglu")
+            out = torch.empty_like(x)
+            offset = 0
+            for part in torch.chunk(x, chunks, dim=0):
+                out[offset:offset + part.shape[0]] = comfy.ops.linear_input_act(mlp.fc2, mlp.fc1(part), "swiglu")
+                offset += part.shape[0]
+            return out
+        return forward
+
+    for index, block in enumerate(blocks):
+        patched.add_object_patch(f"diffusion_model.blocks.{index}.mlp.forward", forward_of(block.mlp))
+    return patched
 
 
 def part_boxes(text):
@@ -237,6 +263,9 @@ class PROMPTFORGE_H3Options:
                 "seam_blend": ("BOOLEAN", {"default": True, "tooltip": "Evens out the brief light flash at the join: the first third of a second of the new part is brought onto a straight brightness/colour line from the previous part's last frame. Skipped when the change is large enough to be a real cut."}),
                 "seam_check": ("BOOLEAN", {"default": False, "tooltip": "When a part is meant to continue the same shot, compare its first frame with the previous part's last frame and generate it again with another seed if the picture jumps. Not used when cuts are allowed."}),
                 "seam_retries": ("INT", {"default": 1, "min": 0, "max": 5, "tooltip": "How many times a jumping part is generated again."}),
+                "preview": (["taesd", "latent2rgb", "none", "default"], {"default": "taesd", "tooltip": "Live preview while a part is sampled. taesd uses the tiny H3 decoder (taeh3 in models/vae_approx) and falls back to latent2rgb; default follows ComfyUI's --preview-method."}),
+                "attention": (["comfy kitchen attention", "pytorch attention", "as connected"], {"default": "comfy kitchen attention", "tooltip": "Attention used while sampling. comfy kitchen is INT8 attention: about 40% faster for MiniMax H3 here, with a tiny precision cost (it falls back to pytorch where it is not available). as connected leaves what the model already has."}),
+                "ffn_chunks": ("INT", {"default": 3, "min": 1, "max": 64, "tooltip": "Splits MiniMax H3's feed-forward layers into this many chunks, which lowers peak VRAM without changing the result. 1 = off."}),
             },
         }
 
@@ -258,7 +287,7 @@ class PROMPTFORGE_H3Endless:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "model": ("MODEL", {"tooltip": "The MiniMax H3 model, with LoRAs, shift and the preview override already applied."}),
+                "model": ("MODEL", {"tooltip": "The MiniMax H3 model, with LoRAs and shift already applied."}),
                 "clip": ("CLIP",),
                 "vae": ("VAE", {"tooltip": "The MiniMax H3 video VAE."}),
                 "audio_vae": ("VAE", {"tooltip": "The MiniMax H3 audio VAE."}),
@@ -315,6 +344,10 @@ class PROMPTFORGE_H3Endless:
         if mode == "reference video":
             context = max(5, context)
         width, height = empty_latent.resolve_size("aspect + megapixels", 0, 0, "", opts["aspect_ratio"], opts["megapixels"], opts["orientation"], 32)
+        if opts["attention"] != "as connected":
+            model = ModelAttentionBackend.execute(model, opts["attention"]).args[0]
+        if int(opts["ffn_chunks"]) > 1:
+            model = chunk_feed_forward(model, int(opts["ffn_chunks"]))
 
         entered = part_boxes(part_prompts)
         if any(part["text"] for part in entered):
@@ -383,7 +416,7 @@ class PROMPTFORGE_H3Endless:
                     self._status(unique_id, f"Part {index + 1}/{total}: sampling" + (f" (try {attempt + 1})" if attempt else ""))
                     self._release()
                     clock_sample = time.time()
-                    latent_out = sampler.PROMPTFORGE_Sampler().sample(model, positive, negative, latent, seed + index + 1000 * attempt, opts["steps"], opts["cfg"], opts["sampler_name"], opts["scheduler"], 1.0, 1)[0]
+                    latent_out = sampler.PROMPTFORGE_Sampler().sample(model, positive, negative, latent, seed + index + 1000 * attempt, opts["steps"], opts["cfg"], opts["sampler_name"], opts["scheduler"], 1.0, 1, preview=opts["preview"])[0]
                     marks["sample"] = time.time() - clock_sample
                     self._status(unique_id, f"Part {index + 1}/{total}: decoding")
                     self._release()

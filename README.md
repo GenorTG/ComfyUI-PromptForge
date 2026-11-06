@@ -46,13 +46,10 @@ Standalone output node; it never generates a prompt.
 
 ### PromptForge Frame Interpolate (`PROMPTFORGE_FrameInterpolate`)
 
-RIFE frame interpolation for large frames (for example the 2x-upscaled MiniMax output) that backs off by itself instead of crashing ComfyUI. It reuses the network of the `comfyui-frame-interpolation` pack, which must be installed.
+RIFE / FILM frame interpolation for large frames (for example the 2x-decoded MiniMax output) that backs off by itself instead of crashing ComfyUI. It uses ComfyUI's own interpolation models, so no other node pack is needed.
 
-- **`ckpt_name`**: every RIFE checkpoint found in `models/frame_interpolation`, `models/rife` or the pack's `ckpts/rife` (4.7/4.9, 4.17, 4.26; `.pth` or `.safetensors`), plus `blend`, a plain cross-fade that needs no model and is instant (ghosts on motion).
-- **`mode`**: `balanced` (full-resolution flow), `fast` (flow at half resolution), `best` (ensemble, 4.7/4.9/4.17 only). **`output_precision`**: float16 halves the RAM of the result.
-- **Memory**: frames stay on the CPU and the output is one preallocated tensor. Before running, the node checks free RAM; if float32 does not fit it switches to float16, and if that does not fit either it raises a clear error instead of letting the OS kill ComfyUI.
-- **VRAM**: one frame pair at a time in fp16. On an out-of-memory error it unloads ComfyUI's models and retries, then estimates flow at 1/2 and 1/4 resolution (the result is still warped at full resolution), and finally runs on the CPU.
-- About 25–30 frame pairs per second at 1920x1088 on an RTX 5080 (rife49).
+- **`ckpt_name`**: every model in `models/frame_interpolation` (RIFE 4.25+, FILM), plus `blend`, a plain cross-fade that needs no model and is instant (ghosts on motion). Older RIFE `.pth` files (rife47 / 49 / 417) are not supported by ComfyUI's loader.
+- When the whole clip does not fit in memory it is interpolated in shorter overlapping runs (down to 4 frames), and what is still too much is cross-faded. The clip's RAM need is checked up front.
 
 ### PromptForge Save Video (`PROMPTFORGE_SaveVideo`)
 
@@ -121,9 +118,10 @@ Makes a long MiniMax H3 video part by part, with a ready workflow in `workflows/
 - **Continuation (`continuity`):** *anchor tail* anchors the last `context_frames` frames and the last audio of the previous part at the start of the new part with H3's own guide mechanism, so it continues frame-exactly; the anchored frames are cut when the parts are joined. *reference video* hands the previous ending to H3 as a reference video (its native continuation). *none* makes independent parts from the references only. `transition` decides whether the story stays in one shot, may cut, or cuts every part.
 - **Join smoothing (`seam_blend`, on by default):** the brief light flash that can appear where two parts meet is evened out: the first third of a second of the new part is brought onto a straight brightness/colour line from the previous part's last frame. Real scene changes are left alone.
 - **Seam check:** when a part should continue the same shot, its first frame is compared with the previous part's last frame; if the picture jumps, that part can be generated again with another seed (`seam_check`, off by default because every retry adds a full part of generation time; `seam_retries` sets how many). Not used when cuts are allowed.
+- **Speed options (Endless Options):** `attention` (INT8 *comfy kitchen* attention by default) and `ffn_chunks` (feed-forward chunking for lower peak VRAM, exact) are built in, so no extra patch nodes are needed.
 - **Speed (RTX 5080, 0.5 MP parts decoded 2x, 8 steps):** about 95 s per 5-second part with the *comfy kitchen attention* backend and chunked feed-forward in the example workflow (140-180 s with the PyTorch attention). A 10-second part takes about 3.5x as long as a 5-second one to sample, so several 5-second parts are cheaper than few long ones. The log prints the time of every stage.
 - **Memory:** between the stages (prompt writer, sampler, decoder) everything ComfyUI holds is unloaded, so the language model, the diffusion model and the decoders never share VRAM. Parts are encoded as they finish and joined at the end with one continuous audio track, so length is limited by disk, not RAM.
-- **Previews:** each finished part appears in the node as soon as it is done; the latent preview of the sampling comes from the *Latent preview* node (`ModelPreviewOverrideKJ`, with `taeh3-approx`) in front of the Endless node. `keep_parts` also saves every part as its own file.
+- **Previews:** each finished part appears in the node as soon as it is done, and the sampling shows live previews in the node (`preview` in the Options node: the tiny `taeh3` decoder from `models/vae_approx`, falling back to latent2rgb). `keep_parts` also saves every part as its own file.
 - **2x decoding:** connect the Loader's `extra_vae` (for example `MiniMax-H3-X2-Detail`) to `decode_vae` to decode every part with the 2x detail decoder; frames come out at twice the generation size, and the tail carried to the next part is scaled back to the generation size automatically.
 - The Enhancer got two optional inputs for this, `continuation` and `context_video`, which any MiniMax H3 prompt can use.
 
@@ -147,6 +145,10 @@ One node instead of a chain of LoRA loaders. The node shows every LoRA in your l
 - **skip_mismatched**: skips LoRAs whose family differs from the connected model's.
 - **Outputs**: MODEL, CLIP, TRIGGER_WORDS (from the sidecars) and a REPORT of what was applied.
 - All LoRAs are applied in one pass: the key maps are built once instead of once per LoRA.
+- **Layer scope** (video / audio): on audio+video models (MiniMax H3, LTX Video) a LoRA row has a select to apply it to all layers, only the video layers or only the audio layers.
+- **Stack report**: with several LoRAs on, the REPORT lists every LoRA's layers and rank, how much each pair overlaps (similarity, from the low-rank factors, no full weight matrices) and how hard they push together compared with the strongest one alone.
+- **balance** (off by default): when they push harder than the strongest alone, every strength is lowered by the same factor. Image models can go down to 0.85 of the set strengths; video and audio models (turbo and distillation LoRAs keep their published strength) are left alone unless `balance_floor` is set.
+- **Training info**: the (i) dialog also shows what the file itself says (rank, alpha, trained-on model, resolution, epochs ...) and its most common training tags, so LoRAs without a CivitAI sidecar still show something to copy.
 
 ## One-click config
 
@@ -181,6 +183,10 @@ Every preset has an `NSFW › …` variant with explicit adult writing instructi
 ## Models catalog
 
 `catalog/models.json` — heretic VL-capable HF models (4B / 9B / 27B, free, image-capable or text-only) and GGUF variants, plus local scan dirs for text models.
+
+## Dependencies
+
+PromptForge does not need any other custom node pack. Its Python requirements are in `pyproject.toml` (`transformers`, `llama-cpp-python`, `bitsandbytes`, `accelerate`, `huggingface-hub`, `psutil`, `Pillow`, `numpy`, `imageio-ffmpeg`); ComfyUI itself provides the rest (`comfy_kitchen`, `safetensors`, the MiniMax H3, LTX and frame interpolation nodes). Two optional things: **ffmpeg** on the PATH for the video nodes (`imageio-ffmpeg` is the fallback), and the **ComfyUI-GGUF** pack, only if you want to load GGUF diffusion models or text encoders in the Loader (the Enhancer's GGUF language models run through `llama-cpp-python` and do not need it).
 
 ## Install
 
