@@ -1,5 +1,5 @@
 {
- "id": "181263ff-64cb-4730-b291-dcc002eea6ea",
+ "id": "500947d0-3e0c-4dd0-a66b-aea12304a4ad",
  "revision": 0,
  "last_node_id": 52,
  "last_link_id": 62,
@@ -663,6 +663,56 @@
       "name": "review_prompts"
      },
      "link": null
+    },
+    {
+     "localized_name": "writer_top_p",
+     "name": "writer_top_p",
+     "shape": 7,
+     "type": "FLOAT",
+     "widget": {
+      "name": "writer_top_p"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "writer_top_k",
+     "name": "writer_top_k",
+     "shape": 7,
+     "type": "INT",
+     "widget": {
+      "name": "writer_top_k"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "writer_repetition_penalty",
+     "name": "writer_repetition_penalty",
+     "shape": 7,
+     "type": "FLOAT",
+     "widget": {
+      "name": "writer_repetition_penalty"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "writer_max_tokens",
+     "name": "writer_max_tokens",
+     "shape": 7,
+     "type": "INT",
+     "widget": {
+      "name": "writer_max_tokens"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "check_prompts",
+     "name": "check_prompts",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "check_prompts"
+     },
+     "link": null
     }
    ],
    "outputs": [
@@ -691,6 +741,11 @@
     "standard",
     "automatic (by mode and style)",
     0.8,
+    false,
+    0.95,
+    40,
+    1.1,
+    2048,
     false
    ],
    "widgets_values_named": {
@@ -704,7 +759,12 @@
     "prompt_style": "standard",
     "prompt_template": "automatic (by mode and style)",
     "writer_creativity": 0.8,
-    "review_prompts": false
+    "review_prompts": false,
+    "writer_top_p": 0.95,
+    "writer_top_k": 40,
+    "writer_repetition_penalty": 1.1,
+    "writer_max_tokens": 2048,
+    "check_prompts": false
    }
   },
   {
@@ -3048,7 +3108,7 @@
    ],
    "size": [
     370.84921875,
-    226
+    250
    ],
    "flags": {},
    "order": 26,
@@ -3152,6 +3212,15 @@
       "name": "sampler_name"
      },
      "link": null
+    },
+    {
+     "localized_name": "return_first_pass",
+     "name": "return_first_pass",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "return_first_pass"
+     },
+     "link": null
     }
    ],
    "outputs": [
@@ -3179,7 +3248,8 @@
     "fp16",
     3,
     0.9035,
-    "er_sde"
+    "er_sde",
+    false
    ],
    "widgets_values_named": {
     "upscale_model": "minimax_h3_latent_upscaler_3d_conv_v1_fp16.safetensors",
@@ -3192,7 +3262,8 @@
     "precision": "fp16",
     "steps": 3,
     "start_sigma": 0.9035,
-    "sampler_name": "er_sde"
+    "sampler_name": "er_sde",
+    "return_first_pass": false
    }
   },
   {
@@ -3369,7 +3440,7 @@
    "type": "PROMPTFORGE_H3Generate",
    "pos": [
     570,
-    4752
+    4776
    ],
    "size": [
     520,
@@ -3534,6 +3605,18 @@
      "links": [
       62
      ]
+    },
+    {
+     "localized_name": "first_pass_frames",
+     "name": "first_pass_frames",
+     "type": "IMAGE",
+     "links": null
+    },
+    {
+     "localized_name": "first_pass_audio",
+     "name": "first_pass_audio",
+     "type": "AUDIO",
+     "links": null
     }
    ],
    "title": "GENERATE",
@@ -3560,7 +3643,7 @@
    "type": "PROMPTFORGE_FrameInterpolate",
    "pos": [
     2150.33359375,
-    4752
+    4776
    ],
    "size": [
     401.3375,
@@ -3623,7 +3706,7 @@
    "type": "PROMPTFORGE_SaveVideo",
    "pos": [
     2581.67109375,
-    4752
+    4776
    ],
    "size": [
     302.9751953125,
@@ -3845,7 +3928,7 @@
    "type": "PreviewAny",
    "pos": [
     1120,
-    4752
+    4776
    ],
    "size": [
     210.33359375,
@@ -3882,7 +3965,7 @@
    "type": "PreviewAny",
    "pos": [
     1360.33359375,
-    4752
+    4776
    ],
    "size": [
     210,
@@ -4270,7 +4353,7 @@
    "type": "Note",
    "pos": [
     20,
-    4752
+    4776
    ],
    "size": [
     520,
@@ -4297,7 +4380,7 @@
    "type": "Note",
    "pos": [
     1660.33359375,
-    4752
+    4776
    ],
    "size": [
     460,
@@ -4958,7 +5041,7 @@
     0,
     3936,
     1607.1150390624998,
-    696
+    720
    ],
    "color": "#3f789e",
    "flags": {}
@@ -4968,7 +5051,7 @@
    "title": "4. GENERATE",
    "bounding": [
     0,
-    4682,
+    4706,
     1590.33359375,
     810
    ],
@@ -4980,7 +5063,7 @@
    "title": "5. SAVE",
    "bounding": [
     1640.33359375,
-    4682,
+    4706,
     1264.3126953125,
     552
    ],

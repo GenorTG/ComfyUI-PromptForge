@@ -33,6 +33,7 @@ import comfy.model_prefetch
 import comfy.nested_tensor
 import comfy.ops
 import comfy.utils
+import node_helpers
 from comfy_extras import nodes_audio, nodes_minimax_h3
 from comfy_extras.nodes_sparse_attention import BlockSparseAttention
 from comfy_extras.nodes_model_advanced import ModelAttentionBackend
@@ -210,11 +211,11 @@ class PROMPTFORGE_H3Generate:
     CATEGORY = h3_settings.CATEGORY
     FUNCTION = "generate"
     OUTPUT_NODE = True
-    RETURN_TYPES = ("IMAGE", "AUDIO", "STRING", "STRING")
-    RETURN_NAMES = ("frames", "audio", "prompts", "report")
+    RETURN_TYPES = ("IMAGE", "AUDIO", "STRING", "STRING", "IMAGE", "AUDIO")
+    RETURN_NAMES = ("frames", "audio", "prompts", "report", "first_pass_frames", "first_pass_audio")
     DESCRIPTION = ("Makes a long MiniMax H3 video part by part and returns the frames and the sound; it does not save anything, so plug it into a save node. "
                    "What to make comes from the Idea node and the Modes node (and optionally Parts, References, Video Format, Continuity, Sampling, Second Stage, Live Preview, Speed and Memory); "
-                   "an unconnected settings node means its defaults.")
+                   "an unconnected settings node means its defaults. With the Second Stage set to return the first pass, the video of the first pass comes out of the last two outputs.")
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -332,6 +333,7 @@ class PROMPTFORGE_H3Generate:
         preset = story["prompt_template"] if story["prompt_template"] != h3_settings.AUTOMATIC_TEMPLATE else ("NSFW › " if story["prompt_style"] == "NSFW" else "") + PRESETS[kind]
 
         parts_frames, parts_audio, prompts, notes, report = [], [], [], [], []
+        first_parts, first_waves, first_rate = [], [], 0
         tail, tail_wave, last_shot, sample_rate, previous = None, None, "", 0, None
         review = {"on": bool(story["review_prompts"]) and unique_id is not None and PromptServer.instance.client_id is not None}
         if story["review_prompts"] and not review["on"]:
@@ -376,7 +378,7 @@ class PROMPTFORGE_H3Generate:
                 self._status(unique_id, f"Part {index + 1}/{total}: encoding the prompt")
                 length = nearest_grid(prefix + seconds * FPS)
                 carried = (tail if continuing else None, (tail_wave, sample_rate) if continuing else None)
-                positive, latent = self._conditioning(clip, vae, audio_vae, prompt, width, height, length, kind, pictures, anchors(index), *carried, mode, extras, continuing)
+                positive, latent = self._guard("encoding", lambda: self._conditioning(clip, vae, audio_vae, prompt, width, height, length, kind, pictures, anchors(index), *carried, mode, extras, continuing))
                 negative = positive if sampling["cfg"] == 1.0 else clip.encode_from_tokens_scheduled(clip.tokenize(""))
 
                 marks["encode"] = time.time() - clock - marks["prompt"]
@@ -385,16 +387,20 @@ class PROMPTFORGE_H3Generate:
                     self._status(unique_id, f"Part {index + 1}/{total}: sampling" + (f" (try {attempt + 1})" if attempt else ""))
                     self._release()
                     clock_sample = time.time()
-                    latent_out = self._stage(model, positive, negative, latent, seed + index + 1000 * attempt, sampling["steps"], sampling, preview, unique_id, f"part {index + 1}, first stage")
+                    latent_out = self._guard("sampling", lambda: self._stage(model, positive, negative, latent, seed + index + 1000 * attempt, sampling["steps"], sampling, preview, unique_id, f"part {index + 1}, first stage"))
                     marks["sample"] = time.time() - clock_sample
+                    first_pass = None
+                    if second is not None and second["return_first_pass"]:
+                        self._status(unique_id, f"Part {index + 1}/{total}: decoding the first pass")
+                        self._release()
+                        first_pass = self._decode(latent_out, decode_vae, vae, audio_vae)
                     if second is not None:
-                        latent_out = self._second_stage(model, clip, vae, audio_vae, prompt, latent_out, second, sampling, preview, unique_id, index, total, seed + index + 1000 * attempt + 7,
-                                                        length, kind, pictures, anchors(index), carried, mode, extras, continuing, marks)
+                        latent_out = self._second_stage(model, vae, audio_vae, positive, negative, latent_out, second, sampling, preview, unique_id, index, total, seed + index + 1000 * attempt + 7,
+                                                        kind, anchors(index), carried, mode, continuing, marks)
                     self._status(unique_id, f"Part {index + 1}/{total}: decoding")
                     self._release()
                     clock_decode = time.time()
-                    frames = minimax_decode.PROMPTFORGE_MiniMaxDecode().decode(latent_out, decode_vae if decode_vae is not None else vae, 0, 0, "cpu", True)[0]
-                    audio = nodes_audio.vae_decode_audio(audio_vae, {"samples": latent_out["samples"].unbind()[1]})
+                    frames, audio = self._decode(latent_out, decode_vae, vae, audio_vae)
                     del latent_out
                     if not check:
                         break
@@ -418,6 +424,13 @@ class PROMPTFORGE_H3Generate:
                 wave = wave[:, round(prefix / FPS * sample_rate):round(prefix / FPS * sample_rate) + round(frames.shape[0] / FPS * sample_rate)]
                 parts_frames.append(frames.half())
                 parts_audio.append(wave)
+                if first_pass is not None:
+                    first_frames, first_audio = first_pass[0][prefix:], first_pass[1]["waveform"][0].float().cpu()
+                    start = round(prefix / FPS * int(first_pass[1]["sample_rate"]))
+                    first_parts.append(first_frames.half())
+                    first_waves.append(first_audio[:, start:start + round(first_frames.shape[0] / FPS * int(first_pass[1]["sample_rate"]))])
+                    first_rate = int(first_pass[1]["sample_rate"])
+                    first_pass = None
                 self._show_part(unique_id, index, frames, int(preview["size"]))
                 marks["total"] = time.time() - clock
                 line = f"part {index + 1}/{total} ({frames.shape[2]}x{frames.shape[1]}, {frames.shape[0]} frames): " + ", ".join(f"{name} {value:.0f}s" for name, value in marks.items())
@@ -438,7 +451,24 @@ class PROMPTFORGE_H3Generate:
             parts_audio.insert(0, self._resample(old, parts_audio[0].shape[0], sample_rate, source.shape[0]))
         video = self._assemble(parts_frames)
         text = "\n\n".join(f"--- Part {number + 1} ---\n{prompt}" for number, prompt in enumerate(prompts))
-        return (video, {"waveform": torch.cat(parts_audio, dim=1)[None], "sample_rate": sample_rate}, text, "\n".join(report))
+        first_video = self._assemble(first_parts) if first_parts else None
+        first_audio = {"waveform": torch.cat(first_waves, dim=1)[None], "sample_rate": first_rate} if first_waves else None
+        return (video, {"waveform": torch.cat(parts_audio, dim=1)[None], "sample_rate": sample_rate}, text, "\n".join(report), first_video, first_audio)
+
+    def _guard(self, label, work):
+        """Runs `work`; when the GPU runs out of memory everything is unloaded and it runs once more."""
+        try:
+            return work()
+        except model_management.OOM_EXCEPTION:
+            print(f"[PromptForge] endless video: out of memory while {label}; freeing everything and trying once more.")
+            self._release()
+            return work()
+
+    @staticmethod
+    def _decode(latent_out, decode_vae, vae, audio_vae):
+        """(frames, audio) of an AV latent."""
+        frames = minimax_decode.PROMPTFORGE_MiniMaxDecode().decode(latent_out, decode_vae if decode_vae is not None else vae, 0, 0, "cpu", True)[0]
+        return frames, nodes_audio.vae_decode_audio(audio_vae, {"samples": latent_out["samples"].unbind()[1]})
 
     @staticmethod
     def _fit(frames, like):
@@ -511,24 +541,26 @@ class PROMPTFORGE_H3Generate:
         return sampler.PROMPTFORGE_Sampler().sample(model, positive, negative, latent, seed, steps, sampling["cfg"], sampler_name or sampling["sampler_name"], sampling["scheduler"], 1.0, 1,
                                                     custom_sigmas=custom_sigmas, preview="default" if preview["mode"] == "ComfyUI's own" else "none")[0]
 
-    def _second_stage(self, model, clip, vae, audio_vae, prompt, latent_out, second, sampling, preview, unique_id, index, total, seed, length, kind, pictures, anchors, carried, mode, extras, continuing, marks):
-        """Upscales the first stage's video latent and samples it again; the sound latent is kept."""
+    def _second_stage(self, model, vae, audio_vae, positive, negative, latent_out, second, sampling, preview, unique_id, index, total, seed, kind, anchors, carried, mode, continuing, marks):
+        """Upscales the first stage's video latent and samples it again; the sound latent is kept. The conditioning of the first stage (the text
+        and the references, encoded once) is used again; only the keyframes (first / last frame, the carried ending) are encoded again at the new size."""
         self._status(unique_id, f"Part {index + 1}/{total}: upscaling the latent")
         self._release()
         clock = time.time()
         video, audio_latent = latent_out["samples"].unbind()
-        video = h3_upscaler.upscale(video, second["upscale_model"], second["size_mode"], second["scale"], second["megapixels"], second["width"], second["height"], second["align"], second["precision"])
+        video = self._guard("upscaling", lambda: h3_upscaler.upscale(video, second["upscale_model"], second["size_mode"], second["scale"], second["megapixels"], second["width"], second["height"], second["align"]))
         marks["upscale"] = time.time() - clock
-        self._release()
-        positive, _ = self._conditioning(clip, vae, audio_vae, prompt, video.shape[-1] * 16, video.shape[-2] * 16, length, kind, pictures, anchors, *carried, mode, extras, continuing)
-        negative = positive if sampling["cfg"] == 1.0 else clip.encode_from_tokens_scheduled(clip.tokenize(""))
+        latent = {"samples": comfy.nested_tensor.NestedTensor((video, audio_latent))}
+        positive = node_helpers.conditioning_set_values(positive, {"minimax_keyframes": []})
+        positive = self._guard("encoding", lambda: self._guides(positive, latent, vae, audio_vae, kind, anchors, *carried, mode, continuing, True))
+        if sampling["cfg"] == 1.0:
+            negative = positive
         steps = int(second["steps"])
         sigmas = ", ".join(f"{value:.4f}" for value in stage2_sigmas(steps, float(second["start_sigma"])))
         self._status(unique_id, f"Part {index + 1}/{total}: sampling the second stage")
         self._release()
         clock = time.time()
-        result = self._stage(model, positive, negative, {"samples": comfy.nested_tensor.NestedTensor((video, audio_latent))}, seed, steps, sampling, preview, unique_id,
-                             f"part {index + 1}, second stage", sigmas, second["sampler_name"])
+        result = self._guard("sampling", lambda: self._stage(model, positive, negative, latent, seed, steps, sampling, preview, unique_id, f"part {index + 1}, second stage", sigmas, second["sampler_name"]))
         marks["sample2"] = time.time() - clock
         return result
 
@@ -597,14 +629,22 @@ class PROMPTFORGE_H3Generate:
                 videos[f"ref_video_{len(videos) + 1}"] = tail
             positive, latent = nodes_minimax_h3.MiniMaxH3ReferenceToVideo.execute(
                 clip, prompt, width, height, length, "match", vae=vae, audio_vae=audio_vae, ref_images=refs, ref_videos=videos, ref_video_audios=extras["ref_video_audios"], ref_audios=extras["ref_audios"]).args
-            if first is not None:
-                positive = nodes_minimax_h3.MiniMaxH3AddGuide.execute(positive, latent, 0, vae=vae, image=first[:1]).args[0]
         else:
             fit = lambda image: None if image is None else comfy.utils.common_upscale(image[:1, ..., :3].movedim(-1, 1), width, height, "lanczos", "center").movedim(1, -1)
             positive, latent = nodes_minimax_h3.MiniMaxH3ImageToVideo.execute(clip, vae, prompt, width, height, length, first_frame=fit(first), last_frame=fit(last)).args
+        return self._guides(positive, latent, vae, audio_vae, kind, anchors, tail, tail_wave, mode, continuing, kind == "REF2V"), latent
+
+    @staticmethod
+    def _guides(positive, latent, vae, audio_vae, kind, anchors, tail, tail_wave, mode, continuing, frames):
+        """Keyframes of the latent's size: the first and the last frame (`frames`; I2V, L2V and FL2V already have them from their encoder) and the carried ending of the previous part."""
+        first, last = anchors
+        if frames and first is not None:
+            positive = nodes_minimax_h3.MiniMaxH3AddGuide.execute(positive, latent, 0, vae=vae, image=first[:1]).args[0]
+        if frames and last is not None:
+            positive = nodes_minimax_h3.MiniMaxH3AddGuide.execute(positive, latent, -1, vae=vae, image=last[:1]).args[0]
         if continuing and mode == "anchor tail":
             positive = nodes_minimax_h3.MiniMaxH3AddGuide.execute(positive, latent, 0, vae=vae, audio_vae=audio_vae, image=tail, audio=tail_audio(tail_wave[0], tail_wave[1], tail.shape[0])).args[0]
-        return positive, latent
+        return positive
 
 
 NODE_CLASS_MAPPINGS = {"PROMPTFORGE_H3Generate": PROMPTFORGE_H3Generate}
