@@ -5,9 +5,6 @@ const ENDLESS = "PROMPTFORGE_H3Endless";
 const OPTIONS = "PROMPTFORGE_H3Options";
 // prompting lives on the Endless node; an Options node from an older workflow keeps these values but does not show them
 const MOVED = ["parts", "part_ideas", "negative_prompt", "dialogue", "dialogue_language", "dialogue_language_other", "preset_style", "seconds_per_part"];
-// widgets of the second stage: shown only with two_stage on, the size ones by upscale_mode
-const SECOND_STAGE = ["upscale_model", "upscale_mode", "upscale_scale", "upscale_megapixels", "upscale_width", "upscale_height", "upscale_align", "upscale_precision", "stage2_steps", "stage2_start"];
-const BY_MODE = { "scale by multiplier": ["upscale_scale"], megapixels: ["upscale_megapixels"], "target dimensions": ["upscale_width", "upscale_height"] };
 const BOX_HEIGHT = 96;
 const LABEL_HEIGHT = 18;
 
@@ -15,14 +12,6 @@ function el(tag, style = {}, props = {}) {
   const element = Object.assign(document.createElement(tag), props);
   Object.assign(element.style, style);
   return element;
-}
-
-function setShown(widget, shown) {
-  if (!widget) return;
-  if (widget.promptforgeSize === undefined) widget.promptforgeSize = widget.computeSize;
-  widget.hidden = !shown;
-  widget.computeSize = shown ? widget.promptforgeSize : () => [0, -4];
-  if (widget.element) widget.element.style.display = shown ? "" : "none";
 }
 
 // a text widget the user can make taller or shorter by dragging its corner; the height is kept in the workflow (node.properties)
@@ -89,26 +78,13 @@ app.registerExtension({
           const widget = node.widgets.find((entry) => entry.name === name);
           if (widget) hide(widget);
         }
-        const find = (name) => node.widgets.find((entry) => entry.name === name);
-        const refresh = () => {
-          const on = find("two_stage")?.value === true;
-          const sizes = BY_MODE[find("upscale_mode")?.value] || [];
-          for (const name of SECOND_STAGE) setShown(find(name), on && (!["upscale_scale", "upscale_megapixels", "upscale_width", "upscale_height"].includes(name) || sizes.includes(name)));
-          node.setSize([node.size[0], node.computeSize()[1]]);
-          node.setDirtyCanvas(true, true);
-        };
-        for (const name of ["two_stage", "upscale_mode"]) {
-          const widget = find(name);
-          const callback = widget.callback;
-          widget.callback = function () { callback?.apply(this, arguments); refresh(); };
-        }
-        node.promptforgeRefresh = refresh;
-        refresh();
+        node.setSize([node.size[0], node.computeSize()[1]]);
       };
+      // a node saved before options were added is too short to show them: grow it to fit
       const onConfigureOptions = nodeType.prototype.onConfigure;
       nodeType.prototype.onConfigure = function () {
         const result = onConfigureOptions?.apply(this, arguments);
-        this.promptforgeRefresh?.();
+        this.setSize([this.size[0], Math.max(this.size[1], this.computeSize()[1])]);
         return result;
       };
       return;
