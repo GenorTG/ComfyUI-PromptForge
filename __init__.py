@@ -2435,15 +2435,11 @@ class PROMPTFORGE_PromptEnhancer:
         if torch.cuda.is_available() and torch.cuda.mem_get_info()[0] < 2 * 1024 ** 3:
             _free_vram(getattr(clip, "patcher", None))
 
-        max_length = min(max_tokens, 2048)
-        if max_tokens > max_length:
-            print("[PromptForge] the connected CLIP sampler is limited to 2048 tokens; using 2048.")
-
         def run(top_p_value, seed_value):
             return clip.generate(
                 tokens,
                 do_sample=True,
-                max_length=max_length,
+                max_length=max_tokens,
                 temperature=temperature,
                 top_k=top_k,
                 top_p=top_p_value,
