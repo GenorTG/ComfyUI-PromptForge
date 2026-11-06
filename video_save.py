@@ -92,7 +92,7 @@ class PROMPTFORGE_SaveVideo:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "images": ("IMAGE",),
+                "images": ("IMAGE", {"tooltip": "The frames. An empty input (for example the first pass when it is not returned) saves nothing."}),
                 "frame_rate": ("FLOAT", {"default": 24.0, "min": 1.0, "max": 240.0, "step": 0.01}),
                 "filename_prefix": ("STRING", {"default": "PromptForge/video", "tooltip": "Saved under the output folder (or temp when save_output is off)."}),
                 "codec": (list(CODECS), {"default": "h264 (nvenc)", "tooltip": "nvenc encodes on the GPU (fastest). The cpu encoders are slower but work everywhere. av1 nvenc needs an RTX 40 series or newer."}),
@@ -124,6 +124,9 @@ class PROMPTFORGE_SaveVideo:
 
     def save(self, images, frame_rate, filename_prefix, codec, speed, rate_control, quality, bitrate_mbit, bit_depth,
              save_output, pingpong, save_metadata, audio=None, audio_bitrate_kbps=192, show_preview=True, loop_preview=True, autoplay_preview=True, film_grain=0.0, prompt=None, extra_pnginfo=None):
+        if images is None:
+            print("[PromptForge] Save Video: nothing to save, its input is empty (for the first pass, switch return_first_pass on in the Second Stage node and keep the second stage on).")
+            return {"ui": {}}
         count, height, width = (int(size) for size in images.shape[:3])
         bits = int(bit_depth)
         encoder, presets, quality_flag, pix_fmt_10 = CODECS[codec]
