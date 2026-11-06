@@ -55,7 +55,7 @@ DIALOGUE_AUTO = "auto (from the instructions)"
 DEFAULT_OPTIONS = {
     "parts": 3, "seconds": 5, "aspect_ratio": "16:9", "orientation": "landscape", "megapixels": 0.5, "transition": TRANSITIONS[0],
     "continuity": CONTINUITY[0], "context_frames": 22, "part_ideas": "", "preset_style": "standard", "negative_prompt": "",
-    "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "temperature": 0.8, "preview": "live", "preview_frames": 4, "preview_decoder": "", "preview_fps": 8, "preview_size": 512, "attention": "comfy kitchen attention", "ffn_chunks": 3, "two_stage": False, "upscale_model": "", "upscale_mode": h3_upscaler.MODES[0], "upscale_scale": 2.0, "upscale_megapixels": 1.0, "upscale_width": 1280, "upscale_height": 704, "upscale_align": 32, "upscale_precision": "fp16", "stage2_steps": 3, "stage2_start": 0.9, "seam_blend": True, "seam_check": False, "seam_retries": 1, "steps": 8, "cfg": 1.0,
+    "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "temperature": 0.8, "preview": "live", "preview_frames": 4, "preview_decoder": "", "preview_fps": 8, "preview_size": 512, "attention": "comfy kitchen attention", "ffn_chunks": 3, "two_stage": False, "upscale_model": "", "upscale_mode": h3_upscaler.MODES[0], "upscale_scale": 2.0, "upscale_megapixels": 1.0, "upscale_width": 1280, "upscale_height": 704, "upscale_align": 32, "upscale_precision": "fp16", "stage2_steps": 3, "stage2_start": 0.9035, "stage2_sampler": "er_sde", "seam_blend": True, "seam_check": False, "seam_retries": 1, "steps": 8, "cfg": 1.0,
     "sampler_name": "euler", "scheduler": "simple", "codec": "h264 (nvenc)", "quality": 19, "keep_parts": False,
 }
 TRANSITION_TEXT = {
@@ -150,6 +150,12 @@ async def _review_route(request):
     slot["action"], slot["text"] = str(body.get("action", "approve")), str(body.get("text", ""))
     slot["event"].set()
     return web.json_response({})
+
+
+def stage2_sigmas(steps, start):
+    """The second-stage schedule: `start`, then a straight line from just above it down to 0. For 3 steps from 0.9035 this is 0.9035, 0.6316, 0.3158, 0 (the schedule used by the usual MiniMax H3 two-pass workflows)."""
+    top = start * 1.0486
+    return [start] + [top * (steps - index) / steps for index in range(1, steps)] + [0.0]
 
 
 def part_boxes(text):
@@ -294,11 +300,12 @@ class PROMPTFORGE_H3Options:
                 "upscale_align": ("INT", {"default": 32, "min": 1, "max": 512, "tooltip": "Pixel alignment of the second stage; 32 is recommended."}),
                 "upscale_precision": (list(h3_upscaler.PRECISIONS), {"default": "fp16"}),
                 "stage2_steps": ("INT", {"default": 3, "min": 1, "max": 100, "tooltip": "Steps of the second stage. 6 first-stage steps plus 3 here is 9 steps per part."}),
-                "stage2_start": ("FLOAT", {"default": 0.9, "min": 0.05, "max": 1.0, "step": 0.01, "tooltip": "How much noise the upscaled latent gets before the second stage (the first sigma, falling in a straight line to 0). Lower keeps more of the first stage."}),
+                "stage2_start": ("FLOAT", {"default": 0.9035, "min": 0.05, "max": 1.0, "step": 0.0005, "tooltip": "The first sigma of the second stage: how much noise the upscaled latent gets. The rest fall in a straight line to 0 (3 steps from 0.9035 give 0.9035, 0.6316, 0.3158, 0). Lower keeps more of the first stage."}),
                 "preview_frames": ("INT", {"default": 4, "min": 1, "max": 99999, "tooltip": "How many latent frames the live preview shows while sampling; they play as a loop. 99999 shows every frame."}),
                 "preview_decoder": (preview_decoder.decoder_names(), {"default": preview_decoder.default_decoder(), "tooltip": "What draws the preview: latent2rgb is instant and needs no file; a tiny decoder from models/vae_approx (taeh3 for MiniMax H3) gives real colours and detail."}),
                 "preview_fps": ("INT", {"default": 8, "min": 1, "max": 60, "tooltip": "Playback speed of the preview loop."}),
                 "preview_size": ("INT", {"default": 512, "min": 64, "max": 2048, "step": 16, "tooltip": "Longest side of the preview frames in pixels."}),
+                "stage2_sampler": (comfy.samplers.KSampler.SAMPLERS, {"default": "er_sde", "tooltip": "Sampler of the second stage. er_sde (the usual choice for the H3 second pass) re-injects a little noise at every step, which cleans up the upscaled latent; euler does not."}),
             },
         }
 
@@ -474,12 +481,12 @@ class PROMPTFORGE_H3Endless:
                                                           tail if continuing else None, (tail_wave, sample_rate) if continuing else None, mode, voice_audio, continuing)
                         negative2 = positive2 if opts["cfg"] == 1.0 else clip.encode_from_tokens_scheduled(clip.tokenize(""))
                         steps2, start = int(opts["stage2_steps"]), float(opts["stage2_start"])
-                        sigmas = ", ".join(f"{start * (steps2 - i) / steps2:.4f}" for i in range(steps2)) + ", 0"
+                        sigmas = ", ".join(f"{value:.4f}" for value in stage2_sigmas(steps2, start))
                         self._status(unique_id, f"Part {index + 1}/{total}: sampling the second stage")
                         self._release()
                         clock_second = time.time()
                         latent_out = self._stage(model, positive2, negative2, {"samples": comfy.nested_tensor.NestedTensor((video, audio_latent))}, seed + index + 1000 * attempt + 7, steps2, opts, unique_id,
-                                                 f"part {index + 1}, second stage", sigmas)
+                                                 f"part {index + 1}, second stage", sigmas, opts["stage2_sampler"])
                         marks["sample2"] = time.time() - clock_second
                         del positive2, negative2, video, audio_latent
                     self._status(unique_id, f"Part {index + 1}/{total}: decoding")
@@ -560,12 +567,12 @@ class PROMPTFORGE_H3Endless:
             PromptServer.instance.send_sync("executed", {"node": str(unique_id), "display_node": str(unique_id), "output": {"promptforge_video": [preview]},
                                                          "prompt_id": next((item[1] for item in PromptServer.instance.prompt_queue.currently_running.values()), None)}, PromptServer.instance.client_id)
 
-    def _stage(self, model, positive, negative, latent, seed, steps, opts, unique_id, label, custom_sigmas=""):
+    def _stage(self, model, positive, negative, latent, seed, steps, opts, unique_id, label, custom_sigmas="", sampler_name=None):
         """One sampling stage, previewed in this node by PromptForge's preview override unless the preview is off (or left to ComfyUI)."""
         mode = opts["preview"]
         if mode not in ("none", "default"):
             model = preview_override.apply(model, unique_id, label=label, max_resolution=int(opts["preview_size"]), frames=int(opts["preview_frames"]), fps=int(opts["preview_fps"]), tiny_vae=opts["preview_decoder"])
-        return sampler.PROMPTFORGE_Sampler().sample(model, positive, negative, latent, seed, steps, opts["cfg"], opts["sampler_name"], opts["scheduler"], 1.0, 1,
+        return sampler.PROMPTFORGE_Sampler().sample(model, positive, negative, latent, seed, steps, opts["cfg"], sampler_name or opts["sampler_name"], opts["scheduler"], 1.0, 1,
                                                     custom_sigmas=custom_sigmas, preview="default" if mode == "default" else "none")[0]
 
     def _review(self, unique_id, index, total, prompt, rewrite, review):
