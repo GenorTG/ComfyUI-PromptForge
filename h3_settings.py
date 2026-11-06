@@ -2,7 +2,8 @@
 
 Each one answers a single question and plugs into the generator (PromptForge H3 Endless Video):
 
-    Story ............ what happens (general prompt, a box per part, dialogue, prompt style)
+    Control Panel .... the place you look at: what to make (one clip or parts), the prompts and saved ideas, the prompt template,
+                       the switches for what is used, and which references are on
     References ....... who is in it (character pictures and their descriptions, a voice)
     Video Format ..... how big and how long (aspect ratio, megapixels, seconds per part)
     Continuity ....... how the parts join (carry the ending forward, cuts, smoothing)
@@ -11,9 +12,13 @@ Each one answers a single question and plugs into the generator (PromptForge H3 
     Live Preview ..... optional: what you see while it samples
     Speed and Memory . optional: attention backend and feed-forward chunking
 
-Every node is optional except the Story: an unconnected one means its defaults. Connecting the Second Stage node is
+Every node is optional except the Control Panel: an unconnected one means its defaults. Connecting the Second Stage node is
 what turns the second stage on, so none of them has an on/off switch for a whole section.
 """
+import importlib
+import json
+import re
+
 import comfy.samplers
 
 from . import h3_upscaler, preview_decoder
@@ -32,16 +37,21 @@ STORY_STYLES = ("continue the same shot", "let the story decide", "cut to a new 
 CARRIED_FRAMES = ("1", "5", "22", "39", "56", "73")
 SECONDS = ("5", "10")
 PROMPT_STYLES = ("standard", "NSFW")
+GENERATIONS = ("one clip", "several parts (endless video)")
+AUTOMATIC_TEMPLATE = "automatic (by mode and style)"
+# a part box may start with its length, for example (10s)
+LENGTH_PREFIX = re.compile(r"\(\s*(\d+(?:\.\d+)?)\s*s(?:ec(?:onds?)?)?\s*\)\s*", re.I)
+MODE_KEYS = ("use_first_frame", "use_reference_images", "use_reference_videos", "use_reference_audio", "extend_existing_video", "two_stage_upscale")
 DIALOGUE_AUTO = "auto (from the prompts)"
 DIALOGUE_LANGUAGES = (DIALOGUE_AUTO, "Arabic", "Chinese", "English", "French", "German", "Italian", "Japanese", "Korean", "Portuguese", "Russian", "Spanish", "other (type below)")
 PREVIEW_MODES = ("live", "none", "ComfyUI's own")
 ATTENTION = ("comfy kitchen attention", "pytorch attention", "as connected")
 
 DEFAULTS = {
-    "story": {"general_prompt": "", "parts": 3, "part_prompts": "", "negative_prompt": "", "dialogue": "", "dialogue_language": DIALOGUE_AUTO,
+    "story": {"general_prompt": "", "parts": 3, "part_prompts": "", "negative_prompt": "", "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "prompt_template": AUTOMATIC_TEMPLATE,
               "dialogue_language_other": "", "prompt_style": "standard", "writer_creativity": 0.8, "review_prompts": False},
     "references": {},
-    "modes": {"use_first_frame": True, "use_reference_images": True, "use_reference_videos": True, "use_reference_audio": True, "extend_existing_video": True, "two_stage_upscale": True},
+    "modes": {key: True for key in MODE_KEYS},
     "format": {"aspect_ratio": "16:9", "orientation": "landscape", "megapixels": 0.5, "seconds_per_part": "5"},
     "continuity": {"how_parts_join": next(iter(JOIN_MODES)), "story_style": STORY_STYLES[0], "carried_frames": "22", "smooth_joins": True, "check_joins": False, "join_retries": 1},
     "sampling": {"sampler_name": "er_sde", "scheduler": "sgm_uniform", "steps": 8, "cfg": 1.0, "shift_video": 12.0, "shift_audio": 3.0},
@@ -51,6 +61,13 @@ DEFAULTS = {
     "performance": {"attention": ATTENTION[0], "ffn_chunks": 3, "sparse_attention": True, "keep_percent": 10.0},
     "continue_from": {},
 }
+
+
+def as_raw(box):
+    """A part box marked to be used as the finished prompt (after its length, if it has one)."""
+    length = LENGTH_PREFIX.match(box)
+    start = length.end() if length else 0
+    return box if box[start:].lower().startswith("raw:") else box[:start] + "raw: " + box[start:]
 
 
 def settings(name, given):
@@ -70,16 +87,26 @@ class _Settings:
 
 class PROMPTFORGE_H3Story(_Settings):
     KEY = "story"
-    RETURN_TYPES = ("PROMPTFORGE_H3_STORY",)
-    RETURN_NAMES = ("story",)
-    DESCRIPTION = "What the video is about and what happens in each part. Write the general prompt, press + to add a box for every part, and describe that part in its box. Plug into the H3 Endless Video node."
+    RETURN_TYPES = ("PROMPTFORGE_H3_STORY", "PROMPTFORGE_H3_MODES")
+    RETURN_NAMES = ("story", "modes")
+    DESCRIPTION = ("The control panel: the place you look at most of the time. Choose one clip or several parts, write the idea (and keep ideas you like in the saved ideas list), "
+                   "choose the prompt template, switch on what the video is made from, and see which references are on. The Load nodes hold the files; here you only flip them on and off.")
 
     @classmethod
     def INPUT_TYPES(cls):
+        templates = [AUTOMATIC_TEMPLATE] + [name for name in importlib.import_module(__package__).PRESET_OPTIONS if name != "auto"]
+        switches = {
+            "use_first_frame": "Image to video: the video starts exactly with the first frame from the References.",
+            "use_reference_images": "Reference to video: use the reference pictures.",
+            "use_reference_videos": "Use the reference videos (and their soundtracks).",
+            "use_reference_audio": "Use the reference sounds.",
+            "extend_existing_video": "Continue the video from the Continue Existing Video node.",
+            "two_stage_upscale": "Run the Second Stage (upscale and refine). Off = first pass only, much faster, for trying prompts.",
+        }
         return {
             "required": {
-                "general_prompt": ("STRING", {"default": "", "multiline": True, "placeholder": "What the whole video is about, who is in it, the style. What happens in each part goes in the boxes below.",
-                                              "tooltip": "Context for every part: the idea of the whole video, the look, who is in it. It is not shown in full in each part; each part shows what its own box says."}),
+                "general_prompt": ("STRING", {"default": "", "multiline": True, "placeholder": "Your idea. For several parts: what the whole video is about, who is in it, the style; what happens in each part goes in the boxes below.",
+                                              "tooltip": "One clip: the idea of the clip. Several parts: context for every part (the look, who is in it); each part shows what its own box says."}),
             },
             "optional": {
                 "parts": ("INT", {"default": 3, "min": 1, "max": 200, "tooltip": "Number of parts. Press + / - on the node."}),
@@ -91,8 +118,24 @@ class PROMPTFORGE_H3Story(_Settings):
                 "prompt_style": (list(PROMPT_STYLES), {"default": "standard", "tooltip": "Which family of MiniMax H3 prompt presets the prompt writer uses."}),
                 "writer_creativity": ("FLOAT", {"default": 0.8, "min": 0.1, "max": 1.0, "step": 0.05, "tooltip": "How freely the prompt writer words things. Lower sticks closer to your text."}),
                 "review_prompts": ("BOOLEAN", {"default": False, "tooltip": "Pause after each part's prompt is written: a panel lets you edit it, approve it, or have it written again. Needs the ComfyUI page open."}),
+                "generation": (list(GENERATIONS), {"default": GENERATIONS[0], "tooltip": "One clip: a single video of the length below, written from one idea. Several parts: a long video made part by part, each with its own box, joined with the continuity settings."}),
+                "clip_seconds": ("FLOAT", {"default": 5.0, "min": 1.0, "max": 120.0, "step": 0.5, "tooltip": "Length of the clip in seconds (one clip only). The frame count snaps to what MiniMax H3 can make."}),
+                "use_prompt_writer": ("BOOLEAN", {"default": True, "tooltip": "On: the language model turns your idea into a full H3 prompt. Off: your text is used as the finished prompt, as it is."}),
+                "prompt_template": (templates, {"default": AUTOMATIC_TEMPLATE, "tooltip": "The prompt writer's template. Automatic picks the text-to-video or reference-to-video one for the mode, in the style set above."}),
+                **{key: ("BOOLEAN", {"default": True, "tooltip": text}) for key, text in switches.items()},
             },
         }
+
+    def build(self, general_prompt, **values):
+        modes = {key: values.pop(key) for key in MODE_KEYS if key in values}
+        story = {**values, "general_prompt": general_prompt}
+        writer = story.get("use_prompt_writer", True)
+        if story.get("generation", GENERATIONS[0]) == GENERATIONS[0]:
+            seconds = f"({story.get('clip_seconds', 5.0):g}s) "
+            story.update(parts=1, general_prompt="", part_prompts=json.dumps([seconds + ("" if writer else "raw: ") + general_prompt.strip()]))
+        elif not writer:
+            story["part_prompts"] = json.dumps([as_raw(str(box)) for box in json.loads(story.get("part_prompts") or "[]")])
+        return (story, modes)
 
 
 class PROMPTFORGE_H3References(_Settings):
@@ -122,26 +165,6 @@ class PROMPTFORGE_H3References(_Settings):
         for number in range(1, 4):
             optional[f"audio_description_{number}"] = ("STRING", {"default": "", "multiline": True, "tooltip": f"What sound {number} is, for example 'the voice of the woman (S1)'."})
         return {"required": {}, "optional": optional}
-
-
-class PROMPTFORGE_H3Modes(_Settings):
-    KEY = "modes"
-    RETURN_TYPES = ("PROMPTFORGE_H3_MODES",)
-    RETURN_NAMES = ("modes",)
-    DESCRIPTION = "One place to switch what the video uses, without rewiring or bypassing: every switch only turns off something that is connected. All on = use everything that is connected."
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "use_first_frame": ("BOOLEAN", {"default": True, "tooltip": "Image to video: the video starts exactly with the first frame from the References node."}),
-                "use_reference_images": ("BOOLEAN", {"default": True, "tooltip": "Reference to video: use the pictures from the References node."}),
-                "use_reference_videos": ("BOOLEAN", {"default": True, "tooltip": "Use the reference videos (and their soundtracks) from the References node."}),
-                "use_reference_audio": ("BOOLEAN", {"default": True, "tooltip": "Use the sounds from the References node."}),
-                "extend_existing_video": ("BOOLEAN", {"default": True, "tooltip": "Continue the video from the Continue Existing Video node."}),
-                "two_stage_upscale": ("BOOLEAN", {"default": True, "tooltip": "Run the Second Stage (upscale and refine). Off = first pass only, much faster, for trying prompts."}),
-            },
-        }
 
 
 class PROMPTFORGE_H3Format(_Settings):
@@ -279,10 +302,9 @@ class PROMPTFORGE_H3ContinueFrom(_Settings):
 
 
 NODES = {
-    "PROMPTFORGE_H3Story": ("PromptForge H3 Story", PROMPTFORGE_H3Story),
+    "PROMPTFORGE_H3Story": ("PromptForge H3 Control Panel", PROMPTFORGE_H3Story),
     "PROMPTFORGE_H3References": ("PromptForge H3 References", PROMPTFORGE_H3References),
     "PROMPTFORGE_H3ContinueFrom": ("PromptForge H3 Continue Existing Video", PROMPTFORGE_H3ContinueFrom),
-    "PROMPTFORGE_H3Modes": ("PromptForge H3 Mode Switches", PROMPTFORGE_H3Modes),
     "PROMPTFORGE_H3Format": ("PromptForge H3 Video Format", PROMPTFORGE_H3Format),
     "PROMPTFORGE_H3Continuity": ("PromptForge H3 Continuity", PROMPTFORGE_H3Continuity),
     "PROMPTFORGE_H3Sampling": ("PromptForge H3 Sampling", PROMPTFORGE_H3Sampling),

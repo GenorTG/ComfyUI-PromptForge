@@ -114,7 +114,7 @@ def part_boxes(text):
     plan = []
     for value in values if isinstance(values, list) else []:
         value = str(value).strip()
-        match = re.match(r"\(\s*(\d+(?:\.\d+)?)\s*s(?:ec(?:onds?)?)?\s*\)\s*", value, re.I)
+        match = h3_settings.LENGTH_PREFIX.match(value)
         plan.append({"text": value[match.end():].strip() if match else value, "seconds": float(match.group(1)) if match else None})
     return plan
 
@@ -531,7 +531,7 @@ class PROMPTFORGE_H3Generate:
         package = _package()
         refs = (list(pictures) + [None] * 3)[:3]
         have_refs = bool(pictures) or bool(extras["ref_videos"] or extras["ref_audios"]) or (continuing and mode == "reference video")
-        preset = ("NSFW › " if story["prompt_style"] == "NSFW" else "") + ("MiniMax H3 Ref2VA" if have_refs else "MiniMax H3 T2VA")
+        preset = story["prompt_template"] if story["prompt_template"] != h3_settings.AUTOMATIC_TEMPLATE else ("NSFW › " if story["prompt_style"] == "NSFW" else "") + ("MiniMax H3 Ref2VA" if have_refs else "MiniMax H3 T2VA")
         continuation = continuation_brief(index, total, seconds, notes[-4:], last_shot, mode, prefix / FPS, story_style) if continuing else ""
         context = small(tail) if (continuing and tail is not None) else None
         for attempt in range(2):

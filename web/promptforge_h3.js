@@ -53,6 +53,121 @@ function setShown(widget, shown) {
   if (widget.element) widget.element.style.display = shown ? "" : "none";
 }
 
+
+const IDEA_KEYS = ["general_prompt", "parts", "part_prompts", "negative_prompt", "dialogue", "generation", "clip_seconds"];
+const BUTTON = { cursor: "pointer", padding: "2px 8px" };
+const INPUT = { background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)", border: "1px solid var(--border-color, #555)", borderRadius: "3px" };
+
+// a DOM widget that is as wide as its node, is not saved in the workflow and is as tall as `height()`
+function domWidget(node, name, element, height) {
+  element.addEventListener("pointerdown", (event) => event.stopPropagation());
+  element.addEventListener("wheel", (event) => event.stopPropagation());
+  const widget = node.addDOMWidget(name, "promptforge_" + name, element, { serialize: false, getMinHeight: height });
+  Object.defineProperty(widget, "width", { get: () => node.size[0], set: () => {}, configurable: true });
+  return widget;
+}
+
+// the saved ideas of the control panel: your own texts, before the prompt writer turns them into prompts
+function addIdeas(node, put) {
+  const find = (name) => node.widgets.find((widget) => widget.name === name);
+  const bar = el("div", { display: "flex", alignItems: "center", gap: "4px", boxSizing: "border-box", fontSize: "12px", color: "var(--input-text, #ddd)" });
+  const select = el("select", { ...INPUT, flex: "1 1 auto", minWidth: "0", height: "24px" });
+  const previous = el("button", BUTTON, { textContent: "◀", title: "previous idea" });
+  const next = el("button", BUTTON, { textContent: "▶", title: "next idea" });
+  const save = el("button", BUTTON, { textContent: "Save", title: "store the idea that is written now under the selected name" });
+  const saveAs = el("button", BUTTON, { textContent: "Save as…", title: "store it under a new name" });
+  const remove = el("button", BUTTON, { textContent: "Delete", title: "delete the selected idea" });
+  bar.append(el("span", { opacity: ".7" }, { textContent: "Ideas" }), previous, select, next, save, saveAs, remove);
+  let ideas = {};
+
+  const refresh = (chosen) => {
+    select.replaceChildren(el("option", {}, { value: "", textContent: "— saved ideas —" }), ...Object.keys(ideas).map((name) => el("option", {}, { value: name, textContent: name })));
+    select.value = chosen && ideas[chosen] ? chosen : "";
+  };
+  const load = async (chosen) => { ideas = await (await api.fetchApi("/promptforge/ideas")).json(); refresh(chosen ?? select.value); };
+  const current = () => Object.fromEntries(IDEA_KEYS.map((key) => [key, find(key)?.value]));
+  const store = async (name) => {
+    ideas = await (await api.fetchApi("/promptforge/ideas", { method: "POST", body: JSON.stringify({ name, data: current() }) })).json();
+    refresh(name);
+  };
+  const apply = (name) => {
+    const data = ideas[name];
+    if (!data) return;
+    for (const key of IDEA_KEYS) if (key in data && find(key)) find(key).value = data[key];
+    node.promptforgeRestoreParts?.();
+    find("generation")?.callback?.(find("generation").value);
+    node.setDirtyCanvas(true, true);
+  };
+  const step = (by) => {
+    const names = Object.keys(ideas);
+    if (!names.length) return;
+    const index = (names.indexOf(select.value) + by + names.length) % names.length;
+    refresh(names[index]);
+    apply(names[index]);
+  };
+  select.addEventListener("change", () => apply(select.value));
+  previous.addEventListener("click", () => step(-1));
+  next.addEventListener("click", () => step(1));
+  save.addEventListener("click", () => { const name = select.value || window.prompt("Name of this idea:"); if (name?.trim()) store(name.trim()); });
+  saveAs.addEventListener("click", () => { const name = window.prompt("Name of this idea:", select.value); if (name?.trim()) store(name.trim()); });
+  remove.addEventListener("click", async () => {
+    if (!select.value || !window.confirm(`Delete the idea "${select.value}"?`)) return;
+    ideas = await (await api.fetchApi("/promptforge/ideas?name=" + encodeURIComponent(select.value), { method: "DELETE" })).json();
+    refresh("");
+  });
+  put(domWidget(node, "saved_ideas", bar, () => 30));
+  load("");
+}
+
+// which references are on, and a switch for each: the Load nodes keep the files, this is where you flip them
+const REFERENCE_SLOTS = [["first_frame", "First frame"], ...Array.from({ length: 9 }, (_, index) => [`image_${index + 1}`, `Picture ${index + 1}`]),
+  ...Array.from({ length: 3 }, (_, index) => [`video_${index + 1}`, `Video ${index + 1}`]), ...Array.from({ length: 3 }, (_, index) => [`audio_${index + 1}`, `Sound ${index + 1}`])];
+
+function addReferenceOverview(node, put) {
+  const graph = () => node.graph;
+  const linkOf = (id) => (graph().getLink ? graph().getLink(id) : graph().links[id]);
+  const sourceOf = (target, name) => {
+    const link = target?.inputs?.find((input) => input.name === name)?.link;
+    return link == null ? null : graph().getNodeById(linkOf(link)?.origin_id);
+  };
+  const generator = () => node.outputs.flatMap((output) => output.links || []).map((id) => graph().getNodeById(linkOf(id)?.target_id)).find((target) => target?.type === GENERATE);
+  const frame = el("div", { boxSizing: "border-box", fontSize: "12px", color: "var(--input-text, #ddd)", border: "1px solid var(--border-color, #555)", borderRadius: "4px", padding: "4px 6px", overflow: "auto" });
+  let shown = "";
+
+  const rows = () => {
+    const target = generator();
+    const collect = target ? sourceOf(target, "references") : null;
+    const slots = REFERENCE_SLOTS.map(([name, label]) => [label, sourceOf(collect, name)]);
+    slots.push(["Video to extend", sourceOf(sourceOf(target, "continue_from"), "video")]);
+    return slots.filter(([, loader]) => loader);
+  };
+  const render = () => {
+    if (!graph()) return;
+    const slots = rows();
+    const state = JSON.stringify(slots.map(([label, loader]) => [label, loader.title, loader.widgets?.map((widget) => widget.value).filter((value) => typeof value === "string").join("|"), loader.widgets?.find((widget) => widget.name === "enabled")?.value]));
+    if (state === shown) return;
+    shown = state;
+    const used = slots.filter(([, loader]) => loader.widgets.find((widget) => ["image", "video", "audio"].includes(widget.name))?.value);
+    const lines = used.map(([label, loader]) => {
+      const file = loader.widgets.find((widget) => ["image", "video", "audio"].includes(widget.name))?.value || "";
+      const toggle = loader.widgets.find((widget) => widget.name === "enabled");
+      const line = el("label", { display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", opacity: toggle?.value ? "1" : ".5", whiteSpace: "nowrap", overflow: "hidden" });
+      const box = el("input", {}, { type: "checkbox", checked: !!toggle?.value });
+      box.addEventListener("change", () => { toggle.value = box.checked; loader.setDirtyCanvas?.(true, true); node.setDirtyCanvas(true, true); shown = ""; });
+      line.append(box, el("b", { minWidth: "96px" }, { textContent: label }), el("span", { overflow: "hidden", textOverflow: "ellipsis" }, { textContent: file.split("/").pop() || "(no file)" }));
+      return line;
+    });
+    const empty = slots.length - used.length;
+    frame.replaceChildren(el("div", { opacity: ".7" }, { textContent: lines.length ? "References (tick = on)" : "No references chosen: pick files in the Load nodes" }), ...lines,
+      ...(slots.length && empty ? [el("div", { opacity: ".5" }, { textContent: `${empty} slot${empty > 1 ? "s" : ""} empty` })] : []));
+    node.setSize([node.size[0], Math.max(node.size[1], node.computeSize()[1])]);
+  };
+  put(domWidget(node, "references_overview", frame, () => Math.min(300, 14 + 20 * Math.max(2, frame.childElementCount))));
+  const timer = setInterval(render, 700);
+  const removed = node.onRemoved;
+  node.onRemoved = function () { clearInterval(timer); return removed?.apply(this, arguments); };
+}
+
 // the prompt of a part, waiting for you: edit it, approve it, or ask for another one
 let reviewPanel = null;
 function closeReview() { reviewPanel?.remove(); reviewPanel = null; }
@@ -246,7 +361,8 @@ app.registerExtension({
       plus.addEventListener("click", () => setCount(total() + 1));
       count.addEventListener("change", () => setCount(Number(count.value) || 1));
 
-      const widget = node.addDOMWidget("part_boxes", "promptforge_part_boxes", frame, { serialize: false, getMinHeight: () => 34 + Array.from({ length: total() }, (_, index) => (heights()[index] || BOX_HEIGHT) + LABEL_HEIGHT + 4).reduce((sum, value) => sum + value, 0) });
+      let clipMode = false;
+      const widget = node.addDOMWidget("part_boxes", "promptforge_part_boxes", frame, { serialize: false, getMinHeight: () => clipMode ? 0 : 34 + Array.from({ length: total() }, (_, index) => (heights()[index] || BOX_HEIGHT) + LABEL_HEIGHT + 4).reduce((sum, value) => sum + value, 0) });
       Object.defineProperty(widget, "width", { get: () => node.size[0], set: () => {}, configurable: true });
       // the part boxes go right under the general prompt
       node.widgets.splice(node.widgets.indexOf(widget), 1);
@@ -262,13 +378,33 @@ app.registerExtension({
       node.promptforgeRestoreParts = restore;
       if (!Number(countWidget.value)) countWidget.value = 3;
       render();
-      node.setSize([Math.max(node.size[0], 520), Math.max(node.size[1], node.computeSize()[1])]);
+
+      // one clip or several parts: the part boxes are only for several parts, the length only for one clip
+      const generation = find("generation");
+      const applyGeneration = () => {
+        const clip = String(generation.value).startsWith("one clip");
+        clipMode = clip;
+        frame.style.display = clip ? "none" : "";
+        setShown(find("clip_seconds"), clip);
+        const input = general.inputEl || general.element;
+        if (input) input.placeholder = clip ? "Your idea for the clip: what happens, who is in it, the look, the sound." : "What the whole video is about, who is in it, the style. What happens in each part goes in the boxes below.";
+        fit();
+      };
+      const callback = generation.callback;
+      generation.callback = (...args) => { callback?.apply(generation, args); applyGeneration(); };
+      node.promptforgeApplyGeneration = applyGeneration;
+      const put = (added) => { node.widgets.splice(node.widgets.indexOf(added), 1); node.widgets.splice(node.widgets.indexOf(general), 0, added); };
+      addIdeas(node, put);
+      addReferenceOverview(node, put);
+      applyGeneration();
+      node.setSize([Math.max(node.size[0], 760), Math.max(node.size[1], node.computeSize()[1])]);
     };
 
     const onConfigure = nodeType.prototype.onConfigure;
     nodeType.prototype.onConfigure = function () {
       const result = onConfigure?.apply(this, arguments);
       this.promptforgeRestoreParts?.();
+      this.promptforgeApplyGeneration?.();
       return result;
     };
   },

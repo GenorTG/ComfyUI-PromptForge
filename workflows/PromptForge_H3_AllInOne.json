@@ -1,7 +1,7 @@
 {
- "id": "cb5fba8e-4a06-4d9b-89a8-ac7c363bafe8",
+ "id": "66f74f32-8d67-4ed1-a4f0-9a049a4236e3",
  "revision": 0,
- "last_node_id": 48,
+ "last_node_id": 45,
  "last_link_id": 60,
  "nodes": [
   {
@@ -9,7 +9,7 @@
    "type": "PROMPTFORGE_Loader",
    "pos": [
     20,
-    790
+    1350
    ],
    "size": [
     270,
@@ -233,14 +233,14 @@
    "type": "PROMPTFORGE_LoraLoader",
    "pos": [
     320,
-    790
+    1350
    ],
    "size": [
     620,
     598
    ],
    "flags": {},
-   "order": 40,
+   "order": 37,
    "mode": 0,
    "inputs": [
     {
@@ -369,7 +369,7 @@
    "type": "PROMPTFORGE_Model",
    "pos": [
     970,
-    790
+    1350
    ],
    "size": [
     400,
@@ -473,12 +473,12 @@
    "id": 4,
    "type": "PROMPTFORGE_H3Story",
    "pos": [
-    1910,
-    790
+    20,
+    70
    ],
    "size": [
-    820,
-    768
+    900,
+    1120
    ],
    "flags": {},
    "order": 2,
@@ -582,6 +582,106 @@
       "name": "review_prompts"
      },
      "link": null
+    },
+    {
+     "localized_name": "generation",
+     "name": "generation",
+     "shape": 7,
+     "type": "COMBO",
+     "widget": {
+      "name": "generation"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "clip_seconds",
+     "name": "clip_seconds",
+     "shape": 7,
+     "type": "FLOAT",
+     "widget": {
+      "name": "clip_seconds"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "use_prompt_writer",
+     "name": "use_prompt_writer",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "use_prompt_writer"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "prompt_template",
+     "name": "prompt_template",
+     "shape": 7,
+     "type": "COMBO",
+     "widget": {
+      "name": "prompt_template"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "use_first_frame",
+     "name": "use_first_frame",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "use_first_frame"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "use_reference_images",
+     "name": "use_reference_images",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "use_reference_images"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "use_reference_videos",
+     "name": "use_reference_videos",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "use_reference_videos"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "use_reference_audio",
+     "name": "use_reference_audio",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "use_reference_audio"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "extend_existing_video",
+     "name": "extend_existing_video",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "extend_existing_video"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "two_stage_upscale",
+     "name": "two_stage_upscale",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "two_stage_upscale"
+     },
+     "link": null
     }
    ],
    "outputs": [
@@ -592,15 +692,25 @@
      "links": [
       10
      ]
+    },
+    {
+     "localized_name": "modes",
+     "name": "modes",
+     "type": "PROMPTFORGE_H3_MODES",
+     "links": [
+      11
+     ]
     }
    ],
-   "title": "STORY: write your video here",
+   "title": "CONTROL PANEL - look here",
    "properties": {
     "Node name for S&R": "PROMPTFORGE_H3Story",
     "heights": {},
     "partHeights": []
    },
    "widgets_values": [
+    "",
+    "",
     "",
     "",
     3,
@@ -611,9 +721,21 @@
     "",
     "standard",
     0.8,
-    false
+    false,
+    "one clip",
+    5,
+    true,
+    "automatic (by mode and style)",
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
    ],
    "widgets_values_named": {
+    "saved_ideas": "",
+    "references_overview": "",
     "general_prompt": "",
     "part_boxes": "",
     "parts": 3,
@@ -624,102 +746,11 @@
     "dialogue_language_other": "",
     "prompt_style": "standard",
     "writer_creativity": 0.8,
-    "review_prompts": false
-   }
-  },
-  {
-   "id": 5,
-   "type": "PROMPTFORGE_H3Modes",
-   "pos": [
-    1720,
-    70
-   ],
-   "size": [
-    314.3228515625,
-    178
-   ],
-   "flags": {},
-   "order": 3,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "use_first_frame",
-     "name": "use_first_frame",
-     "type": "BOOLEAN",
-     "widget": {
-      "name": "use_first_frame"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "use_reference_images",
-     "name": "use_reference_images",
-     "type": "BOOLEAN",
-     "widget": {
-      "name": "use_reference_images"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "use_reference_videos",
-     "name": "use_reference_videos",
-     "type": "BOOLEAN",
-     "widget": {
-      "name": "use_reference_videos"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "use_reference_audio",
-     "name": "use_reference_audio",
-     "type": "BOOLEAN",
-     "widget": {
-      "name": "use_reference_audio"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "extend_existing_video",
-     "name": "extend_existing_video",
-     "type": "BOOLEAN",
-     "widget": {
-      "name": "extend_existing_video"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "two_stage_upscale",
-     "name": "two_stage_upscale",
-     "type": "BOOLEAN",
-     "widget": {
-      "name": "two_stage_upscale"
-     },
-     "link": null
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "modes",
-     "name": "modes",
-     "type": "PROMPTFORGE_H3_MODES",
-     "links": [
-      11
-     ]
-    }
-   ],
-   "title": "MODE SWITCHES",
-   "properties": {
-    "Node name for S&R": "PROMPTFORGE_H3Modes"
-   },
-   "widgets_values": [
-    true,
-    true,
-    true,
-    true,
-    true,
-    true
-   ],
-   "widgets_values_named": {
+    "review_prompts": false,
+    "generation": "one clip",
+    "clip_seconds": 5,
+    "use_prompt_writer": true,
+    "prompt_template": "automatic (by mode and style)",
     "use_first_frame": true,
     "use_reference_images": true,
     "use_reference_videos": true,
@@ -729,18 +760,18 @@
    }
   },
   {
-   "id": 6,
+   "id": 5,
    "type": "PROMPTFORGE_LoadImage",
    "pos": [
     610,
-    1718
+    2108
    ],
    "size": [
     400,
     460
    ],
    "flags": {},
-   "order": 4,
+   "order": 3,
    "mode": 0,
    "inputs": [
     {
@@ -817,18 +848,18 @@
    }
   },
   {
-   "id": 7,
+   "id": 6,
    "type": "PROMPTFORGE_LoadImage",
    "pos": [
     1040,
-    1718
+    2108
    ],
    "size": [
     400,
     460
    ],
    "flags": {},
-   "order": 5,
+   "order": 4,
    "mode": 0,
    "inputs": [
     {
@@ -907,18 +938,18 @@
    }
   },
   {
-   "id": 8,
+   "id": 7,
    "type": "PROMPTFORGE_LoadImage",
    "pos": [
     1470,
-    1718
+    2108
    ],
    "size": [
     400,
     460
    ],
    "flags": {},
-   "order": 6,
+   "order": 5,
    "mode": 0,
    "inputs": [
     {
@@ -997,18 +1028,18 @@
    }
   },
   {
-   "id": 9,
+   "id": 8,
    "type": "PROMPTFORGE_LoadImage",
    "pos": [
     1900,
-    1718
+    2108
    ],
    "size": [
     400,
     460
    ],
    "flags": {},
-   "order": 7,
+   "order": 6,
    "mode": 0,
    "inputs": [
     {
@@ -1087,18 +1118,18 @@
    }
   },
   {
-   "id": 10,
+   "id": 9,
    "type": "PROMPTFORGE_LoadImage",
    "pos": [
     2330,
-    1718
+    2108
    ],
    "size": [
     400,
     460
    ],
    "flags": {},
-   "order": 8,
+   "order": 7,
    "mode": 0,
    "inputs": [
     {
@@ -1177,18 +1208,18 @@
    }
   },
   {
-   "id": 11,
+   "id": 10,
    "type": "PROMPTFORGE_LoadImage",
    "pos": [
     20,
-    2238
+    2628
    ],
    "size": [
     400,
     460
    ],
    "flags": {},
-   "order": 9,
+   "order": 8,
    "mode": 0,
    "inputs": [
     {
@@ -1267,18 +1298,18 @@
    }
   },
   {
-   "id": 12,
+   "id": 11,
    "type": "PROMPTFORGE_LoadImage",
    "pos": [
     610,
-    2238
+    2628
    ],
    "size": [
     400,
     460
    ],
    "flags": {},
-   "order": 10,
+   "order": 9,
    "mode": 0,
    "inputs": [
     {
@@ -1357,18 +1388,18 @@
    }
   },
   {
-   "id": 13,
+   "id": 12,
    "type": "PROMPTFORGE_LoadImage",
    "pos": [
     1040,
-    2238
+    2628
    ],
    "size": [
     400,
     460
    ],
    "flags": {},
-   "order": 11,
+   "order": 10,
    "mode": 0,
    "inputs": [
     {
@@ -1447,18 +1478,18 @@
    }
   },
   {
-   "id": 14,
+   "id": 13,
    "type": "PROMPTFORGE_LoadImage",
    "pos": [
     1470,
-    2238
+    2628
    ],
    "size": [
     400,
     460
    ],
    "flags": {},
-   "order": 12,
+   "order": 11,
    "mode": 0,
    "inputs": [
     {
@@ -1537,18 +1568,18 @@
    }
   },
   {
-   "id": 15,
+   "id": 14,
    "type": "PROMPTFORGE_LoadImage",
    "pos": [
     1900,
-    2238
+    2628
    ],
    "size": [
     400,
     460
    ],
    "flags": {},
-   "order": 13,
+   "order": 12,
    "mode": 0,
    "inputs": [
     {
@@ -1627,18 +1658,18 @@
    }
   },
   {
-   "id": 16,
+   "id": 15,
    "type": "PROMPTFORGE_LoadVideo",
    "pos": [
     510,
-    2858
+    3248
    ],
    "size": [
     400,
-    200
+    224
    ],
    "flags": {},
-   "order": 14,
+   "order": 13,
    "mode": 0,
    "inputs": [
     {
@@ -1722,18 +1753,18 @@
    }
   },
   {
-   "id": 17,
+   "id": 16,
    "type": "PROMPTFORGE_LoadVideo",
    "pos": [
     940,
-    2858
+    3248
    ],
    "size": [
     400,
-    200
+    224
    ],
    "flags": {},
-   "order": 15,
+   "order": 14,
    "mode": 0,
    "inputs": [
     {
@@ -1817,18 +1848,18 @@
    }
   },
   {
-   "id": 18,
+   "id": 17,
    "type": "PROMPTFORGE_LoadVideo",
    "pos": [
     1370,
-    2858
+    3248
    ],
    "size": [
     400,
-    200
+    224
    ],
    "flags": {},
-   "order": 16,
+   "order": 15,
    "mode": 0,
    "inputs": [
     {
@@ -1912,18 +1943,18 @@
    }
   },
   {
-   "id": 19,
+   "id": 18,
    "type": "PROMPTFORGE_LoadAudio",
    "pos": [
     2350,
-    2858
+    3248
    ],
    "size": [
     400,
     200
    ],
    "flags": {},
-   "order": 17,
+   "order": 16,
    "mode": 0,
    "inputs": [
     {
@@ -1988,18 +2019,18 @@
    }
   },
   {
-   "id": 20,
+   "id": 19,
    "type": "PROMPTFORGE_LoadAudio",
    "pos": [
     2780,
-    2858
+    3248
    ],
    "size": [
     400,
     200
    ],
    "flags": {},
-   "order": 18,
+   "order": 17,
    "mode": 0,
    "inputs": [
     {
@@ -2064,18 +2095,18 @@
    }
   },
   {
-   "id": 21,
+   "id": 20,
    "type": "PROMPTFORGE_LoadAudio",
    "pos": [
     3210,
-    2858
+    3248
    ],
    "size": [
     400,
     200
    ],
    "flags": {},
-   "order": 19,
+   "order": 18,
    "mode": 0,
    "inputs": [
     {
@@ -2140,18 +2171,18 @@
    }
   },
   {
-   "id": 22,
+   "id": 21,
    "type": "PROMPTFORGE_H3References",
    "pos": [
     510,
-    3238
+    3632
    ],
    "size": [
     400,
     394
    ],
    "flags": {},
-   "order": 41,
+   "order": 38,
    "mode": 0,
    "inputs": [
     {
@@ -2488,18 +2519,18 @@
    }
   },
   {
-   "id": 23,
+   "id": 22,
    "type": "PROMPTFORGE_LoadVideo",
    "pos": [
     1490,
-    3238
+    3632
    ],
    "size": [
     400,
-    200
+    224
    ],
    "flags": {},
-   "order": 20,
+   "order": 19,
    "mode": 0,
    "inputs": [
     {
@@ -2581,18 +2612,18 @@
    }
   },
   {
-   "id": 24,
+   "id": 23,
    "type": "PROMPTFORGE_H3ContinueFrom",
    "pos": [
     1920,
-    3238
+    3632
    ],
    "size": [
     309.8033203125,
     46
    ],
    "flags": {},
-   "order": 42,
+   "order": 39,
    "mode": 0,
    "inputs": [
     {
@@ -2625,18 +2656,18 @@
    }
   },
   {
-   "id": 25,
+   "id": 24,
    "type": "PROMPTFORGE_H3Format",
    "pos": [
     610,
-    3792
+    4186
    ],
    "size": [
     300.9244140625,
     130
    ],
    "flags": {},
-   "order": 21,
+   "order": 20,
    "mode": 0,
    "inputs": [
     {
@@ -2704,18 +2735,18 @@
    }
   },
   {
-   "id": 26,
+   "id": 25,
    "type": "PROMPTFORGE_H3Continuity",
    "pos": [
     940.9244140625,
-    3792
+    4186
    ],
    "size": [
     280.0337890625,
     178
    ],
    "flags": {},
-   "order": 22,
+   "order": 21,
    "mode": 0,
    "inputs": [
     {
@@ -2805,18 +2836,18 @@
    }
   },
   {
-   "id": 27,
+   "id": 26,
    "type": "PROMPTFORGE_H3Sampling",
    "pos": [
     1313.28828125,
-    3792
+    4186
    ],
    "size": [
     273.8267578125,
     178
    ],
    "flags": {},
-   "order": 23,
+   "order": 22,
    "mode": 0,
    "inputs": [
     {
@@ -2906,18 +2937,18 @@
    }
   },
   {
-   "id": 28,
+   "id": 27,
    "type": "PROMPTFORGE_H3SecondStage",
    "pos": [
     20,
-    4152
+    4546
    ],
    "size": [
     370.84921875,
     226
    ],
    "flags": {},
-   "order": 24,
+   "order": 23,
    "mode": 0,
    "inputs": [
     {
@@ -3062,18 +3093,18 @@
    }
   },
   {
-   "id": 29,
+   "id": 28,
    "type": "PROMPTFORGE_H3Preview",
    "pos": [
     610,
-    4152
+    4546
    ],
    "size": [
     296.0025390625,
     154
    ],
    "flags": {},
-   "order": 25,
+   "order": 24,
    "mode": 0,
    "inputs": [
     {
@@ -3152,18 +3183,18 @@
    }
   },
   {
-   "id": 30,
+   "id": 29,
    "type": "PROMPTFORGE_H3Performance",
    "pos": [
     940.9244140625,
-    4152
+    4546
    ],
    "size": [
     342.3638671875,
     130
    ],
    "flags": {},
-   "order": 26,
+   "order": 25,
    "mode": 0,
    "inputs": [
     {
@@ -3231,18 +3262,18 @@
    }
   },
   {
-   "id": 31,
+   "id": 30,
    "type": "PROMPTFORGE_H3Generate",
    "pos": [
     570,
-    4538
+    4932
    ],
    "size": [
     520,
     700
    ],
    "flags": {},
-   "order": 43,
+   "order": 40,
    "mode": 0,
    "inputs": [
     {
@@ -3415,18 +3446,18 @@
    }
   },
   {
-   "id": 32,
+   "id": 31,
    "type": "PROMPTFORGE_FrameInterpolate",
    "pos": [
     2150.33359375,
-    4538
+    4932
    ],
    "size": [
     401.3375,
     82
    ],
    "flags": {},
-   "order": 44,
+   "order": 41,
    "mode": 4,
    "inputs": [
     {
@@ -3478,18 +3509,18 @@
    }
   },
   {
-   "id": 33,
+   "id": 32,
    "type": "PROMPTFORGE_SaveVideo",
    "pos": [
     2581.67109375,
-    4538
+    4932
    ],
    "size": [
     302.9751953125,
     442
    ],
    "flags": {},
-   "order": 47,
+   "order": 44,
    "mode": 0,
    "inputs": [
     {
@@ -3700,18 +3731,18 @@
    }
   },
   {
-   "id": 34,
+   "id": 33,
    "type": "PreviewAny",
    "pos": [
     1120,
-    4538
+    4932
    ],
    "size": [
     210.33359375,
     122
    ],
    "flags": {},
-   "order": 45,
+   "order": 42,
    "mode": 0,
    "inputs": [
     {
@@ -3737,18 +3768,18 @@
    "widgets_values_named": {}
   },
   {
-   "id": 35,
+   "id": 34,
    "type": "PreviewAny",
    "pos": [
     1360.33359375,
-    4538
+    4932
    ],
    "size": [
     210,
     122
    ],
    "flags": {},
-   "order": 46,
+   "order": 43,
    "mode": 0,
    "inputs": [
     {
@@ -3774,28 +3805,55 @@
    "widgets_values_named": {}
   },
   {
-   "id": 36,
+   "id": 35,
    "type": "Note",
    "pos": [
-    20,
+    1010,
     70
    ],
    "size": [
     760,
-    560
+    520
    ],
    "flags": {},
-   "order": 27,
+   "order": 26,
    "mode": 0,
    "inputs": [],
    "outputs": [],
    "title": "READ ME 1: how to use",
    "properties": {},
    "widgets_values": [
-    "HOW TO USE THIS WORKFLOW\n\n1. Pick your models in 'Loader' and a language model in 'Prompt writer' (once).\n2. Write what you want in STORY. That is the only place you write the video: a general idea, and one box per part (press + / -). Each part is 5 or 10 seconds, so 3 parts = a 15 second video.\n3. (Optional) Give it references: switch on the Load nodes you want (the 'enabled' switch on each node) and describe them. The prompt writer sees the pictures and the descriptions.\n4. Press Run. The prompts that were written and a timing report appear at the end; the video is saved by SAVE VIDEO.\n\nTo try another scene: only rewrite the Story. The references and settings stay as they are.\nTo check prompts before spending time on sampling, switch 'review_prompts' on in the Story.\nEverything left to right: models -> story -> references -> settings -> generate -> save."
+    "HOW TO USE THIS WORKFLOW\n\nMost of the time you only look at the CONTROL PANEL (top left). Everything else is set once.\n\n1. Once: pick your models in 'Loader' and a language model in 'Prompt writer'.\n2. In the CONTROL PANEL: choose ONE CLIP (a video of the length you set, written from one idea) or SEVERAL PARTS (a long video made part by part, a box per part).\n3. Write your idea in the panel. Like it? Save it in the Ideas bar (Save / Save as) and flip between your saved ideas with the arrows.\n4. Pick the prompt template, and switch on what the video is made from (first frame, references, extend a video, second pass).\n5. References: the panel lists the files you chose in the Load nodes below and lets you tick each one on or off. Choose files, describe them, and use 'Upload' to add new ones.\n6. Press Run. The written prompts and a timing report appear at the end; SAVE VIDEO saves the video.\n\nTo try another scene: only change the idea in the panel (or pick another saved idea). References and settings stay as they are."
    ],
    "widgets_values_named": {
-    "text": "HOW TO USE THIS WORKFLOW\n\n1. Pick your models in 'Loader' and a language model in 'Prompt writer' (once).\n2. Write what you want in STORY. That is the only place you write the video: a general idea, and one box per part (press + / -). Each part is 5 or 10 seconds, so 3 parts = a 15 second video.\n3. (Optional) Give it references: switch on the Load nodes you want (the 'enabled' switch on each node) and describe them. The prompt writer sees the pictures and the descriptions.\n4. Press Run. The prompts that were written and a timing report appear at the end; the video is saved by SAVE VIDEO.\n\nTo try another scene: only rewrite the Story. The references and settings stay as they are.\nTo check prompts before spending time on sampling, switch 'review_prompts' on in the Story.\nEverything left to right: models -> story -> references -> settings -> generate -> save."
+    "text": "HOW TO USE THIS WORKFLOW\n\nMost of the time you only look at the CONTROL PANEL (top left). Everything else is set once.\n\n1. Once: pick your models in 'Loader' and a language model in 'Prompt writer'.\n2. In the CONTROL PANEL: choose ONE CLIP (a video of the length you set, written from one idea) or SEVERAL PARTS (a long video made part by part, a box per part).\n3. Write your idea in the panel. Like it? Save it in the Ideas bar (Save / Save as) and flip between your saved ideas with the arrows.\n4. Pick the prompt template, and switch on what the video is made from (first frame, references, extend a video, second pass).\n5. References: the panel lists the files you chose in the Load nodes below and lets you tick each one on or off. Choose files, describe them, and use 'Upload' to add new ones.\n6. Press Run. The written prompts and a timing report appear at the end; SAVE VIDEO saves the video.\n\nTo try another scene: only change the idea in the panel (or pick another saved idea). References and settings stay as they are."
+   },
+   "color": "#432",
+   "bgcolor": "#653"
+  },
+  {
+   "id": 36,
+   "type": "Note",
+   "pos": [
+    1800,
+    70
+   ],
+   "size": [
+    820,
+    520
+   ],
+   "flags": {},
+   "order": 27,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "title": "READ ME 2: modes",
+   "properties": {},
+   "widgets_values": [
+    "MODES - what the video is made from (all combine freely; switches are in the CONTROL PANEL)\n\nTEXT TO VIDEO: nothing ticked in the references; write the idea.\nIMAGE TO VIDEO: put a picture in FIRST FRAME and keep 'use_first_frame' on: the video starts exactly with it.\nREFERENCE TO VIDEO: choose pictures / videos / sounds in the Load nodes and describe them. In the idea you can say 'the woman from <Picture 1>', 'the voice of <Audio 1>', 'like <Video 1>'. Numbers follow the order of the ticked references (first frame = Picture 1 when used; soundtracks of reference videos come before the standalone sounds).\nEXTEND A VIDEO: choose the video in VIDEO TO EXTEND and tick it: the new video continues it and the result contains both.\nONE CLIP: any length (clip_seconds). SEVERAL PARTS: each part 5 or 10 s (or '(8s)' at the start of a part box), joined with the Continuity settings.\nPROMPT WRITER OFF: your text is used as the finished prompt, exactly as written (use_prompt_writer).\nQUICK PREVIEW: switch two_stage_upscale off: first pass only, much faster, for trying ideas. On = full quality.\nSMOOTHER MOTION: un-bypass the interpolation node (select it, Ctrl+B) and set Save Video frame_rate to 48."
+   ],
+   "widgets_values_named": {
+    "text": "MODES - what the video is made from (all combine freely; switches are in the CONTROL PANEL)\n\nTEXT TO VIDEO: nothing ticked in the references; write the idea.\nIMAGE TO VIDEO: put a picture in FIRST FRAME and keep 'use_first_frame' on: the video starts exactly with it.\nREFERENCE TO VIDEO: choose pictures / videos / sounds in the Load nodes and describe them. In the idea you can say 'the woman from <Picture 1>', 'the voice of <Audio 1>', 'like <Video 1>'. Numbers follow the order of the ticked references (first frame = Picture 1 when used; soundtracks of reference videos come before the standalone sounds).\nEXTEND A VIDEO: choose the video in VIDEO TO EXTEND and tick it: the new video continues it and the result contains both.\nONE CLIP: any length (clip_seconds). SEVERAL PARTS: each part 5 or 10 s (or '(8s)' at the start of a part box), joined with the Continuity settings.\nPROMPT WRITER OFF: your text is used as the finished prompt, exactly as written (use_prompt_writer).\nQUICK PREVIEW: switch two_stage_upscale off: first pass only, much faster, for trying ideas. On = full quality.\nSMOOTHER MOTION: un-bypass the interpolation node (select it, Ctrl+B) and set Save Video frame_rate to 48."
    },
    "color": "#432",
    "bgcolor": "#653"
@@ -3804,25 +3862,25 @@
    "id": 37,
    "type": "Note",
    "pos": [
-    810,
-    70
+    1400,
+    1350
    ],
    "size": [
-    820,
-    560
+    420,
+    200
    ],
    "flags": {},
    "order": 28,
    "mode": 0,
    "inputs": [],
    "outputs": [],
-   "title": "READ ME 2: modes",
+   "title": "How",
    "properties": {},
    "widgets_values": [
-    "MODES - what the video is made from (all combine freely)\n\nTEXT TO VIDEO: leave every Load node switched off; write the Story.\nIMAGE TO VIDEO: switch on FIRST FRAME and pick a picture: the video starts exactly with it.\nREFERENCE TO VIDEO: switch on reference pictures / videos / sounds and describe each. In the Story you can say 'the woman from <Picture 1>', 'the voice of <Audio 1>', 'like <Video 1>'. Numbers follow the order of the switched-on nodes (the first frame, if used, is Picture 1; soundtracks of videos come before the standalone sounds).\nEXTEND A VIDEO: switch on VIDEO TO EXTEND (the video you already have); the new parts continue it and the result contains both.\nQUICK PREVIEW: switch 'two_stage_upscale' off in MODE SWITCHES: first pass only, much faster, for trying prompts. On = full quality.\nENDLESS VIDEO: raise the number of parts in the Story.\nSMOOTHER MOTION: un-bypass the interpolation node (select it, Ctrl+B) and set Save Video frame_rate to 48.\n\nQuick switches: every Load node has an 'enabled' switch; MODE SWITCHES turns whole kinds on or off at once."
+    "Pick the diffusion model, the text encoder and the VAEs once. The extra VAE (2x detail) decodes every part at twice the size. LoRAs apply to the model. The prompt writer is a separate small language model that turns your idea into H3 prompts."
    ],
    "widgets_values_named": {
-    "text": "MODES - what the video is made from (all combine freely)\n\nTEXT TO VIDEO: leave every Load node switched off; write the Story.\nIMAGE TO VIDEO: switch on FIRST FRAME and pick a picture: the video starts exactly with it.\nREFERENCE TO VIDEO: switch on reference pictures / videos / sounds and describe each. In the Story you can say 'the woman from <Picture 1>', 'the voice of <Audio 1>', 'like <Video 1>'. Numbers follow the order of the switched-on nodes (the first frame, if used, is Picture 1; soundtracks of videos come before the standalone sounds).\nEXTEND A VIDEO: switch on VIDEO TO EXTEND (the video you already have); the new parts continue it and the result contains both.\nQUICK PREVIEW: switch 'two_stage_upscale' off in MODE SWITCHES: first pass only, much faster, for trying prompts. On = full quality.\nENDLESS VIDEO: raise the number of parts in the Story.\nSMOOTHER MOTION: un-bypass the interpolation node (select it, Ctrl+B) and set Save Video frame_rate to 48.\n\nQuick switches: every Load node has an 'enabled' switch; MODE SWITCHES turns whole kinds on or off at once."
+    "text": "Pick the diffusion model, the text encoder and the VAEs once. The extra VAE (2x detail) decodes every part at twice the size. LoRAs apply to the model. The prompt writer is a separate small language model that turns your idea into H3 prompts."
    },
    "color": "#432",
    "bgcolor": "#653"
@@ -3831,12 +3889,12 @@
    "id": 38,
    "type": "Note",
    "pos": [
-    2064.3228515625,
-    70
+    20,
+    2108
    ],
    "size": [
-    420,
-    280
+    560,
+    260
    ],
    "flags": {},
    "order": 29,
@@ -3846,10 +3904,10 @@
    "title": "How",
    "properties": {},
    "widgets_values": [
-    "Turn whole kinds of input on or off here without touching the nodes: first frame, reference pictures / videos / sounds, extending a video, and the second pass (off = quick preview).\n\nEach Load node also has its own 'enabled' switch for single files."
+    "Up to 9 reference pictures plus the first frame. Each node: choose the file, write what it is (or keep the stored description), switch 'enabled' on - or tick it in the CONTROL PANEL. Use them for characters, places, objects, styles."
    ],
    "widgets_values_named": {
-    "text": "Turn whole kinds of input on or off here without touching the nodes: first frame, reference pictures / videos / sounds, extending a video, and the second pass (off = quick preview).\n\nEach Load node also has its own 'enabled' switch for single files."
+    "text": "Up to 9 reference pictures plus the first frame. Each node: choose the file, write what it is (or keep the stored description), switch 'enabled' on - or tick it in the CONTROL PANEL. Use them for characters, places, objects, styles."
    },
    "color": "#432",
    "bgcolor": "#653"
@@ -3858,12 +3916,12 @@
    "id": 39,
    "type": "Note",
    "pos": [
-    1400,
-    790
+    20,
+    3248
    ],
    "size": [
-    420,
-    200
+    460,
+    220
    ],
    "flags": {},
    "order": 30,
@@ -3873,10 +3931,10 @@
    "title": "How",
    "properties": {},
    "widgets_values": [
-    "Pick the diffusion model, the text encoder and the VAEs once. The extra VAE (2x detail) decodes every part at twice the size. LoRAs apply to the model. The prompt writer is a separate small language model that turns your Story into H3 prompts."
+    "Up to 3 reference videos with their sound (2-15 seconds is best). Use for motion, a person's look and voice, a camera move. Upload adds a file from your computer."
    ],
    "widgets_values_named": {
-    "text": "Pick the diffusion model, the text encoder and the VAEs once. The extra VAE (2x detail) decodes every part at twice the size. LoRAs apply to the model. The prompt writer is a separate small language model that turns your Story into H3 prompts."
+    "text": "Up to 3 reference videos with their sound (2-15 seconds is best). Use for motion, a person's look and voice, a camera move. Upload adds a file from your computer."
    },
    "color": "#432",
    "bgcolor": "#653"
@@ -3885,11 +3943,11 @@
    "id": 40,
    "type": "Note",
    "pos": [
-    2760,
-    790
+    1860,
+    3248
    ],
    "size": [
-    820,
+    460,
     220
    ],
    "flags": {},
@@ -3900,10 +3958,10 @@
    "title": "How",
    "properties": {},
    "widgets_values": [
-    "General prompt: the idea, the look, who is in it (name references with <Picture 1>, <Audio 1>...).\nPart boxes: what happens in each part. Start a box with (10s) for a 10 second part, or raw: to use the box as the finished prompt without the writer. Dialogue: what is said, with its language."
+    "Up to 3 sounds: a voice, music, an effect. They are provided to the model as they are; the description only tells the prompt writer what each one is. Upload adds a file from your computer."
    ],
    "widgets_values_named": {
-    "text": "General prompt: the idea, the look, who is in it (name references with <Picture 1>, <Audio 1>...).\nPart boxes: what happens in each part. Start a box with (10s) for a 10 second part, or raw: to use the box as the finished prompt without the writer. Dialogue: what is said, with its language."
+    "text": "Up to 3 sounds: a voice, music, an effect. They are provided to the model as they are; the description only tells the prompt writer what each one is. Upload adds a file from your computer."
    },
    "color": "#432",
    "bgcolor": "#653"
@@ -3913,11 +3971,11 @@
    "type": "Note",
    "pos": [
     20,
-    1718
+    3632
    ],
    "size": [
-    560,
-    260
+    460,
+    200
    ],
    "flags": {},
    "order": 32,
@@ -3927,10 +3985,10 @@
    "title": "How",
    "properties": {},
    "widgets_values": [
-    "Up to 9 reference pictures plus the first frame. Each node: pick the file, write what it is (or keep the stored description), switch 'enabled' on. Switched-off nodes are ignored. Use them for characters, places, objects, styles."
+    "Collects the first frame, pictures, videos and sounds above. Nothing to set here."
    ],
    "widgets_values_named": {
-    "text": "Up to 9 reference pictures plus the first frame. Each node: pick the file, write what it is (or keep the stored description), switch 'enabled' on. Switched-off nodes are ignored. Use them for characters, places, objects, styles."
+    "text": "Collects the first frame, pictures, videos and sounds above. Nothing to set here."
    },
    "color": "#432",
    "bgcolor": "#653"
@@ -3939,8 +3997,8 @@
    "id": 42,
    "type": "Note",
    "pos": [
-    20,
-    2858
+    1000,
+    3632
    ],
    "size": [
     460,
@@ -3954,10 +4012,10 @@
    "title": "How",
    "properties": {},
    "widgets_values": [
-    "Up to 3 reference videos with their sound (2-15 seconds is best). Use for motion, a person's look and voice, a camera move."
+    "To extend a video you already have: upload / choose it in VIDEO TO EXTEND (max_seconds 0 = all of it), enable it, tick 'extend_existing_video' in the panel. The result starts with your video and continues it."
    ],
    "widgets_values_named": {
-    "text": "Up to 3 reference videos with their sound (2-15 seconds is best). Use for motion, a person's look and voice, a camera move."
+    "text": "To extend a video you already have: upload / choose it in VIDEO TO EXTEND (max_seconds 0 = all of it), enable it, tick 'extend_existing_video' in the panel. The result starts with your video and continues it."
    },
    "color": "#432",
    "bgcolor": "#653"
@@ -3966,12 +4024,12 @@
    "id": 43,
    "type": "Note",
    "pos": [
-    1860,
-    2858
+    20,
+    4186
    ],
    "size": [
-    460,
-    220
+    560,
+    300
    ],
    "flags": {},
    "order": 34,
@@ -3981,10 +4039,10 @@
    "title": "How",
    "properties": {},
    "widgets_values": [
-    "Up to 3 sounds: a voice, music, an effect. They are provided to the model as they are; the description only tells the prompt writer what each one is."
+    "Video format: size and seconds per part.\nContinuity: how parts join (parts mode).\nSampling: first pass (defaults follow 10Eros Max: er_sde, sgm_uniform, 8 steps, shift 12/3).\nSecond pass: upscales and refines with 3 steps; the panel switch turns it off.\nLive preview: what you watch while it samples.\nSpeed and memory: sparse attention (turn off for models that are not FastH3-based)."
    ],
    "widgets_values_named": {
-    "text": "Up to 3 sounds: a voice, music, an effect. They are provided to the model as they are; the description only tells the prompt writer what each one is."
+    "text": "Video format: size and seconds per part.\nContinuity: how parts join (parts mode).\nSampling: first pass (defaults follow 10Eros Max: er_sde, sgm_uniform, 8 steps, shift 12/3).\nSecond pass: upscales and refines with 3 steps; the panel switch turns it off.\nLive preview: what you watch while it samples.\nSpeed and memory: sparse attention (turn off for models that are not FastH3-based)."
    },
    "color": "#432",
    "bgcolor": "#653"
@@ -3994,10 +4052,10 @@
    "type": "Note",
    "pos": [
     20,
-    3238
+    4932
    ],
    "size": [
-    460,
+    520,
     200
    ],
    "flags": {},
@@ -4008,10 +4066,10 @@
    "title": "How",
    "properties": {},
    "widgets_values": [
-    "Collects the first frame, pictures, videos and sounds above. Nothing to set here: connected slots show their description box if the Load node has none."
+    "Makes the video and returns the frames and sound; it saves nothing itself. The written prompts and a timing report are shown below."
    ],
    "widgets_values_named": {
-    "text": "Collects the first frame, pictures, videos and sounds above. Nothing to set here: connected slots show their description box if the Load node has none."
+    "text": "Makes the video and returns the frames and sound; it saves nothing itself. The written prompts and a timing report are shown below."
    },
    "color": "#432",
    "bgcolor": "#653"
@@ -4020,96 +4078,15 @@
    "id": 45,
    "type": "Note",
    "pos": [
-    1000,
-    3238
+    1660.33359375,
+    4932
    ],
    "size": [
     460,
-    220
+    200
    ],
    "flags": {},
    "order": 36,
-   "mode": 0,
-   "inputs": [],
-   "outputs": [],
-   "title": "How",
-   "properties": {},
-   "widgets_values": [
-    "To extend a video you already have: pick it in VIDEO TO EXTEND (set max_seconds 0 for all of it), switch it on, run. The result starts with your video and continues it with the parts of the Story."
-   ],
-   "widgets_values_named": {
-    "text": "To extend a video you already have: pick it in VIDEO TO EXTEND (set max_seconds 0 for all of it), switch it on, run. The result starts with your video and continues it with the parts of the Story."
-   },
-   "color": "#432",
-   "bgcolor": "#653"
-  },
-  {
-   "id": 46,
-   "type": "Note",
-   "pos": [
-    20,
-    3792
-   ],
-   "size": [
-    560,
-    300
-   ],
-   "flags": {},
-   "order": 37,
-   "mode": 0,
-   "inputs": [],
-   "outputs": [],
-   "title": "How",
-   "properties": {},
-   "widgets_values": [
-    "Video format: size and seconds per part.\nContinuity: how parts join.\nSampling: first pass (defaults follow 10Eros Max: er_sde, sgm_uniform, 8 steps, shift 12/3).\nSecond pass: upscales and refines with 3 steps; the mode switch turns it off.\nLive preview: what you watch while it samples.\nSpeed and memory: sparse attention (turn off for models that are not FastH3-based)."
-   ],
-   "widgets_values_named": {
-    "text": "Video format: size and seconds per part.\nContinuity: how parts join.\nSampling: first pass (defaults follow 10Eros Max: er_sde, sgm_uniform, 8 steps, shift 12/3).\nSecond pass: upscales and refines with 3 steps; the mode switch turns it off.\nLive preview: what you watch while it samples.\nSpeed and memory: sparse attention (turn off for models that are not FastH3-based)."
-   },
-   "color": "#432",
-   "bgcolor": "#653"
-  },
-  {
-   "id": 47,
-   "type": "Note",
-   "pos": [
-    20,
-    4538
-   ],
-   "size": [
-    520,
-    200
-   ],
-   "flags": {},
-   "order": 38,
-   "mode": 0,
-   "inputs": [],
-   "outputs": [],
-   "title": "How",
-   "properties": {},
-   "widgets_values": [
-    "Makes the video part by part and returns the frames and sound; it saves nothing itself. The written prompts and a timing report are shown below."
-   ],
-   "widgets_values_named": {
-    "text": "Makes the video part by part and returns the frames and sound; it saves nothing itself. The written prompts and a timing report are shown below."
-   },
-   "color": "#432",
-   "bgcolor": "#653"
-  },
-  {
-   "id": 48,
-   "type": "Note",
-   "pos": [
-    1660.33359375,
-    4538
-   ],
-   "size": [
-    460,
-    200
-   ],
-   "flags": {},
-   "order": 39,
    "mode": 0,
    "inputs": [],
    "outputs": [],
@@ -4154,7 +4131,7 @@
    4,
    2,
    0,
-   31,
+   30,
    0,
    "MODEL"
   ],
@@ -4162,7 +4139,7 @@
    5,
    2,
    1,
-   31,
+   30,
    1,
    "CLIP"
   ],
@@ -4170,7 +4147,7 @@
    6,
    1,
    2,
-   31,
+   30,
    2,
    "VAE"
   ],
@@ -4178,7 +4155,7 @@
    7,
    1,
    3,
-   31,
+   30,
    3,
    "VAE"
   ],
@@ -4186,7 +4163,7 @@
    8,
    1,
    4,
-   31,
+   30,
    15,
    "VAE"
   ],
@@ -4194,7 +4171,7 @@
    9,
    3,
    0,
-   31,
+   30,
    4,
    "PROMPTFORGE_MODEL"
   ],
@@ -4202,407 +4179,407 @@
    10,
    4,
    0,
-   31,
+   30,
    5,
    "PROMPTFORGE_H3_STORY"
   ],
   [
    11,
-   5,
-   0,
-   31,
+   4,
+   1,
+   30,
    13,
    "PROMPTFORGE_H3_MODES"
   ],
   [
    12,
-   6,
+   5,
    0,
-   22,
+   21,
    0,
    "IMAGE"
   ],
   [
    13,
-   7,
+   6,
    0,
-   22,
+   21,
    1,
    "IMAGE"
   ],
   [
    14,
-   7,
+   6,
    2,
-   22,
+   21,
    19,
    "STRING"
   ],
   [
    15,
-   8,
+   7,
    0,
-   22,
+   21,
    2,
    "IMAGE"
   ],
   [
    16,
-   8,
+   7,
    2,
-   22,
+   21,
    20,
    "STRING"
   ],
   [
    17,
-   9,
+   8,
    0,
-   22,
+   21,
    3,
    "IMAGE"
   ],
   [
    18,
-   9,
+   8,
    2,
-   22,
+   21,
    21,
    "STRING"
   ],
   [
    19,
-   10,
+   9,
    0,
-   22,
+   21,
    4,
    "IMAGE"
   ],
   [
    20,
-   10,
+   9,
    2,
-   22,
+   21,
    22,
    "STRING"
   ],
   [
    21,
-   11,
+   10,
    0,
-   22,
+   21,
    5,
    "IMAGE"
   ],
   [
    22,
-   11,
+   10,
    2,
-   22,
+   21,
    23,
    "STRING"
   ],
   [
    23,
-   12,
+   11,
    0,
-   22,
+   21,
    6,
    "IMAGE"
   ],
   [
    24,
-   12,
+   11,
    2,
-   22,
+   21,
    24,
    "STRING"
   ],
   [
    25,
-   13,
+   12,
    0,
-   22,
+   21,
    7,
    "IMAGE"
   ],
   [
    26,
-   13,
+   12,
    2,
-   22,
+   21,
    25,
    "STRING"
   ],
   [
    27,
-   14,
+   13,
    0,
-   22,
+   21,
    8,
    "IMAGE"
   ],
   [
    28,
-   14,
+   13,
    2,
-   22,
+   21,
    26,
    "STRING"
   ],
   [
    29,
-   15,
+   14,
    0,
-   22,
+   21,
    9,
    "IMAGE"
   ],
   [
    30,
-   15,
+   14,
    2,
-   22,
+   21,
    27,
    "STRING"
   ],
   [
    31,
-   16,
+   15,
    0,
-   22,
+   21,
    10,
    "IMAGE"
   ],
   [
    32,
-   16,
+   15,
    1,
-   22,
+   21,
    11,
    "AUDIO"
   ],
   [
    33,
-   16,
+   15,
    2,
-   22,
+   21,
    28,
    "STRING"
   ],
   [
    34,
-   17,
+   16,
    0,
-   22,
+   21,
    12,
    "IMAGE"
   ],
   [
    35,
-   17,
+   16,
    1,
-   22,
+   21,
    13,
    "AUDIO"
   ],
   [
    36,
-   17,
+   16,
    2,
-   22,
+   21,
    29,
    "STRING"
   ],
   [
    37,
-   18,
+   17,
    0,
-   22,
+   21,
    14,
    "IMAGE"
   ],
   [
    38,
-   18,
+   17,
    1,
-   22,
+   21,
    15,
    "AUDIO"
   ],
   [
    39,
-   18,
+   17,
    2,
-   22,
+   21,
    30,
    "STRING"
   ],
   [
    40,
-   19,
+   18,
    0,
-   22,
+   21,
    16,
    "AUDIO"
   ],
   [
    41,
-   19,
+   18,
    1,
-   22,
+   21,
    31,
    "STRING"
   ],
   [
    42,
-   20,
+   19,
    0,
-   22,
+   21,
    17,
    "AUDIO"
   ],
   [
    43,
-   20,
+   19,
    1,
-   22,
+   21,
    32,
    "STRING"
   ],
   [
    44,
-   21,
+   20,
    0,
-   22,
+   21,
    18,
    "AUDIO"
   ],
   [
    45,
-   21,
+   20,
    1,
-   22,
+   21,
    33,
    "STRING"
   ],
   [
    46,
-   23,
+   22,
    0,
-   24,
+   23,
    0,
    "IMAGE"
   ],
   [
    47,
-   23,
+   22,
    1,
-   24,
+   23,
    1,
    "AUDIO"
   ],
   [
    48,
-   22,
+   21,
    0,
-   31,
+   30,
    6,
    "PROMPTFORGE_H3_REFERENCES"
   ],
   [
    49,
-   24,
+   23,
    0,
-   31,
+   30,
    14,
    "PROMPTFORGE_H3_CONTINUE"
   ],
   [
    50,
-   25,
+   24,
    0,
-   31,
+   30,
    7,
    "PROMPTFORGE_H3_FORMAT"
   ],
   [
    51,
-   26,
+   25,
    0,
-   31,
+   30,
    8,
    "PROMPTFORGE_H3_CONTINUITY"
   ],
   [
    52,
-   27,
+   26,
    0,
-   31,
+   30,
    9,
    "PROMPTFORGE_H3_SAMPLING"
   ],
   [
    53,
-   28,
+   27,
    0,
-   31,
+   30,
    10,
    "PROMPTFORGE_H3_SECOND_STAGE"
   ],
   [
    54,
-   29,
+   28,
    0,
-   31,
+   30,
    11,
    "PROMPTFORGE_H3_PREVIEW"
   ],
   [
    55,
-   30,
+   29,
    0,
-   31,
+   30,
    12,
    "PROMPTFORGE_H3_PERFORMANCE"
   ],
   [
    56,
-   31,
+   30,
    0,
-   32,
+   31,
    0,
    "IMAGE"
   ],
   [
    57,
-   32,
+   31,
    0,
-   33,
+   32,
    0,
    "IMAGE"
   ],
   [
    58,
-   31,
+   30,
    1,
-   33,
+   32,
    1,
    "AUDIO"
   ],
   [
    59,
-   31,
+   30,
    2,
-   34,
+   33,
    0,
    "STRING"
   ],
   [
    60,
-   31,
+   30,
    3,
-   35,
+   34,
    0,
    "STRING"
   ]
@@ -4610,34 +4587,34 @@
  "groups": [
   {
    "id": 1,
-   "title": "READ ME",
+   "title": "CONTROL PANEL - the place you look at: idea, saved ideas, template, switches, references",
    "bounding": [
     0,
     0,
-    1650,
-    670
-   ],
-   "color": "#3f789e",
-   "flags": {}
-  },
-  {
-   "id": 2,
-   "title": "MODE SWITCHES",
-   "bounding": [
-    1700,
-    0,
-    804.3228515625,
-    390
+    940,
+    1230
    ],
    "color": "#c0392b",
    "flags": {}
   },
   {
+   "id": 2,
+   "title": "READ ME",
+   "bounding": [
+    990,
+    0,
+    1650,
+    630
+   ],
+   "color": "#3f789e",
+   "flags": {}
+  },
+  {
    "id": 3,
-   "title": "1. MODELS",
+   "title": "1. MODELS (set once)",
    "bounding": [
     0,
-    720,
+    1280,
     1840,
     708
    ],
@@ -4646,22 +4623,10 @@
   },
   {
    "id": 4,
-   "title": "2. STORY - the one place you write the video",
-   "bounding": [
-    1890,
-    720,
-    1710,
-    878
-   ],
-   "color": "#8A8",
-   "flags": {}
-  },
-  {
-   "id": 5,
-   "title": "3a. REFERENCE PICTURES (all off by default)",
+   "title": "2a. REFERENCE PICTURES (all off by default)",
    "bounding": [
     0,
-    1648,
+    2038,
     2750,
     1090
    ],
@@ -4669,11 +4634,23 @@
    "flags": {}
   },
   {
-   "id": 6,
-   "title": "3b. REFERENCE VIDEOS",
+   "id": 5,
+   "title": "2b. REFERENCE VIDEOS",
    "bounding": [
     0,
-    2788,
+    3178,
+    1790,
+    334
+   ],
+   "color": "#a1309b",
+   "flags": {}
+  },
+  {
+   "id": 6,
+   "title": "2c. REFERENCE SOUNDS",
+   "bounding": [
+    1840,
+    3178,
     1790,
     330
    ],
@@ -4682,22 +4659,10 @@
   },
   {
    "id": 7,
-   "title": "3c. REFERENCE SOUNDS",
-   "bounding": [
-    1840,
-    2788,
-    1790,
-    330
-   ],
-   "color": "#a1309b",
-   "flags": {}
-  },
-  {
-   "id": 8,
-   "title": "3d. REFERENCES",
+   "title": "2d. REFERENCES",
    "bounding": [
     0,
-    3168,
+    3562,
     930,
     504
    ],
@@ -4705,23 +4670,23 @@
    "flags": {}
   },
   {
-   "id": 9,
+   "id": 8,
    "title": "EXTEND AN EXISTING VIDEO (off by default)",
    "bounding": [
     980,
-    3168,
+    3562,
     1269.8033203125,
-    330
+    334
    ],
    "color": "#b58b2a",
    "flags": {}
   },
   {
-   "id": 10,
-   "title": "4. SETTINGS",
+   "id": 9,
+   "title": "3. SETTINGS (set once)",
    "bounding": [
     0,
-    3722,
+    4116,
     1607.1150390624998,
     696
    ],
@@ -4729,11 +4694,11 @@
    "flags": {}
   },
   {
-   "id": 11,
-   "title": "5. GENERATE",
+   "id": 10,
+   "title": "4. GENERATE",
    "bounding": [
     0,
-    4468,
+    4862,
     1590.33359375,
     810
    ],
@@ -4741,11 +4706,11 @@
    "flags": {}
   },
   {
-   "id": 12,
-   "title": "6. SAVE",
+   "id": 11,
+   "title": "5. SAVE",
    "bounding": [
     1640.33359375,
-    4468,
+    4862,
     1264.3126953125,
     552
    ],
