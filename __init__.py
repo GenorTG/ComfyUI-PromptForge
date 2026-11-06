@@ -8,6 +8,8 @@
 """
 
 import base64
+import ctypes
+import glob
 import io
 import json
 import gc
@@ -23,6 +25,21 @@ from pathlib import Path
 import psutil
 import torch
 import torch.nn.functional as F
+
+
+def _preload_nvrtc_builtins():
+    """PyTorch compiles a few CUDA kernels (for example an int64 prod) at run time with NVRTC, which opens its builtins library by name; a pip install puts it
+    where the loader does not look, and the kernel fails with "failed to open libnvrtc-builtins". Loading it by path makes the name resolve."""
+    nvidia = importlib.util.find_spec("nvidia")
+    for folder in (nvidia.submodule_search_locations if nvidia else None) or []:
+        for path in glob.glob(os.path.join(folder, "*", "lib", "libnvrtc-builtins.so.*")):
+            if ".alt." not in path:
+                ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL)
+
+
+if os.name == "posix":
+    _preload_nvrtc_builtins()
+
 from .frame_interpolation import NODE_CLASS_MAPPINGS as VFI_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as VFI_DISPLAY_NAMES
 from .video_save import NODE_CLASS_MAPPINGS as SAVE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as SAVE_DISPLAY_NAMES
 from .lora_loader import NODE_CLASS_MAPPINGS as LORA_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as LORA_DISPLAY_NAMES
