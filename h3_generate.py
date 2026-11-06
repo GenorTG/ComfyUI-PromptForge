@@ -400,7 +400,7 @@ class PROMPTFORGE_H3Generate:
                     self._status(unique_id, f"Part {index + 1}/{total}: decoding")
                     self._release()
                     clock_decode = time.time()
-                    frames, audio = self._decode(latent_out, decode_vae, vae, audio_vae)
+                    frames, audio = self._guard("decoding", lambda: self._decode(latent_out, decode_vae, vae, audio_vae))
                     del latent_out
                     if not check:
                         break
@@ -461,8 +461,12 @@ class PROMPTFORGE_H3Generate:
             return work()
         except model_management.OOM_EXCEPTION:
             print(f"[PromptForge] endless video: out of memory while {label}; freeing everything and trying once more.")
-            self._release()
-            return work()
+            free = self._release()
+            try:
+                return work()
+            except model_management.OOM_EXCEPTION:
+                print(f"[PromptForge] endless video: out of memory again while {label} ({free:.1f} GB free after unloading, {torch.cuda.memory_allocated() / 1024 ** 3:.1f} GB held by this process).")
+                raise
 
     @staticmethod
     def _decode(latent_out, decode_vae, vae, audio_vae):
@@ -519,10 +523,17 @@ class PROMPTFORGE_H3Generate:
         model_management.unload_all_models()
         gc.collect()
         model_management.soft_empty_cache()
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-            return torch.cuda.mem_get_info()[0] / 1024 ** 3
-        return 0.0
+        if not torch.cuda.is_available():
+            return 0.0
+        torch.cuda.synchronize()
+        held = torch.cuda.memory_allocated() / 1024 ** 3
+        if held > 1.0:
+            listed = [type(loaded.model.model).__name__ for loaded in model_management.current_loaded_models if not loaded.is_dead()]
+            print(f"[PromptForge] endless video: {held:.1f} GB of VRAM is still held after unloading (ComfyUI still lists: {', '.join(listed) or 'no models'}); freeing again.")
+            model_management.cleanup_models_gc()
+            gc.collect()
+            torch.cuda.empty_cache()
+        return torch.cuda.mem_get_info()[0] / 1024 ** 3
 
     @staticmethod
     def _show_part(unique_id, index, frames, size):
