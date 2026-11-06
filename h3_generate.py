@@ -248,7 +248,7 @@ class PROMPTFORGE_H3Generate:
         sampling = h3_settings.settings("sampling", sampling)
         modes = h3_settings.settings("modes", modes)
         second = h3_settings.settings("second_stage", second_stage) if second_stage is not None and modes["two_stage_upscale"] else None
-        if not modes["extend_existing_video"]:
+        if not modes["extend_existing_video"] or (continue_from is not None and continue_from["video"] is None):
             continue_from = None
         preview = h3_settings.settings("preview", preview)
         perf = h3_settings.settings("performance", performance)

@@ -95,6 +95,7 @@ class PROMPTFORGE_LoadImage:
             "required": {
                 "image": ("STRING", {"default": "", "tooltip": "Path inside the input folder. Use Choose image to pick it from thumbnails."}),
                 "description": ("STRING", {"default": "", "multiline": True, "placeholder": "Description of this image / character. Empty = the stored description.", "tooltip": "Output as DESCRIPTION. The stored description of the image is used when this is empty; Save description stores this text for the image."}),
+                "enabled": ("BOOLEAN", {"default": True, "tooltip": "Off = the node outputs nothing, as if it were bypassed, so it can stay in a workflow and be switched on when needed."}),
             },
         }
 
@@ -105,9 +106,9 @@ class PROMPTFORGE_LoadImage:
     DESCRIPTION = "Load an image from a thumbnail browser of the input folder and output a per-image description (stored, or typed in the node) as text. With no image chosen the image output is empty, so the node can stay in a workflow unused."
 
     @classmethod
-    def IS_CHANGED(cls, image, description):
+    def IS_CHANGED(cls, image, description, enabled=True):
         try:
-            if not image:
+            if not image or not enabled:
                 return description
             path = _resolve(image)
             return f"{path.stat().st_mtime_ns}|{description}|{_descriptions().get(image, '')}"
@@ -123,9 +124,9 @@ class PROMPTFORGE_LoadImage:
         except ValueError as error:
             return str(error)
 
-    def load(self, image, description):
-        if not image:
-            return (None, None, description.strip(), "")
+    def load(self, image, description, enabled=True):
+        if not image or not enabled:
+            return (None, None, "", "")
         path = _resolve(image)
         with node_helpers.pillow(Image.open, str(path)) as opened:
             frame = node_helpers.pillow(ImageOps.exif_transpose, opened)

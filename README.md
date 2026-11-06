@@ -97,8 +97,8 @@ Converts a bf16 / fp16 diffusion model to **NVFP4** (about 3.5x smaller, native 
 ### PromptForge MiniMax H3 VAE Decode (`PROMPTFORGE_MiniMaxDecode`)
 Decodes MiniMax H3 video latents with H3's own decoder. It always tiles at 256 px (whole-frame and larger tiles look fried and banded with H3) and, on an out-of-memory error, steps down to 85 / 34 / 17 frames per pass, without the generic tiler that ignores H3's blend rules. The step that worked is remembered per latent size. Frames are written into one preallocated buffer, non-finite pixels are repaired and reported, and `tile_size` / `frames_per_pass` can be forced. Works with the 2x packed-projection decoders too.
 
-### PromptForge Load Audio (`PROMPTFORGE_LoadAudio`)
-A sound from the input folder with a description; empty = no sound, so the node can stay in a workflow unused (Load Image works the same way).
+### PromptForge Load Audio / Load Video (`PROMPTFORGE_LoadAudio`, `PROMPTFORGE_LoadVideo`)
+A sound, or a video (as 24 fps frames with its sound), from the input folder with a description. Empty, or `enabled` off, = no output, so the nodes can stay in a workflow unused; Load Image has the same `enabled` switch.
 
 ### PromptForge Load Image (`PROMPTFORGE_LoadImage`)
 Loads an image from the input folder through a thumbnail browser (search, folder filter, upload). Each image can have a stored description (`user/promptforge/image_descriptions.json`): *Save description* stores the text typed in the node (picking another image never changes that box; the stored text shows as its placeholder), and the node outputs it as `DESCRIPTION` next to `IMAGE`, `MASK` and `NAME`. Text typed in the node is used as is; an empty box falls back to the stored description. Handy for switching a character and its description together in reference-to-video workflows.
