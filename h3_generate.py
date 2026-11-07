@@ -364,7 +364,9 @@ class PROMPTFORGE_H3Generate:
                     return f"{tags[source]} ({look})" if look else tags[source]
                 return look or ("the first person", "the second person", "")[number - 1]
 
-            block = h3_actions.brief(action_name, story["camera_angle"], [subject(number) for number in (1, 2, 3)], story["notes"])
+            people = [subject(number) for number in (1, 2, 3)]
+            h3_actions.check_adults(story["notes"], *people, *(refs.get(f"description_{slot}", "") for slot, _ in images), refs.get("description_first", ""))
+            block = h3_actions.brief(action_name, story["camera_angle"], people, story["notes"])
             if several:
                 brief = f"{brief}\n\n{block}".strip()
             for index, part in enumerate(plan):

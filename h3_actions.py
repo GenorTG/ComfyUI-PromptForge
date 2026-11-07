@@ -4,6 +4,17 @@
 prompt writer's NSFW template turns it into a full video prompt, for one clip or spread over the parts."""
 
 ADULTS = "Everyone in this video is a consenting adult."
+# the presets are for adults: descriptions that point to a minor stop the run
+MINOR_TERMS = ("child", "kid", "minor", "underage", "under-age", "teen", "loli", "shota", "young girl", "little girl", "little boy", "schoolgirl", "school girl", "preteen", "pre-teen", "toddler")
+
+
+def check_adults(*texts):
+    """Raises when a description of a person points to a minor."""
+    for text in texts:
+        found = next((term for term in MINOR_TERMS if term in text.lower()), None)
+        if found:
+            raise ValueError(f"[PromptForge] the action presets are for adults only, and a description says '{found}'. Describe adults (18 or older) or do not use an action preset.")
+
 
 # label -> (roles of the people in the order A, B; the arrangement)
 ACTIONS = {

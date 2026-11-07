@@ -263,7 +263,7 @@ app.registerExtension({
         addLivePreview(node);
 
         // what the prompt writer was given, to read it yourself: mode, settings, pictures, your text and every instruction
-        const given = el("textarea", { width: "100%", height: "100%", resize: "none", boxSizing: "border-box", padding: "6px 8px", fontSize: "11px", borderRadius: "4px", border: "1px solid var(--border-color, #555)", background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)", whiteSpace: "pre" },
+        const given = el("textarea", { width: "100%", height: "100%", resize: "none", boxSizing: "border-box", padding: "6px 8px", fontSize: "11px", borderRadius: "4px", border: "1px solid var(--border-color, #555)", background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)", whiteSpace: "pre-wrap", overflowX: "hidden", overflowWrap: "anywhere" },
           { readOnly: true, placeholder: "What the prompt writer was given appears here: settings, pictures, your text and every instruction." });
         given.addEventListener("wheel", (event) => event.stopPropagation());
         given.addEventListener("pointerdown", (event) => event.stopPropagation());
@@ -276,7 +276,7 @@ app.registerExtension({
         };
 
         // every part's prompt, added as soon as it has been written
-        const box = el("textarea", { width: "100%", height: "100%", resize: "none", boxSizing: "border-box", padding: "6px 8px", fontSize: "12px", borderRadius: "4px", border: "1px solid var(--border-color, #555)", background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)" },
+        const box = el("textarea", { width: "100%", height: "100%", resize: "none", boxSizing: "border-box", padding: "6px 8px", fontSize: "12px", borderRadius: "4px", border: "1px solid var(--border-color, #555)", background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)", whiteSpace: "pre-wrap", overflowX: "hidden", overflowWrap: "anywhere" },
           { readOnly: true, placeholder: "The prompt written for each part appears here as it is made." });
         box.addEventListener("wheel", (event) => event.stopPropagation());
         box.addEventListener("pointerdown", (event) => event.stopPropagation());
