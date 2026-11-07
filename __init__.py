@@ -2264,6 +2264,8 @@ class PROMPTFORGE_PromptEnhancer:
         if src_path.is_dir():
             if torch.cuda.is_available():
                 _free_vram()
+            if (src_path / "config.json").is_file() and "qwen3_5" in (src_path / "config.json").read_text(encoding="utf-8") and importlib.util.find_spec("fla") is None:
+                print("[PromptForge] this Qwen3.5 folder runs on slow fallback kernels (3x slower than the single-file or GGUF versions). pip install flash-linear-attention in ComfyUI's environment makes it much faster.")
             hf_dtype = torch.float16 if quant == "fp16" else _hf_compute_dtype()
             if quant in ("auto", "q8") and params_b:
                 try:
