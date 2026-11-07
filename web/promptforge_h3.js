@@ -153,7 +153,8 @@ function addReferenceOverview(node, put) {
     const slots = rows();
     const kind = String(node.widgets.find((widget) => widget.name === "mode")?.value || "T2V").split(" ")[0];
     const extending = !!node.widgets.find((widget) => widget.name === "extend_existing_video")?.value;
-    const state = kind + extending + JSON.stringify(slots.map(([label, loader]) => [label, loader.title, loader.widgets?.map((widget) => widget.value).filter((value) => typeof value === "string").join("|"), loader.widgets?.find((widget) => widget.name === "enabled")?.value]));
+    const source = String(node.widgets.find((widget) => widget.name === "prompt_source")?.value || "");
+    const state = kind + extending + source + JSON.stringify(slots.map(([label, loader]) => [label, loader.title, loader.widgets?.map((widget) => widget.value).filter((value) => typeof value === "string").join("|"), loader.widgets?.find((widget) => widget.name === "enabled")?.value]));
     if (state === shown) return;
     shown = state;
     const used = slots.filter(([, loader]) => loader.widgets.find((widget) => ["image", "video", "audio"].includes(widget.name))?.value);
@@ -167,7 +168,7 @@ function addReferenceOverview(node, put) {
       return line;
     });
     const empty = slots.length - used.length;
-    frame.replaceChildren(el("div", { opacity: ".7" }, { textContent: lines.length ? `Files chosen in the Load nodes (tick = on) - mode ${kind}` : "No files chosen: pick them in the Load nodes" }), ...lines,
+    frame.replaceChildren(el("div", { fontWeight: "bold", marginBottom: "2px" }, { textContent: `The prompt is written from: ${source.startsWith("action") ? "the ACTION node (action preset)" : "the IDEA node (my text)"}  -  change it in prompt_source below` }), el("div", { opacity: ".7" }, { textContent: lines.length ? `Files chosen in the Load nodes (tick = on) - mode ${kind}` : "No files chosen: pick them in the Load nodes" }), ...lines,
       ...(slots.length && empty ? [el("div", { opacity: ".5" }, { textContent: `${empty} slot${empty > 1 ? "s" : ""} empty` })] : []));
     node.setSize([node.size[0], Math.max(node.size[1], node.computeSize()[1])]);
   };
@@ -205,6 +206,7 @@ app.registerExtension({
     for (const name of ["execution_success", "execution_error", "execution_interrupted"]) api.addEventListener(name, closeReview);
     const node = (event) => app.graph.getNodeById(Number(event.detail.node));
     api.addEventListener("promptforge.prompt", (event) => node(event)?.promptforgeShowPrompt?.(event.detail));
+    api.addEventListener("promptforge.request", (event) => node(event)?.promptforgeShowRequest?.(event.detail));
   },
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name === SECOND_STAGE) {
@@ -259,6 +261,19 @@ app.registerExtension({
         onCreated?.apply(this, arguments);
         const node = this;
         addLivePreview(node);
+
+        // what the prompt writer was given, to read it yourself: mode, settings, pictures, your text and every instruction
+        const given = el("textarea", { width: "100%", height: "100%", resize: "none", boxSizing: "border-box", padding: "6px 8px", fontSize: "11px", borderRadius: "4px", border: "1px solid var(--border-color, #555)", background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)", whiteSpace: "pre" },
+          { readOnly: true, placeholder: "What the prompt writer was given appears here: settings, pictures, your text and every instruction." });
+        given.addEventListener("wheel", (event) => event.stopPropagation());
+        given.addEventListener("pointerdown", (event) => event.stopPropagation());
+        const givenWrapper = el("div", { width: "100%", height: "100%" });
+        givenWrapper.append(given);
+        const request = node.addDOMWidget("writer_input", "promptforge_writer_input", givenWrapper, { serialize: false, getMinHeight: () => 220 });
+        Object.defineProperty(request, "width", { get: () => node.size[0], set: () => {}, configurable: true });
+        node.promptforgeShowRequest = ({ index, text }) => {
+          given.value = (index === 0 ? "" : given.value + "\n\n\n") + `##### PART ${index + 1} #####\n` + text;
+        };
 
         // every part's prompt, added as soon as it has been written
         const box = el("textarea", { width: "100%", height: "100%", resize: "none", boxSizing: "border-box", padding: "6px 8px", fontSize: "12px", borderRadius: "4px", border: "1px solid var(--border-color, #555)", background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)" },

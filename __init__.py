@@ -1873,6 +1873,11 @@ class PROMPTFORGE_PromptEnhancer:
         system_prompt = "\n\n".join(system_parts)
         user_prompt = "\n\n".join(user_parts)
         full_prompt = "\n\n".join(p for p in (system_prompt, user_prompt) if p)
+        self.last_request = {
+            "preset": enhancement_preset, "mode": mode, "images": sum(value is not None for value in (image, image2, image3)), "video": video is not None, "user": user_prompt,
+            "sections": [(name, text) for name, text in (("media", media_line), ("MiniMax mode", minimax_block), ("continuation", continuation_block), ("dialogue", dialogue_block), ("negative prompt", negative_line),
+                                                          ("output rules", guard), ("template", sys_text)) if text and text.strip()],
+        }
 
         eff_local = (local_model_path or "").strip()
         if source == "connected clip":

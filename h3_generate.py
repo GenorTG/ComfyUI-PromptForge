@@ -403,7 +403,7 @@ class PROMPTFORGE_H3Generate:
                     prompt = idea[4:].strip() if idea.lower().startswith("raw:") else idea
                 else:
                     ask = lambda attempt: self._prompt(writer, story, mode, join["story_style"], continuing, index, total, seconds, seed + index + 500 * attempt,
-                                                       part_text(index, total, brief, lines, plan, seconds), shown, preset, tail if continuing else None, notes, last_shot, prefix)
+                                                       part_text(index, total, brief, lines, plan, seconds), shown, preset, tail if continuing else None, notes, last_shot, prefix, unique_id)
                     prompt = ask(0)
                     if review["on"]:
                         clock_wait = time.time()
@@ -636,7 +636,21 @@ class PROMPTFORGE_H3Generate:
         if unique_id is not None:
             PromptServer.instance.send_sync("promptforge.prompt", {"node": str(unique_id), "index": index, "text": prompt}, PromptServer.instance.client_id)
 
-    def _prompt(self, writer, story, mode, story_style, continuing, index, total, seconds, seed, text, pictures, preset, tail, notes, last_shot, prefix):
+    @staticmethod
+    def _request_preview(unique_id, index, total, seconds, seed, writer, settings, preset, pictures, context, request):
+        """Everything the prompt writer was given for one prompt, as text for the node: the settings, the pictures, your text and every instruction section."""
+        if unique_id is None:
+            return
+        model = writer.get("local_model_path") or writer.get({"GGUF": "gguf_model", "safetensors": "safetensors_model"}.get(writer.get("source"), "")) or "the connected CLIP"
+        lines = [f"PART {index + 1} of {total}: {seconds:g} seconds, seed {seed}", f"template: {preset}", f"writer model: {model}",
+                 f"sampling: temperature {settings['writer_creativity']}, top_p {settings['writer_top_p']}, top_k {settings['writer_top_k']}, repetition penalty {settings['writer_repetition_penalty']}, max tokens {settings['writer_max_tokens']}, retries {'on' if settings['check_prompts'] else 'off'}",
+                 f"attached: {min(len(pictures), 3)} picture(s) of {len(pictures)}" + (", and a clip of the previous ending" if context is not None else ""),
+                 "", "=== YOUR MESSAGE TO THE WRITER ===", request["user"]]
+        for name, text in request["sections"]:
+            lines += ["", f"=== {name.upper()} ({len(text)} characters) ===", text]
+        PromptServer.instance.send_sync("promptforge.request", {"node": str(unique_id), "index": index, "text": "\n".join(lines)}, PromptServer.instance.client_id)
+
+    def _prompt(self, writer, story, mode, story_style, continuing, index, total, seconds, seed, text, pictures, preset, tail, notes, last_shot, prefix, unique_id):
         package = _package()
         refs = (list(pictures) + [None] * 3)[:3]
         continuation = continuation_brief(index, total, seconds, notes[-4:], last_shot, mode, prefix / FPS, story_style) if continuing else ""
@@ -649,13 +663,15 @@ class PROMPTFORGE_H3Generate:
                 settings = writer
                 if attempt or free < 10:
                     settings = dict(writer, kv_cache_type="q8_0", **({"context_size": 12288} if attempt or free < 8.5 else {}))
-                answer, _ = package.PROMPTFORGE_PromptEnhancer().enhance(
+                enhancer = package.PROMPTFORGE_PromptEnhancer()
+                answer, _ = enhancer.enhance(
                     settings, text, "inputs" if (pictures or context is not None) else "text_only", preset, seed + attempt * 1000, story["writer_max_tokens"], story["writer_creativity"], story["writer_top_p"], story["writer_top_k"], 1, story["writer_repetition_penalty"], "",
                     video_seconds=max(1, round(seconds + prefix / FPS)), image=refs[0], image2=refs[1], image3=refs[2],
                     video=context if mode == "reference video" else None, frame_count=6 - 2 * attempt,
-                    negative_prompt=story["negative_prompt"], auto_retry=story["check_prompts"], dialogue=story["dialogue"], dialogue_language=story["dialogue_language"],
+                    negative_prompt=story["negative_prompt"], auto_retry=story["check_prompts"], dialogue=story["dialogue"], dialogue_language=package.DIALOGUE_AUTO if story["dialogue_language"] == h3_settings.DIALOGUE_AUTO else story["dialogue_language"],
                     dialogue_language_other=story["dialogue_language_other"], continuation=continuation,
                     context_video=context if mode == "anchor tail" else None)
+                self._request_preview(unique_id, index, total, seconds, seed + attempt * 1000, writer, story, preset, pictures, context, enhancer.last_request)
                 return answer
             except ValueError as error:
                 if attempt or "llama context" not in str(error):
