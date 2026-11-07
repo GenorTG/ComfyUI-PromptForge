@@ -200,7 +200,7 @@ Every preset has an `NSFW › …` variant with explicit adult writing instructi
 
 ## Dependencies
 
-PromptForge does not need any other custom node pack. Its Python requirements are in `pyproject.toml` (`transformers`, `llama-cpp-python`, `bitsandbytes`, `accelerate`, `huggingface-hub`, `psutil`, `Pillow`, `numpy`, `imageio-ffmpeg`, `gguf`); ComfyUI itself provides the rest (`comfy_kitchen`, `safetensors`, the MiniMax H3, LTX and frame interpolation nodes). `ffmpeg` should be on the PATH for the video nodes (`imageio-ffmpeg` is the fallback).
+PromptForge does not need any other custom node pack. Its Python requirements are in `pyproject.toml` (`transformers`, `llama-cpp-python`, `bitsandbytes`, `accelerate`, `huggingface-hub`, `psutil`, `Pillow`, `numpy`, `imageio-ffmpeg`, `gguf`, `flash-linear-attention`); `flash-linear-attention` gives Qwen3.5 model folders (transformers route) their fast kernels, about twice as fast; the first prompt written with such a model compiles them once (around 40 s). ComfyUI itself provides the rest (`comfy_kitchen`, `safetensors`, the MiniMax H3, LTX and frame interpolation nodes). `ffmpeg` should be on the PATH for the video nodes (`imageio-ffmpeg` is the fallback).
 
 GGUF diffusion models and text encoders in the Loader are loaded by `gguf_native/`, which is the loading code of [ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF) by City96 (Apache-2.0, license in `gguf_native/LICENSE-ComfyUI-GGUF`) included in this pack. It adds no nodes, so it can sit next to the original pack without clashing.
 
