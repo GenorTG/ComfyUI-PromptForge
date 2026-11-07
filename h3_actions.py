@@ -76,7 +76,7 @@ def stage(index, total):
 def brief(label, camera, a, b):
     """The text the prompt writer gets for one chosen action: who is who, the arrangement and the camera."""
     count, text = ACTIONS[label]
-    lines = [f"Action: {text.format(A=a, B=b)}", ADULTS]
+    lines = [f"Action: {text.format(A=a, B=b)}", "This action is exactly what happens. The idea above only gives the setting, the looks and the mood; if it describes a different act or position, follow this action instead.", ADULTS]
     if camera in CAMERAS and not (count == 1 and camera in SOLO_CAMERAS):
         lines.append(f"Camera: {CAMERAS[camera].format(A=a, B=b)}")
     return "\n".join(lines)
