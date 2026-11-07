@@ -3,6 +3,8 @@ import { api } from "../../scripts/api.js";
 import { addLivePreview } from "./promptforge_preview.js";
 
 const IDEA = "PROMPTFORGE_H3Idea";
+const ACTION = "PROMPTFORGE_H3Action";
+const WRITER = "PROMPTFORGE_H3Writer";
 const PARTS = "PROMPTFORGE_H3Parts";
 const MODES = "PROMPTFORGE_H3Modes";
 const SECOND_STAGE = "PROMPTFORGE_H3SecondStage";
@@ -285,27 +287,67 @@ app.registerExtension({
         for (const [name, fallback] of [["general_prompt", 150], ["negative_prompt", 60], ["dialogue", 60]]) makeResizable(node, find(name), name, fallback);
         const general = find("general_prompt");
         addIdeas(node, (added) => { node.widgets.splice(node.widgets.indexOf(added), 1); node.widgets.splice(node.widgets.indexOf(general), 0, added); });
-        // the camera and the people only matter with an action; the style only while the template is automatic
-        node.promptforgeRefreshIdea = () => {
-          const action = String(find("action").value);
-          const chosen = action !== "(none)";
-          setShown(find("camera_angle"), chosen);
-          setShown(find("person_a"), chosen);
-          setShown(find("person_b"), chosen && !action.startsWith("Solo"));
-          setShown(find("prompt_style"), String(find("prompt_template").value).startsWith("automatic") && !chosen);
+        node.setSize([Math.max(node.size[0], 560), Math.max(node.size[1], node.computeSize()[1])]);
+      };
+      return;
+    }
+
+    if (nodeData.name === ACTION) {
+      // the roles of the chosen action and only the subject slots it uses
+      const onCreated = nodeType.prototype.onNodeCreated;
+      nodeType.prototype.onNodeCreated = function () {
+        onCreated?.apply(this, arguments);
+        const node = this;
+        const find = (name) => node.widgets.find((widget) => widget.name === name);
+        for (const name of ["notes", "negative_prompt", "dialogue", "subject_1_look", "subject_2_look", "subject_3_look"]) if (find(name)) makeResizable(node, find(name), name, 48);
+        const label = el("div", { fontSize: "12px", padding: "3px 6px", color: "var(--input-text, #ddd)", opacity: ".9", lineHeight: "1.4" });
+        const roles = node.addDOMWidget("subject_roles", "promptforge_subject_roles", label, { serialize: false, getMinHeight: () => 72 });
+        Object.defineProperty(roles, "width", { get: () => node.size[0], set: () => {}, configurable: true });
+        const action = find("action");
+        node.widgets.splice(node.widgets.indexOf(roles), 1);
+        node.widgets.splice(node.widgets.indexOf(action) + 1, 0, roles);
+        let known = null;
+        const refresh = async () => {
+          known = known || await (await api.fetchApi("/promptforge/actions")).json();
+          const list = known[String(action.value)]?.roles || [];
+          label.innerHTML = list.map((role, index) => `<b>Subject ${index + 1}</b>: ${role}`).join("<br>") + `<br><b>Subject 3</b>: an extra person who is in the video but not in the act (optional)`;
+          for (let number = 1; number <= 3; number++) {
+            const used = number <= list.length || number === 3;
+            setShown(find(`subject_${number}_from`), used);
+            setShown(find(`subject_${number}_look`), used);
+          }
           node.setSize([node.size[0], node.computeSize()[1]]);
           node.setDirtyCanvas(true, true);
         };
-        for (const name of ["action", "prompt_template"]) {
-          const widget = find(name);
-          const callback = widget.callback;
-          widget.callback = (...args) => { callback?.apply(widget, args); node.promptforgeRefreshIdea(); };
-        }
-        node.promptforgeRefreshIdea();
+        const callback = action.callback;
+        action.callback = (...args) => { callback?.apply(action, args); refresh(); };
+        node.promptforgeRefreshAction = refresh;
+        refresh();
         node.setSize([Math.max(node.size[0], 560), Math.max(node.size[1], node.computeSize()[1])]);
       };
       const onConfigure = nodeType.prototype.onConfigure;
-      nodeType.prototype.onConfigure = function () { const result = onConfigure?.apply(this, arguments); this.promptforgeRefreshIdea?.(); return result; };
+      nodeType.prototype.onConfigure = function () { const result = onConfigure?.apply(this, arguments); this.promptforgeRefreshAction?.(); return result; };
+      return;
+    }
+
+    if (nodeData.name === WRITER) {
+      // the style only matters while the template is automatic
+      const onCreated = nodeType.prototype.onNodeCreated;
+      const refresh = (node) => {
+        const template = node.widgets.find((widget) => widget.name === "prompt_template");
+        setShown(node.widgets.find((widget) => widget.name === "prompt_style"), String(template.value).startsWith("automatic"));
+        node.setSize([node.size[0], node.computeSize()[1]]);
+        node.setDirtyCanvas(true, true);
+      };
+      nodeType.prototype.onNodeCreated = function () {
+        onCreated?.apply(this, arguments);
+        const template = this.widgets.find((widget) => widget.name === "prompt_template");
+        const callback = template.callback;
+        template.callback = (...args) => { callback?.apply(template, args); refresh(this); };
+        refresh(this);
+      };
+      const onConfigure = nodeType.prototype.onConfigure;
+      nodeType.prototype.onConfigure = function () { const result = onConfigure?.apply(this, arguments); refresh(this); return result; };
       return;
     }
 

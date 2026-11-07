@@ -7,7 +7,7 @@ import threading
 from aiohttp import web
 from server import PromptServer
 
-from . import image_library
+from . import h3_actions, image_library
 
 _lock = threading.Lock()
 
@@ -53,3 +53,8 @@ async def _delete(request):
         ideas.pop(request.query.get("name", ""), None)
         _write(ideas)
     return web.json_response(ideas)
+
+
+@PromptServer.instance.routes.get("/promptforge/actions")
+async def _actions(request):
+    return web.json_response({label: {"roles": list(roles)} for label, (roles, _) in h3_actions.ACTIONS.items()})

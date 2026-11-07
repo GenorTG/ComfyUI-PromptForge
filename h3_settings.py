@@ -13,7 +13,7 @@ Each one answers a single question and plugs into the generator (PromptForge H3 
     Live Preview ..... optional: what you see while it samples
     Speed and Memory . optional: attention backend and feed-forward chunking
 
-Every node is optional except the Idea: an unconnected one means its defaults. Connecting the Second Stage node is
+Every node is optional except the Idea or the Action node, whichever the Modes node picks: an unconnected one means its defaults. Connecting the Second Stage node is
 what turns the second stage on, so none of them has an on/off switch for a whole section.
 """
 import importlib
@@ -37,6 +37,8 @@ CARRIED_FRAMES = ("1", "5", "22", "39", "56", "73")
 PROMPT_STYLES = ("standard", "NSFW")
 MODES = ("T2V - text to video", "I2V - first frame to video", "L2V - last frame to video", "FL2V - first and last frame to video", "REF2V - references (pictures, videos, sounds)")
 GENERATIONS = ("one clip", "several parts (endless video)")
+PROMPT_SOURCES = ("my idea (Idea node)", "action preset (Action node)")
+SUBJECT_SOURCES = ("describe in words", "first frame") + tuple(f"reference picture {number}" for number in range(1, 10))
 AUTOMATIC_TEMPLATE = "automatic (by mode and style)"
 DIALOGUE_AUTO = "auto (from the prompts)"
 DIALOGUE_LANGUAGES = (DIALOGUE_AUTO, "Arabic", "Chinese", "English", "French", "German", "Italian", "Japanese", "Korean", "Portuguese", "Russian", "Spanish", "other (type below)")
@@ -44,13 +46,14 @@ PREVIEW_MODES = ("live", "none", "ComfyUI's own")
 ATTENTION = ("comfy kitchen attention", "pytorch attention", "as connected")
 
 DEFAULTS = {
-    "idea": {"general_prompt": "", "negative_prompt": "", "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "use_prompt_writer": True, "prompt_style": "standard",
-             "prompt_template": AUTOMATIC_TEMPLATE, "writer_creativity": 0.8, "review_prompts": False, "check_prompts": False,
-             "writer_top_p": 0.95, "writer_top_k": 40, "writer_repetition_penalty": 1.1, "writer_max_tokens": 2048,
-             "action": h3_actions.NO_ACTION, "camera_angle": h3_actions.ANY_CAMERA, "person_a": "", "person_b": ""},
+    "idea": {"general_prompt": "", "negative_prompt": "", "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": ""},
+    "action": {"action": next(iter(h3_actions.ACTIONS)), "camera_angle": h3_actions.ANY_CAMERA, "notes": "", "negative_prompt": "", "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "",
+               **{f"subject_{number}_{part}": value for number in range(1, 4) for part, value in (("from", SUBJECT_SOURCES[0]), ("look", ""))}},
+    "writer": {"use_prompt_writer": True, "prompt_template": AUTOMATIC_TEMPLATE, "prompt_style": "standard", "writer_creativity": 0.8, "writer_top_p": 0.95, "writer_top_k": 40,
+               "writer_repetition_penalty": 1.1, "writer_max_tokens": 2048, "check_prompts": False, "review_prompts": False},
     "parts": {"parts": 1, "part_prompts": ""},
     "references": {},
-    "modes": {"mode": MODES[0], "generation": GENERATIONS[0], "extend_existing_video": False, "two_stage_upscale": True},
+    "modes": {"mode": MODES[0], "generation": GENERATIONS[0], "extend_existing_video": False, "two_stage_upscale": True, "prompt_source": PROMPT_SOURCES[0]},
     "format": {"aspect_ratio": "16:9", "orientation": "landscape", "megapixels": 0.5, "seconds": 5.0},
     "continuity": {"how_parts_join": next(iter(JOIN_MODES)), "story_style": STORY_STYLES[0], "carried_frames": "22", "smooth_joins": True, "check_joins": False, "join_retries": 1},
     "sampling": {"sampler_name": "er_sde", "scheduler": "sgm_uniform", "steps": 8, "cfg": 1.0, "shift_video": 12.0, "shift_audio": 3.0},
@@ -77,40 +80,82 @@ class _Settings:
         return (values,)
 
 
+def _dialogue_inputs():
+    return {
+        "negative_prompt": ("STRING", {"default": "", "multiline": True, "tooltip": "Things the video must not contain."}),
+        "dialogue": ("STRING", {"default": "", "multiline": True, "tooltip": "What the characters talk about and how it sounds. Empty = no dialogue instructions."}),
+        "dialogue_language": (list(DIALOGUE_LANGUAGES), {"default": DIALOGUE_AUTO, "tooltip": "Language of the spoken lines. The list is what MiniMax H3 speaks well."}),
+        "dialogue_language_other": ("STRING", {"default": "", "tooltip": "Used when the language is 'other', for example Polish. Languages outside the list work only partly."}),
+    }
+
+
 class PROMPTFORGE_H3Idea(_Settings):
     KEY = "idea"
     RETURN_TYPES = ("PROMPTFORGE_H3_IDEA",)
     RETURN_NAMES = ("idea",)
     DESCRIPTION = ("Your own text: what the video is about. The prompt writer turns it into a full MiniMax H3 prompt (or, with the writer off, your text is the prompt as it is). "
-                   "Ideas you like can be saved and flipped through with the bar at the top. With a Parts node connected this is the general idea and each part has its own box.")
+                   "Ideas you like can be saved and flipped through with the bar at the top. With a Parts node connected this is the general idea and each part has its own box. "
+                   "The Modes node chooses between this node and the Action node.")
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "general_prompt": ("STRING", {"default": "", "multiline": True, "placeholder": "Your idea: what happens, who is in it, the look, the sound.",
+                                              "tooltip": "What the video is about. With a Parts node: the context for every part; each part shows what its own box says."}),
+            },
+            "optional": _dialogue_inputs(),
+        }
+
+
+class PROMPTFORGE_H3Action(_Settings):
+    KEY = "action"
+    RETURN_TYPES = ("PROMPTFORGE_H3_ACTION",)
+    RETURN_NAMES = ("action",)
+    DESCRIPTION = ("Adult content from a preset instead of your own text: a solo act or a position, who is who, and a camera angle. The prompt writer writes the whole video prompt (NSFW template), "
+                   "for one clip or spread over the parts. Say who the subjects are: a reference picture (the number of its Load Image slot) or a description in words. "
+                   "Works with every mode; without reference pictures the people are described in words. The Modes node chooses between this node and the Idea node.")
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        subjects = {}
+        for number in range(1, 4):
+            subjects[f"subject_{number}_from"] = (list(SUBJECT_SOURCES), {"default": SUBJECT_SOURCES[0], "tooltip": "Which picture shows this subject: the first frame, or a reference picture by the number of its slot in the References node. Or describe the person in words."})
+            subjects[f"subject_{number}_look"] = ("STRING", {"default": "", "multiline": True, "tooltip": "The person in words: gender, age, hair, body, clothes. With a picture it adds to the picture, without one it is all the writer knows."})
+        return {
+            "required": {
+                "action": (list(h3_actions.ACTIONS), {"default": next(iter(h3_actions.ACTIONS)), "tooltip": "The act or position. The roles of the subjects are shown below it."}),
+                "camera_angle": ([h3_actions.ANY_CAMERA] + list(h3_actions.CAMERAS), {"default": h3_actions.ANY_CAMERA, "tooltip": "How it is filmed. POV (the viewer is B) is what subject 2 sees."}),
+            },
+            "optional": {
+                **subjects,
+                "notes": ("STRING", {"default": "", "multiline": True, "placeholder": "Setting, looks, mood, sounds. Not the act: that is the action above.", "tooltip": "Anything else the video needs: the room, the lighting, the mood, the sounds."}),
+                **_dialogue_inputs(),
+            },
+        }
+
+
+class PROMPTFORGE_H3Writer(_Settings):
+    KEY = "writer"
+    RETURN_TYPES = ("PROMPTFORGE_H3_WRITER",)
+    RETURN_NAMES = ("writer_settings",)
+    DESCRIPTION = "How the prompt writer writes: template, sampling, retries and approval. It is the same for the Idea and the Action node. Not connected: the defaults."
 
     @classmethod
     def INPUT_TYPES(cls):
         templates = [AUTOMATIC_TEMPLATE] + [name for name in importlib.import_module(__package__).PRESET_OPTIONS if name != "auto"]
         return {
             "required": {
-                "general_prompt": ("STRING", {"default": "", "multiline": True, "placeholder": "Your idea: what happens, who is in it, the look, the sound.",
-                                              "tooltip": "What the video is about. With a Parts node: the context for every part; each part shows what its own box says."}),
-            },
-            "optional": {
-                "negative_prompt": ("STRING", {"default": "", "multiline": True, "tooltip": "Things the video must not contain."}),
-                "dialogue": ("STRING", {"default": "", "multiline": True, "tooltip": "What the characters talk about and how it sounds. Empty = no dialogue instructions."}),
-                "dialogue_language": (list(DIALOGUE_LANGUAGES), {"default": DIALOGUE_AUTO, "tooltip": "Language of the spoken lines. The list is what MiniMax H3 speaks well."}),
-                "dialogue_language_other": ("STRING", {"default": "", "tooltip": "Used when the language is 'other', for example Polish. Languages outside the list work only partly."}),
-                "use_prompt_writer": ("BOOLEAN", {"default": True, "tooltip": "On: the language model turns your idea into a full H3 prompt. Off: your text is used as the finished prompt, as it is."}),
-                "prompt_style": (list(PROMPT_STYLES), {"default": "standard", "tooltip": "Standard or NSFW templates, used only while the prompt template is automatic: a template you pick yourself is used as it is, whatever this says. An action preset makes it NSFW."}),
-                "prompt_template": (templates, {"default": AUTOMATIC_TEMPLATE, "tooltip": "The prompt writer's template, SFW and NSFW alike. A template you pick is used as it is, ignoring the style. Automatic picks the one of the mode (T2VA, I2VA, L2VA, FL2VA, Ref2VA) in the style set below."}),
+                "use_prompt_writer": ("BOOLEAN", {"default": True, "tooltip": "On: the language model turns your idea into a full H3 prompt. Off: your idea text is used as the finished prompt, as it is (an action preset needs the writer)."}),
+                "prompt_template": (templates, {"default": AUTOMATIC_TEMPLATE, "tooltip": "The prompt writer's template, SFW and NSFW alike. A template you pick is used as it is, ignoring the style. Automatic picks the one of the mode (T2VA, I2VA, L2VA, FL2VA, Ref2VA), NSFW for an action preset or when the style below says so."}),
+                "prompt_style": (list(PROMPT_STYLES), {"default": "standard", "tooltip": "Standard or NSFW templates, used only while the prompt template is automatic."}),
                 "writer_creativity": ("FLOAT", {"default": 0.8, "min": 0.01, "max": 2.0, "step": 0.05, "tooltip": "The writer's temperature: how freely it words things. Lower sticks closer to your text."}),
-                "review_prompts": ("BOOLEAN", {"default": False, "tooltip": "Pause after each prompt is written: a panel lets you edit it, approve it, or have it written again. Needs the ComfyUI page open."}),
                 "writer_top_p": ("FLOAT", {"default": 0.95, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "The writer's top_p."}),
                 "writer_top_k": ("INT", {"default": 40, "min": 0, "max": 1000, "tooltip": "The writer's top_k."}),
                 "writer_repetition_penalty": ("FLOAT", {"default": 1.1, "min": 1.0, "max": 2.0, "step": 0.01, "tooltip": "The writer's repetition penalty. Too high makes it ramble into synonyms; 1.05 to 1.15 is the usual range."}),
                 "writer_max_tokens": ("INT", {"default": 2048, "min": 256, "max": 8192, "tooltip": "The longest prompt the writer may write. A prompt that runs to this limit has usually lost track; its runaway tail is cut."}),
                 "check_prompts": ("BOOLEAN", {"default": False, "tooltip": "Write the prompt again (new seed, up to 3 tries) when a check finds a problem: empty, repeated, a refusal, or wrong dialogue tags when you gave dialogue instructions. Off = the first answer is used. Every retry costs a full writing pass."}),
-                "action": ([h3_actions.NO_ACTION] + list(h3_actions.ACTIONS), {"default": h3_actions.NO_ACTION, "tooltip": "A solo act or a position (adults, NSFW template): the prompt writer writes the whole video prompt for it. Your idea text is kept but only gives the setting, the looks and the mood: if it describes another act, the action wins. With several parts the action is spread over them. Needs the prompt writer on."}),
-                "camera_angle": ([h3_actions.ANY_CAMERA] + list(h3_actions.CAMERAS), {"default": h3_actions.ANY_CAMERA, "tooltip": "How the action is filmed. POV (the viewer is B) is what B sees."}),
-                "person_a": ("STRING", {"default": "", "tooltip": "Who A is: a reference picture such as <Picture 1>, or words (the blonde woman). Empty: <Picture 1> in reference mode, else the first person."}),
-                "person_b": ("STRING", {"default": "", "tooltip": "Who B is (the partner). Empty: <Picture 2> in reference mode, else the second person. Solo actions have no B."}),
+                "review_prompts": ("BOOLEAN", {"default": False, "tooltip": "Pause after each prompt is written: a panel lets you edit it, approve it, or have it written again. Needs the ComfyUI page open."}),
             },
         }
 
@@ -148,6 +193,7 @@ class PROMPTFORGE_H3Modes(_Settings):
                 "generation": (list(GENERATIONS), {"default": GENERATIONS[0], "tooltip": "One clip: one video of the length set in Video Format. Several parts: a long video made part by part from the Parts node, joined with the Continuity settings."}),
                 "extend_existing_video": ("BOOLEAN", {"default": False, "tooltip": "Continue the video from the Continue Existing Video node; the result starts with it."}),
                 "two_stage_upscale": ("BOOLEAN", {"default": True, "tooltip": "Run the Second Stage (upscale and refine) when it is connected. Off = first pass only, much faster, for trying prompts."}),
+                "prompt_source": (list(PROMPT_SOURCES), {"default": PROMPT_SOURCES[0], "tooltip": "What the prompt writer writes from: your own text (Idea node) or an action preset (Action node). The other node is ignored."}),
             },
         }
 
@@ -323,7 +369,9 @@ class PROMPTFORGE_H3ContinueFrom(_Settings):
 
 NODES = {
     "PROMPTFORGE_H3Modes": ("PromptForge H3 Modes", PROMPTFORGE_H3Modes),
-    "PROMPTFORGE_H3Idea": ("PromptForge H3 Idea", PROMPTFORGE_H3Idea),
+    "PROMPTFORGE_H3Idea": ("PromptForge H3 Idea (my text)", PROMPTFORGE_H3Idea),
+    "PROMPTFORGE_H3Action": ("PromptForge H3 Action (adult presets)", PROMPTFORGE_H3Action),
+    "PROMPTFORGE_H3Writer": ("PromptForge H3 Prompt Writer Settings", PROMPTFORGE_H3Writer),
     "PROMPTFORGE_H3Parts": ("PromptForge H3 Parts (long video)", PROMPTFORGE_H3Parts),
     "PROMPTFORGE_H3References": ("PromptForge H3 References", PROMPTFORGE_H3References),
     "PROMPTFORGE_H3ContinueFrom": ("PromptForge H3 Continue Existing Video", PROMPTFORGE_H3ContinueFrom),

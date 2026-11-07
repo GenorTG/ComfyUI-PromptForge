@@ -5,36 +5,36 @@ prompt writer's NSFW template turns it into a full video prompt, for one clip or
 
 ADULTS = "Everyone in this video is a consenting adult."
 
-# label -> (number of people, arrangement)
+# label -> (roles of the people in the order A, B; the arrangement)
 ACTIONS = {
-    "Solo - self touching, lying down": (1, "{A} lies on a bed or sofa and slowly touches their own body: hands over the chest, stomach and thighs, then between the legs."),
-    "Solo - self touching, standing": (1, "{A} stands, partly undressed, hands moving over their own body and then between their legs."),
-    "Solo - masturbating with a hand": (1, "{A} masturbates with a hand, starting slowly and building the pace."),
-    "Solo - masturbating with a toy": (1, "{A} uses a sex toy on themselves, starting slowly and building the pace."),
-    "Solo - male, jerking off": (1, "{A} strokes their own penis with one hand, starting slowly and building the pace."),
-    "Solo - male, jerking off with a toy": (1, "{A} uses a masturbation toy on their own penis, starting slowly and building the pace."),
-    "Solo - striptease": (1, "{A} slowly undresses for the camera, ending naked, posing and touching their own body."),
-    "Oral - blowjob, kneeling": (2, "{A} kneels in front of {B}, who stands; {A} gives {B} oral sex with the mouth and hands."),
-    "Oral - blowjob, lying": (2, "{B} lies on their back; {A} lies or kneels between {B}'s legs and gives {B} oral sex."),
-    "Oral - cunnilingus": (2, "{B} lies back with the legs apart; {A} kneels between {B}'s legs and gives {B} oral sex."),
-    "Oral - 69": (2, "{A} and {B} lie head to toe, each giving the other oral sex at the same time."),
-    "Hands - handjob": (2, "{A} sits or kneels beside or in front of {B} and strokes {B}'s penis with a hand."),
-    "Hands - titfuck": (2, "{B} lies back or stands; {A} presses their breasts around {B}'s penis and moves."),
-    "Hands - mutual masturbation": (2, "{A} and {B} sit or lie facing each other, each touching the other between the legs."),
-    "Position - missionary": (2, "{A} lies on their back with the legs open or around {B}; {B} is on top between {A}'s legs, face to face."),
-    "Position - cowgirl": (2, "{B} lies on their back; {A} straddles {B} facing them and moves on top."),
-    "Position - reverse cowgirl": (2, "{B} lies on their back; {A} straddles {B} facing away from them, back and rear toward {B}."),
-    "Position - doggy style": (2, "{A} is on hands and knees; {B} kneels or stands behind {A}."),
-    "Position - prone bone": (2, "{A} lies face down, flat on the stomach; {B} lies on top of {A} from behind."),
-    "Position - spooning": (2, "{A} and {B} lie on their sides, {B} pressed against {A}'s back."),
-    "Position - standing, face to face": (2, "{A} and {B} stand facing each other; {B} holds {A} close, {A}'s arms around {B}."),
-    "Position - standing, from behind": (2, "{A} stands bent forward, hands on a wall or furniture; {B} stands behind {A}."),
-    "Position - one leg up": (2, "{A} and {B} stand facing each other; {A} has one leg raised, held up by {B}."),
-    "Position - lap, face to face": (2, "{B} sits; {A} sits on {B}'s lap facing them, arms around each other."),
-    "Position - legs on shoulders": (2, "{A} lies on their back with the legs raised onto {B}'s shoulders; {B} kneels in front, leaning forward."),
-    "Position - edge of the bed": (2, "{A} lies on their back at the edge of the bed, legs open; {B} stands in front of {A}."),
-    "Position - against the wall": (2, "{A} is held up against a wall by {B}, legs around {B}'s waist."),
-    "Position - scissoring": (2, "{A} and {B} lie facing each other with the legs interlocked, their hips pressed together."),
+    "Solo - self touching, lying down": (('the person',), "{A} lies on a bed or sofa and slowly touches their own body: hands over the chest, stomach and thighs, then between the legs."),
+    "Solo - self touching, standing": (('the person',), "{A} stands, partly undressed, hands moving over their own body and then between their legs."),
+    "Solo - masturbating with a hand": (('the person',), "{A} masturbates with a hand, starting slowly and building the pace."),
+    "Solo - masturbating with a toy": (('the person',), "{A} uses a sex toy on themselves, starting slowly and building the pace."),
+    "Solo - male, jerking off": (('the person',), "{A} strokes their own penis with one hand, starting slowly and building the pace."),
+    "Solo - male, jerking off with a toy": (('the person',), "{A} uses a masturbation toy on their own penis, starting slowly and building the pace."),
+    "Solo - striptease": (('the person',), "{A} slowly undresses for the camera, ending naked, posing and touching their own body."),
+    "Oral - blowjob, kneeling": (('kneels and gives oral sex', 'stands and receives'), "{A} kneels in front of {B}, who stands; {A} gives {B} oral sex with the mouth and hands."),
+    "Oral - blowjob, lying": (('between the legs, gives oral sex', 'lies on the back, receives'), "{B} lies on their back; {A} lies or kneels between {B}'s legs and gives {B} oral sex."),
+    "Oral - cunnilingus": (('kneels between the legs, gives oral sex', 'lies back, receives'), "{B} lies back with the legs apart; {A} kneels between {B}'s legs and gives {B} oral sex."),
+    "Oral - 69": (('partner', 'partner'), "{A} and {B} lie head to toe, each giving the other oral sex at the same time."),
+    "Hands - handjob": (('gives the handjob', 'receives'), "{A} sits or kneels beside or in front of {B} and strokes {B}'s penis with a hand."),
+    "Hands - titfuck": (('gives, with the breasts', 'receives'), "{B} lies back or stands; {A} presses their breasts around {B}'s penis and moves."),
+    "Hands - mutual masturbation": (('partner', 'partner'), "{A} and {B} sit or lie facing each other, each touching the other between the legs."),
+    "Position - missionary": (('lies on the back', 'on top, between the legs'), "{A} lies on their back with the legs open or around {B}; {B} is on top between {A}'s legs, face to face."),
+    "Position - cowgirl": (('on top, rides', 'lies on the back'), "{B} lies on their back; {A} straddles {B} facing them and moves on top."),
+    "Position - reverse cowgirl": (('on top, facing away', 'lies on the back'), "{B} lies on their back; {A} straddles {B} facing away from them, back and rear toward {B}."),
+    "Position - doggy style": (('on hands and knees', 'behind'), "{A} is on hands and knees; {B} kneels or stands behind {A}."),
+    "Position - prone bone": (('lies face down', 'on top from behind'), "{A} lies face down, flat on the stomach; {B} lies on top of {A} from behind."),
+    "Position - spooning": (('in front', 'behind'), "{A} and {B} lie on their sides, {B} pressed against {A}'s back."),
+    "Position - standing, face to face": (('held close, arms around', 'holds'), "{A} and {B} stand facing each other; {B} holds {A} close, {A}'s arms around {B}."),
+    "Position - standing, from behind": (('bent forward', 'stands behind'), "{A} stands bent forward, hands on a wall or furniture; {B} stands behind {A}."),
+    "Position - one leg up": (('one leg raised', 'holds the leg up'), "{A} and {B} stand facing each other; {A} has one leg raised, held up by {B}."),
+    "Position - lap, face to face": (('on the lap, facing', 'sits'), "{B} sits; {A} sits on {B}'s lap facing them, arms around each other."),
+    "Position - legs on shoulders": (('on the back, legs raised', 'kneels in front'), "{A} lies on their back with the legs raised onto {B}'s shoulders; {B} kneels in front, leaning forward."),
+    "Position - edge of the bed": (('lies at the edge', 'stands in front'), "{A} lies on their back at the edge of the bed, legs open; {B} stands in front of {A}."),
+    "Position - against the wall": (('held against the wall', 'holds'), "{A} is held up against a wall by {B}, legs around {B}'s waist."),
+    "Position - scissoring": (('partner', 'partner'), "{A} and {B} lie facing each other with the legs interlocked, their hips pressed together."),
 }
 
 CAMERAS = {
@@ -58,7 +58,7 @@ NO_ACTION = "(none)"
 ANY_CAMERA = "(writer's choice)"
 
 
-def people(label):
+def roles(label):
     return ACTIONS[label][0]
 
 
@@ -73,10 +73,17 @@ def stage(index, total):
     return f"This is part {index + 1} of {total} of the action: the main action, changing the pace and the camera framing from the previous part."
 
 
-def brief(label, camera, a, b):
-    """The text the prompt writer gets for one chosen action: who is who, the arrangement and the camera."""
-    count, text = ACTIONS[label]
-    lines = [f"Action: {text.format(A=a, B=b)}", "This action is exactly what happens. The idea above only gives the setting, the looks and the mood; if it describes a different act or position, follow this action instead.", ADULTS]
+def brief(label, camera, subjects, notes=""):
+    """The text the prompt writer gets for one chosen action: who is who, the arrangement and the camera. `subjects` are three descriptions (the third may be empty)."""
+    count = len(ACTIONS[label][0])
+    a, b = subjects[0], subjects[1]
+    lines = [f"Action: {ACTIONS[label][1].format(A=a, B=b)}", "This action is exactly what happens; the notes only give the setting, the looks and the mood.", ADULTS]
+    for number, (role, who) in enumerate(zip(ACTIONS[label][0], subjects), start=1):
+        lines.append(f"Subject {number} ({role}): {who}")
+    if subjects[2]:
+        lines.append(f"Subject 3 is also in the video, not part of the action: {subjects[2]}")
     if camera in CAMERAS and not (count == 1 and camera in SOLO_CAMERAS):
         lines.append(f"Camera: {CAMERAS[camera].format(A=a, B=b)}")
+    if notes.strip():
+        lines.append(f"Notes: {notes.strip()}")
     return "\n".join(lines)

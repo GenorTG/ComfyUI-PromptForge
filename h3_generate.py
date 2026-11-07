@@ -224,10 +224,12 @@ class PROMPTFORGE_H3Generate:
                 "vae": ("VAE", {"tooltip": "The MiniMax H3 video VAE."}),
                 "audio_vae": ("VAE", {"tooltip": "The MiniMax H3 audio VAE."}),
                 "writer": ("PROMPTFORGE_MODEL", {"tooltip": "From a PromptForge Model node: the language model that writes the prompt of every part. A vision model sees the references and the end of the previous part."}),
-                "idea": ("PROMPTFORGE_H3_IDEA", {"tooltip": "From a PromptForge H3 Idea node: what the video is about."}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 2 ** 32 - 1, "tooltip": "Part n uses seed + n, for the prompt writer and the sampler."}),
             },
             "optional": {
+                "idea": ("PROMPTFORGE_H3_IDEA", {"tooltip": "From a PromptForge H3 Idea node: your own text. Used when the Modes node says 'my idea'."}),
+                "action": ("PROMPTFORGE_H3_ACTION", {"tooltip": "From a PromptForge H3 Action node: an action preset with its subjects and camera. Used when the Modes node says 'action preset'."}),
+                "writer_settings": ("PROMPTFORGE_H3_WRITER", {"tooltip": "From a PromptForge H3 Prompt Writer Settings node: template, sampling, retries, approval. Not connected: the defaults."}),
                 "references": ("PROMPTFORGE_H3_REFERENCES", {"tooltip": "The first / last frame (I2V, L2V, FL2V) and the reference pictures, videos and sounds (REF2V). Without it the video comes from the idea alone."}),
                 "format": ("PROMPTFORGE_H3_FORMAT", {"tooltip": "Size and length. Default: 16:9, 0.5 megapixels, 5 seconds."}),
                 "continuity": ("PROMPTFORGE_H3_CONTINUITY", {"tooltip": "How the parts join. Default: the last 22 frames and the sound are carried forward, the joins are smoothed."}),
@@ -243,14 +245,18 @@ class PROMPTFORGE_H3Generate:
             "hidden": {"unique_id": "UNIQUE_ID", "prompt": "PROMPT"},
         }
 
-    def generate(self, model, clip, vae, audio_vae, writer, idea, seed, references=None, format=None, continuity=None, sampling=None, second_stage=None,
+    def generate(self, model, clip, vae, audio_vae, writer, seed, idea=None, action=None, writer_settings=None, references=None, format=None, continuity=None, sampling=None, second_stage=None,
                  preview=None, performance=None, continue_from=None, modes=None, parts=None, decode_vae=None, unique_id=None, prompt=None):
-        story = h3_settings.settings("idea", idea)
         refs = h3_settings.settings("references", references)
         fmt = h3_settings.settings("format", format)
         join = h3_settings.settings("continuity", continuity)
         sampling = h3_settings.settings("sampling", sampling)
         modes = h3_settings.settings("modes", modes)
+        use_action = modes["prompt_source"] == h3_settings.PROMPT_SOURCES[1]
+        chosen = action if use_action else idea
+        if chosen is None:
+            raise ValueError(f"[PromptForge] the Modes node writes from the {'action preset' if use_action else 'idea'}: connect a PromptForge H3 {'Action' if use_action else 'Idea'} node.")
+        story = {"general_prompt": "", **h3_settings.settings("writer", writer_settings), **h3_settings.settings("action" if use_action else "idea", chosen)}
         second = h3_settings.settings("second_stage", second_stage) if second_stage is not None and modes["two_stage_upscale"] else None
         if not modes["extend_existing_video"] or (continue_from is not None and continue_from["video"] is None):
             continue_from = None
@@ -336,17 +342,35 @@ class PROMPTFORGE_H3Generate:
             frames = [(frame, name) for frame, name in zip(anchors(index), ("first", "last")) if frame is not None]
             return [frame for frame, _ in frames], [f"<Picture {number}> is the exact {name} frame of the video." for number, (_, name) in enumerate(frames, start=1)]
 
-        action = story["action"] if story["action"] in h3_actions.ACTIONS and story["use_prompt_writer"] else None
-        if action:
-            person_a = story["person_a"].strip() or ("<Picture 1>" if kind == "REF2V" and len(pictures) > 0 else "the first person")
-            person_b = story["person_b"].strip() or ("<Picture 2>" if kind == "REF2V" and len(pictures) > 1 else "the second person")
-            block = h3_actions.brief(action, story["camera_angle"], person_a, person_b)
+        action_name = story["action"] if use_action else None
+        if action_name:
+            if not story["use_prompt_writer"]:
+                raise ValueError("[PromptForge] an action preset needs the prompt writer: switch use_prompt_writer on in the Prompt Writer Settings node, or choose 'my idea'.")
+            tags = {}
+            if kind == "REF2V":
+                if first is not None:
+                    tags["first frame"] = "<Picture 1>"
+                for position, (slot, _) in enumerate(images, start=len(tags) + 1):
+                    tags[f"reference picture {slot}"] = f"<Picture {position}>"
+            else:
+                for position, (name, frame) in enumerate(((name, frame) for name, frame in (("first frame", first if kind in ("I2V", "FL2V") else None), ("last frame", last if kind in ("L2V", "FL2V") else None)) if frame is not None), start=1):
+                    tags[name] = f"<Picture {position}>"
+
+            def subject(number):
+                source, look = story[f"subject_{number}_from"], story[f"subject_{number}_look"].strip()
+                if source != h3_settings.SUBJECT_SOURCES[0] and source not in tags:
+                    print(f"[PromptForge] subject {number}: the {source} is not used in {kind} mode (or its Load node is off); the person is described in words.")
+                if source in tags:
+                    return f"{tags[source]} ({look})" if look else tags[source]
+                return look or ("the first person", "the second person", "")[number - 1]
+
+            block = h3_actions.brief(action_name, story["camera_angle"], [subject(number) for number in (1, 2, 3)], story["notes"])
             if several:
                 brief = f"{brief}\n\n{block}".strip()
             for index, part in enumerate(plan):
                 if not part["text"].lower().startswith("raw:"):
                     part["text"] = "\n".join(line for line in (part["text"], "" if several else block, h3_actions.stage(index, total)) if line)
-        nsfw = story["prompt_style"] == "NSFW" or action is not None
+        nsfw = story["prompt_style"] == "NSFW" or action_name is not None
         preset = story["prompt_template"] if story["prompt_template"] != h3_settings.AUTOMATIC_TEMPLATE else ("NSFW › " if nsfw else "") + PRESETS[kind]
 
         parts_frames, parts_audio, prompts, notes, report = [], [], [], [], []
