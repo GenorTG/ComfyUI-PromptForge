@@ -203,7 +203,6 @@ app.registerExtension({
     for (const name of ["execution_success", "execution_error", "execution_interrupted"]) api.addEventListener(name, closeReview);
     const node = (event) => app.graph.getNodeById(Number(event.detail.node));
     api.addEventListener("promptforge.prompt", (event) => node(event)?.promptforgeShowPrompt?.(event.detail));
-    api.addEventListener("promptforge.part", (event) => node(event)?.promptforgeShowPart?.(event.detail));
   },
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name === SECOND_STAGE) {
@@ -259,23 +258,6 @@ app.registerExtension({
         const node = this;
         addLivePreview(node);
 
-        // the finished part, as a short clip (it is not saved anywhere)
-        const holder = el("div", { position: "relative", width: "100%", height: "100%", overflow: "hidden", display: "none" });
-        const video = el("video", { position: "absolute", inset: "0", width: "100%", height: "100%", objectFit: "contain", background: "rgba(0,0,0,.25)", borderRadius: "4px" }, { controls: true, muted: true, loop: true, autoplay: true, playsInline: true });
-        const caption = el("div", { position: "absolute", left: "6px", top: "4px", padding: "1px 6px", fontSize: "11px", borderRadius: "3px", background: "rgba(0,0,0,.55)", color: "#fff", zIndex: 1 });
-        holder.append(video, caption);
-        holder.addEventListener("pointerdown", (event) => event.stopPropagation());
-        let partShown = false;
-        const part = node.addDOMWidget("finished_part", "promptforge_finished_part", holder, { serialize: false, getMinHeight: () => (partShown ? 240 : 0) });
-        Object.defineProperty(part, "width", { get: () => node.size[0], set: () => {}, configurable: true });
-        node.promptforgeShowPart = ({ index, mime, image }) => {
-          node.promptforgeLiveHide?.();
-          if (!partShown) { partShown = true; holder.style.display = ""; node.setSize([node.size[0], node.computeSize()[1]]); }
-          caption.textContent = `part ${index + 1} finished`;
-          video.src = `data:${mime};base64,${image}`;
-          video.play().catch(() => {});
-        };
-
         // every part's prompt, added as soon as it has been written
         const box = el("textarea", { width: "100%", height: "100%", resize: "none", boxSizing: "border-box", padding: "6px 8px", fontSize: "12px", borderRadius: "4px", border: "1px solid var(--border-color, #555)", background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)" },
           { readOnly: true, placeholder: "The prompt written for each part appears here as it is made." });
@@ -303,8 +285,27 @@ app.registerExtension({
         for (const [name, fallback] of [["general_prompt", 150], ["negative_prompt", 60], ["dialogue", 60]]) makeResizable(node, find(name), name, fallback);
         const general = find("general_prompt");
         addIdeas(node, (added) => { node.widgets.splice(node.widgets.indexOf(added), 1); node.widgets.splice(node.widgets.indexOf(general), 0, added); });
+        // the camera and the people only matter with an action; the style only while the template is automatic
+        node.promptforgeRefreshIdea = () => {
+          const action = String(find("action").value);
+          const chosen = action !== "(none)";
+          setShown(find("camera_angle"), chosen);
+          setShown(find("person_a"), chosen);
+          setShown(find("person_b"), chosen && !action.startsWith("Solo"));
+          setShown(find("prompt_style"), String(find("prompt_template").value).startsWith("automatic") && !chosen);
+          node.setSize([node.size[0], node.computeSize()[1]]);
+          node.setDirtyCanvas(true, true);
+        };
+        for (const name of ["action", "prompt_template"]) {
+          const widget = find(name);
+          const callback = widget.callback;
+          widget.callback = (...args) => { callback?.apply(widget, args); node.promptforgeRefreshIdea(); };
+        }
+        node.promptforgeRefreshIdea();
         node.setSize([Math.max(node.size[0], 560), Math.max(node.size[1], node.computeSize()[1])]);
       };
+      const onConfigure = nodeType.prototype.onConfigure;
+      nodeType.prototype.onConfigure = function () { const result = onConfigure?.apply(this, arguments); this.promptforgeRefreshIdea?.(); return result; };
       return;
     }
 

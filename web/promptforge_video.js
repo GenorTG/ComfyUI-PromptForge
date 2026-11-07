@@ -1,8 +1,7 @@
 import { app } from "../../scripts/app.js";
-import { api } from "../../scripts/api.js";
 
+// Save Video: ComfyUI shows the saved video itself; here are its facts (size, frames, codec) under it and the show / loop / autoplay switches
 const NODES = ["PROMPTFORGE_SaveVideo"];
-const HEIGHT = 260;
 
 app.registerExtension({
   name: "PromptForge.SaveVideo",
@@ -14,24 +13,23 @@ app.registerExtension({
       const node = this;
       const option = (name) => node.widgets.find((widget) => widget.name === name);
 
-      const frame = document.createElement("div");
-      Object.assign(frame.style, { position: "relative", width: "100%", height: "100%", overflow: "hidden", contain: "layout paint" });
-      const video = document.createElement("video");
-      Object.assign(video.style, { position: "absolute", inset: "0", width: "100%", height: "100%", objectFit: "contain", background: "rgba(0,0,0,.25)", borderRadius: "4px" });
-      Object.assign(video, { controls: true, muted: true, autoplay: true, playsInline: true });
-      frame.append(video);
-      frame.addEventListener("pointerdown", (event) => event.stopPropagation());
-
-      const visible = () => option("show_preview")?.value !== false && !!video.getAttribute("src");
-      const widget = node.addDOMWidget("video_preview", "promptforge_video_preview", frame, { serialize: false, getMinHeight: () => (visible() ? HEIGHT : 0) });
+      const label = Object.assign(document.createElement("div"), { textContent: "" });
+      Object.assign(label.style, { fontSize: "12px", padding: "3px 6px", color: "var(--input-text, #ddd)", opacity: ".85", boxSizing: "border-box", wordBreak: "break-word" });
+      const widget = node.addDOMWidget("video_info", "promptforge_video_info", label, { serialize: false, getMinHeight: () => (label.textContent ? 36 : 0) });
       Object.defineProperty(widget, "width", { get: () => node.size[0], set: () => {}, configurable: true });
-      const apply = () => {
+
+      // the video element belongs to the frontend and appears after the result arrives
+      const apply = (tries = 0) => {
+        const video = node.videoContainer?.querySelector?.("video");
+        if (!video) {
+          if (tries < 30) setTimeout(() => apply(tries + 1), 100);
+          return;
+        }
         video.loop = option("loop_preview")?.value !== false;
-        frame.style.display = visible() ? "" : "none";
         video.autoplay = option("autoplay_preview")?.value !== false;
-        if (!visible()) video.pause();
-        node.setSize([node.size[0], Math.max(node.computeSize()[1], visible() ? node.size[1] : 0)]);
-        node.setDirtyCanvas(true, true);
+        node.videoContainer.style.display = option("show_preview")?.value !== false ? "" : "none";
+        if (!video.autoplay) video.pause();
+        else video.play?.().catch(() => {});
       };
       for (const name of ["show_preview", "loop_preview", "autoplay_preview"]) {
         const toggle = option(name);
@@ -39,18 +37,17 @@ app.registerExtension({
         const callback = toggle.callback;
         toggle.callback = function () { callback?.apply(this, arguments); apply(); };
       }
-      node.promptforgeShowVideo = (preview) => {
-        const query = new URLSearchParams({ filename: preview.filename, subfolder: preview.subfolder, type: preview.type, t: String(Date.now()) });
-        video.src = api.apiURL("/view?" + query);
+      node.promptforgeShowInfo = (text) => {
+        label.textContent = text;
+        node.setSize([node.size[0], Math.max(node.size[1], node.computeSize()[1])]);
         apply();
-        if (video.autoplay) video.play().catch(() => {});
       };
     };
     const onExecuted = nodeType.prototype.onExecuted;
     nodeType.prototype.onExecuted = function (message) {
       onExecuted?.apply(this, arguments);
-      const preview = message?.promptforge_video?.[0];
-      if (preview) this.promptforgeShowVideo(preview);
+      const info = message?.promptforge_info?.[0];
+      if (info) this.promptforgeShowInfo(info);
     };
   },
 });

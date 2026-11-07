@@ -20,7 +20,7 @@ import importlib
 
 import comfy.samplers
 
-from . import h3_upscaler, preview_decoder
+from . import h3_actions, h3_upscaler, preview_decoder
 from . import empty_latent
 
 CATEGORY = "🔮 PromptForge/Endless Video"
@@ -46,7 +46,8 @@ ATTENTION = ("comfy kitchen attention", "pytorch attention", "as connected")
 DEFAULTS = {
     "idea": {"general_prompt": "", "negative_prompt": "", "dialogue": "", "dialogue_language": DIALOGUE_AUTO, "dialogue_language_other": "", "use_prompt_writer": True, "prompt_style": "standard",
              "prompt_template": AUTOMATIC_TEMPLATE, "writer_creativity": 0.8, "review_prompts": False, "check_prompts": False,
-             "writer_top_p": 0.95, "writer_top_k": 40, "writer_repetition_penalty": 1.1, "writer_max_tokens": 2048},
+             "writer_top_p": 0.95, "writer_top_k": 40, "writer_repetition_penalty": 1.1, "writer_max_tokens": 2048,
+             "action": h3_actions.NO_ACTION, "camera_angle": h3_actions.ANY_CAMERA, "person_a": "", "person_b": ""},
     "parts": {"parts": 1, "part_prompts": ""},
     "references": {},
     "modes": {"mode": MODES[0], "generation": GENERATIONS[0], "extend_existing_video": False, "two_stage_upscale": True},
@@ -97,8 +98,8 @@ class PROMPTFORGE_H3Idea(_Settings):
                 "dialogue_language": (list(DIALOGUE_LANGUAGES), {"default": DIALOGUE_AUTO, "tooltip": "Language of the spoken lines. The list is what MiniMax H3 speaks well."}),
                 "dialogue_language_other": ("STRING", {"default": "", "tooltip": "Used when the language is 'other', for example Polish. Languages outside the list work only partly."}),
                 "use_prompt_writer": ("BOOLEAN", {"default": True, "tooltip": "On: the language model turns your idea into a full H3 prompt. Off: your text is used as the finished prompt, as it is."}),
-                "prompt_style": (list(PROMPT_STYLES), {"default": "standard", "tooltip": "Which family of MiniMax H3 prompt presets the prompt writer uses."}),
-                "prompt_template": (templates, {"default": AUTOMATIC_TEMPLATE, "tooltip": "The prompt writer's template. Automatic picks the one of the mode (T2VA, I2VA, L2VA, FL2VA, Ref2VA) in the style set above."}),
+                "prompt_style": (list(PROMPT_STYLES), {"default": "standard", "tooltip": "Standard or NSFW templates, used only while the prompt template is automatic: a template you pick yourself is used as it is, whatever this says. An action preset makes it NSFW."}),
+                "prompt_template": (templates, {"default": AUTOMATIC_TEMPLATE, "tooltip": "The prompt writer's template, SFW and NSFW alike. A template you pick is used as it is, ignoring the style. Automatic picks the one of the mode (T2VA, I2VA, L2VA, FL2VA, Ref2VA) in the style set below."}),
                 "writer_creativity": ("FLOAT", {"default": 0.8, "min": 0.01, "max": 2.0, "step": 0.05, "tooltip": "The writer's temperature: how freely it words things. Lower sticks closer to your text."}),
                 "review_prompts": ("BOOLEAN", {"default": False, "tooltip": "Pause after each prompt is written: a panel lets you edit it, approve it, or have it written again. Needs the ComfyUI page open."}),
                 "writer_top_p": ("FLOAT", {"default": 0.95, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "The writer's top_p."}),
@@ -106,6 +107,10 @@ class PROMPTFORGE_H3Idea(_Settings):
                 "writer_repetition_penalty": ("FLOAT", {"default": 1.1, "min": 1.0, "max": 2.0, "step": 0.01, "tooltip": "The writer's repetition penalty. Too high makes it ramble into synonyms; 1.05 to 1.15 is the usual range."}),
                 "writer_max_tokens": ("INT", {"default": 2048, "min": 256, "max": 8192, "tooltip": "The longest prompt the writer may write. A prompt that runs to this limit has usually lost track; its runaway tail is cut."}),
                 "check_prompts": ("BOOLEAN", {"default": False, "tooltip": "Write the prompt again (new seed, up to 3 tries) when a check finds a problem: empty, repeated, a refusal, or wrong dialogue tags when you gave dialogue instructions. Off = the first answer is used. Every retry costs a full writing pass."}),
+                "action": ([h3_actions.NO_ACTION] + list(h3_actions.ACTIONS), {"default": h3_actions.NO_ACTION, "tooltip": "A solo act or a position (adults, NSFW template): the prompt writer writes the whole video prompt for it, from your idea if you wrote one. With several parts the action is spread over them. Needs the prompt writer on."}),
+                "camera_angle": ([h3_actions.ANY_CAMERA] + list(h3_actions.CAMERAS), {"default": h3_actions.ANY_CAMERA, "tooltip": "How the action is filmed. POV (the viewer is B) is what B sees."}),
+                "person_a": ("STRING", {"default": "", "tooltip": "Who A is: a reference picture such as <Picture 1>, or words (the blonde woman). Empty: <Picture 1> in reference mode, else the first person."}),
+                "person_b": ("STRING", {"default": "", "tooltip": "Who B is (the partner). Empty: <Picture 2> in reference mode, else the second person. Solo actions have no B."}),
             },
         }
 
@@ -231,8 +236,8 @@ class PROMPTFORGE_H3Sampling(_Settings):
                 "scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"default": "sgm_uniform"}),
                 "steps": ("INT", {"default": 8, "min": 1, "max": 200, "tooltip": "Steps of the first stage."}),
                 "cfg": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 30.0, "step": 0.1, "tooltip": "1 for turbo and distilled models."}),
-                "shift_video": ("FLOAT", {"default": 12.0, "min": 0.01, "max": 100.0, "step": 0.01, "tooltip": "Noise schedule shift of the video. 12 for MiniMax H3 turbo models; it is applied to the model, no shift node is needed."}),
-                "shift_audio": ("FLOAT", {"default": 3.0, "min": 0.01, "max": 100.0, "step": 0.01, "tooltip": "Noise schedule shift of the audio. 3 for MiniMax H3."}),
+                "shift_video": ("FLOAT", {"default": 12.0, "min": 0.0, "max": 100.0, "step": 0.01, "tooltip": "Noise schedule shift of the video. 12 for MiniMax H3 turbo models; it is applied to the model, no shift node is needed. 0 leaves the shift the model already has."}),
+                "shift_audio": ("FLOAT", {"default": 3.0, "min": 0.0, "max": 100.0, "step": 0.01, "tooltip": "Noise schedule shift of the audio. 3 for MiniMax H3. 0 leaves the shift the model already has."}),
             },
         }
 
@@ -258,6 +263,9 @@ class PROMPTFORGE_H3SecondStage(_Settings):
                 "steps": ("INT", {"default": 3, "min": 1, "max": 100, "tooltip": "Steps of the second stage."}),
                 "start_sigma": ("FLOAT", {"default": 0.9035, "min": 0.05, "max": 1.0, "step": 0.0005, "tooltip": "How much noise the upscaled latent gets before the second stage; the rest of the steps fall in a straight line to 0. 3 steps from 0.9035 are 0.9035, 0.6316, 0.3158, 0. Lower keeps more of the first stage."}),
                 "sampler_name": (comfy.samplers.KSampler.SAMPLERS, {"default": "er_sde", "tooltip": "Sampler of the second stage. er_sde adds a little fresh noise at every step, which cleans up the upscaled latent; euler does not."}),
+            },
+            "optional": {
+                "model": ("MODEL", {"tooltip": "Sample the second stage with this model instead of the generator's: for example the model without the LoRAs, when they spoil the upscaled picture. Not connected: the same model as the first stage."}),
             },
         }
 

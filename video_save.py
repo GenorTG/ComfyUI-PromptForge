@@ -181,7 +181,8 @@ class PROMPTFORGE_SaveVideo:
             shutil.rmtree(scratch, ignore_errors=True)
 
         preview = {"filename": filename, "subfolder": subfolder, "type": "output" if save_output else "temp"}
-        return {"ui": {"images": [preview], "animated": (True,), "promptforge_video": [preview]}}
+        info = f"{out_width}x{out_height} - {frame_rate:g} fps - {len(order)} frames ({len(order) / frame_rate:.1f} s) - {codec}, {bits}-bit - {'with sound' if audio is not None else 'no sound'} - {target.stat().st_size / 1024 ** 2:.1f} MB"
+        return {"ui": {"images": [preview], "animated": (True,), "promptforge_info": [info]}}
 
     def _encode(self, args, images, order, bits, total, grain):
         device = model_management.get_torch_device()

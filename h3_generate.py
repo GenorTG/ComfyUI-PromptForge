@@ -13,7 +13,6 @@ For every part:
 The models are released between these steps, so the language model, the diffusion model and the decoders never sit in
 VRAM together.
 """
-import base64
 import gc
 import importlib
 import json
@@ -38,7 +37,7 @@ from comfy_extras import nodes_audio, nodes_minimax_h3
 from comfy_extras.nodes_sparse_attention import BlockSparseAttention
 from comfy_extras.nodes_model_advanced import ModelAttentionBackend
 
-from . import empty_latent, h3_settings, h3_upscaler, minimax_decode, preview_override, sampler
+from . import empty_latent, h3_actions, h3_settings, h3_upscaler, minimax_decode, preview_override, sampler
 
 SPARSE_DENSE_BLOCKS = "0, 1"
 FPS = 24
@@ -270,13 +269,20 @@ class PROMPTFORGE_H3Generate:
         if mode == "reference video":
             context = max(5, context)
         width, height = empty_latent.resolve_size("aspect + megapixels", 0, 0, "", fmt["aspect_ratio"], fmt["megapixels"], fmt["orientation"], 32)
-        if perf["attention"] != "as connected":
-            model = ModelAttentionBackend.execute(model, perf["attention"]).args[0]
-        if int(perf["ffn_chunks"]) > 1:
-            model = chunk_feed_forward(model, int(perf["ffn_chunks"]))
-        model = nodes_minimax_h3.MiniMaxH3SigmaShift.execute(model, sampling["shift_video"], sampling["shift_audio"]).args[0]
-        if perf["sparse_attention"]:
-            model = BlockSparseAttention.execute(model, {"selection": "vsa", "keep_percent": perf["keep_percent"]}, 0.0, 1.0, SPARSE_DENSE_BLOCKS).args[0]
+        def prepare(patched):
+            if perf["attention"] != "as connected":
+                patched = ModelAttentionBackend.execute(patched, perf["attention"]).args[0]
+            if int(perf["ffn_chunks"]) > 1:
+                patched = chunk_feed_forward(patched, int(perf["ffn_chunks"]))
+            if sampling["shift_video"] and sampling["shift_audio"]:
+                patched = nodes_minimax_h3.MiniMaxH3SigmaShift.execute(patched, sampling["shift_video"], sampling["shift_audio"]).args[0]
+            if perf["sparse_attention"]:
+                patched = BlockSparseAttention.execute(patched, {"selection": "vsa", "keep_percent": perf["keep_percent"]}, 0.0, 1.0, SPARSE_DENSE_BLOCKS).args[0]
+            return patched
+
+        second_model = prepare(second["model"]) if second is not None and second.get("model") is not None else None
+        model = prepare(model)
+        second_model = second_model or model
 
         if several:
             total = max(1, int(parts["parts"]))
@@ -330,7 +336,18 @@ class PROMPTFORGE_H3Generate:
             frames = [(frame, name) for frame, name in zip(anchors(index), ("first", "last")) if frame is not None]
             return [frame for frame, _ in frames], [f"<Picture {number}> is the exact {name} frame of the video." for number, (_, name) in enumerate(frames, start=1)]
 
-        preset = story["prompt_template"] if story["prompt_template"] != h3_settings.AUTOMATIC_TEMPLATE else ("NSFW › " if story["prompt_style"] == "NSFW" else "") + PRESETS[kind]
+        action = story["action"] if story["action"] in h3_actions.ACTIONS and story["use_prompt_writer"] else None
+        if action:
+            person_a = story["person_a"].strip() or ("<Picture 1>" if kind == "REF2V" and len(pictures) > 0 else "the first person")
+            person_b = story["person_b"].strip() or ("<Picture 2>" if kind == "REF2V" and len(pictures) > 1 else "the second person")
+            block = h3_actions.brief(action, story["camera_angle"], person_a, person_b)
+            if several:
+                brief = f"{brief}\n\n{block}".strip()
+            for index, part in enumerate(plan):
+                if not part["text"].lower().startswith("raw:"):
+                    part["text"] = "\n".join(line for line in (part["text"], "" if several else block, h3_actions.stage(index, total)) if line)
+        nsfw = story["prompt_style"] == "NSFW" or action is not None
+        preset = story["prompt_template"] if story["prompt_template"] != h3_settings.AUTOMATIC_TEMPLATE else ("NSFW › " if nsfw else "") + PRESETS[kind]
 
         parts_frames, parts_audio, prompts, notes, report = [], [], [], [], []
         first_parts, first_waves, first_rate = [], [], 0
@@ -395,7 +412,7 @@ class PROMPTFORGE_H3Generate:
                         self._release()
                         first_pass = self._decode(latent_out, decode_vae, vae, audio_vae)
                     if second is not None:
-                        latent_out = self._second_stage(model, vae, audio_vae, positive, negative, latent_out, second, sampling, preview, unique_id, index, total, seed + index + 1000 * attempt + 7,
+                        latent_out = self._second_stage(second_model, vae, audio_vae, positive, negative, latent_out, second, sampling, preview, unique_id, index, total, seed + index + 1000 * attempt + 7,
                                                         kind, anchors(index), carried, mode, continuing, marks)
                     self._status(unique_id, f"Part {index + 1}/{total}: decoding")
                     self._release()
@@ -431,7 +448,6 @@ class PROMPTFORGE_H3Generate:
                     first_waves.append(first_audio[:, start:start + round(first_frames.shape[0] / FPS * int(first_pass[1]["sample_rate"]))])
                     first_rate = int(first_pass[1]["sample_rate"])
                     first_pass = None
-                self._show_part(unique_id, index, frames, int(preview["size"]))
                 marks["total"] = time.time() - clock
                 line = f"part {index + 1}/{total} ({frames.shape[2]}x{frames.shape[1]}, {frames.shape[0]} frames): " + ", ".join(f"{name} {value:.0f}s" for name, value in marks.items())
                 report.append(line)
@@ -538,16 +554,6 @@ class PROMPTFORGE_H3Generate:
             gc.collect()
             torch.cuda.empty_cache()
         return torch.cuda.mem_get_info()[0] / 1024 ** 3
-
-    @staticmethod
-    def _show_part(unique_id, index, frames, size):
-        """The finished part as a short clip in the node (not saved anywhere)."""
-        if unique_id is None:
-            return
-        scale = size / max(frames.shape[1], frames.shape[2])
-        shown = frames if scale >= 1 else comfy.utils.common_upscale(frames.movedim(-1, 1), round(frames.shape[2] * scale), round(frames.shape[1] * scale), "area", "disabled").movedim(1, -1)
-        mime, data = preview_override.encode((shown.clamp(0, 1) * 255).byte().numpy(), FPS, 80)
-        PromptServer.instance.send_sync("promptforge.part", {"node": str(unique_id), "index": index, "mime": mime, "image": base64.b64encode(data).decode()}, PromptServer.instance.client_id)
 
     def _stage(self, model, positive, negative, latent, seed, steps, sampling, preview, unique_id, label, custom_sigmas="", sampler_name=None):
         """One sampling stage, previewed in this node by PromptForge's preview override unless the preview is off (or left to ComfyUI)."""
