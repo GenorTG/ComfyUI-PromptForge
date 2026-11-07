@@ -54,7 +54,7 @@ DEFAULTS = {
     "continuity": {"how_parts_join": next(iter(JOIN_MODES)), "story_style": STORY_STYLES[0], "carried_frames": "22", "smooth_joins": True, "check_joins": False, "join_retries": 1},
     "sampling": {"sampler_name": "er_sde", "scheduler": "sgm_uniform", "steps": 8, "cfg": 1.0, "shift_video": 12.0, "shift_audio": 3.0},
     "second_stage": {"upscale_model": h3_upscaler.default_model(), "size_mode": h3_upscaler.MODES[0], "scale": 2.0, "megapixels": 1.0, "width": 1280, "height": 704, "align": 32,
-                    "precision": "fp16", "steps": 3, "start_sigma": 0.9035, "sampler_name": "er_sde", "return_first_pass": False},
+                    "precision": "fp16", "steps": 3, "start_sigma": 0.9035, "sampler_name": "er_sde"},
     "preview": {"mode": PREVIEW_MODES[0], "frames": 4, "fps": 8, "size": 512, "decoder": preview_decoder.default_decoder()},
     "performance": {"attention": ATTENTION[0], "ffn_chunks": 3, "sparse_attention": True, "keep_percent": 10.0},
     "continue_from": {},
@@ -258,7 +258,6 @@ class PROMPTFORGE_H3SecondStage(_Settings):
                 "steps": ("INT", {"default": 3, "min": 1, "max": 100, "tooltip": "Steps of the second stage."}),
                 "start_sigma": ("FLOAT", {"default": 0.9035, "min": 0.05, "max": 1.0, "step": 0.0005, "tooltip": "How much noise the upscaled latent gets before the second stage; the rest of the steps fall in a straight line to 0. 3 steps from 0.9035 are 0.9035, 0.6316, 0.3158, 0. Lower keeps more of the first stage."}),
                 "sampler_name": (comfy.samplers.KSampler.SAMPLERS, {"default": "er_sde", "tooltip": "Sampler of the second stage. er_sde adds a little fresh noise at every step, which cleans up the upscaled latent; euler does not."}),
-                "return_first_pass": ("BOOLEAN", {"default": False, "tooltip": "Also decode the first pass (before the upscale) and give it out of the generator's first_pass_frames / first_pass_audio outputs, so you can save the small version separately. Costs one more decode per part."}),
             },
         }
 

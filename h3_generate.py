@@ -210,12 +210,11 @@ def tail_audio(waveform, sample_rate, frames):
 class PROMPTFORGE_H3Generate:
     CATEGORY = h3_settings.CATEGORY
     FUNCTION = "generate"
-    OUTPUT_NODE = True
     RETURN_TYPES = ("IMAGE", "AUDIO", "STRING", "STRING", "IMAGE", "AUDIO")
     RETURN_NAMES = ("frames", "audio", "prompts", "report", "first_pass_frames", "first_pass_audio")
     DESCRIPTION = ("Makes a long MiniMax H3 video part by part and returns the frames and the sound; it does not save anything, so plug it into a save node. "
                    "What to make comes from the Idea node and the Modes node (and optionally Parts, References, Video Format, Continuity, Sampling, Second Stage, Live Preview, Speed and Memory); "
-                   "an unconnected settings node means its defaults. With the Second Stage set to return the first pass, the video of the first pass comes out of the last two outputs.")
+                   "an unconnected settings node means its defaults. The last two outputs give the first pass (before the upscale); it is only decoded when they are connected.")
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -242,11 +241,11 @@ class PROMPTFORGE_H3Generate:
                 "continue_from": ("PROMPTFORGE_H3_CONTINUE", {"tooltip": "An existing video to extend: the first part continues from its ending and the result starts with that video."}),
                 "decode_vae": ("VAE", {"tooltip": "Decode with this VAE instead of the video VAE, for example the MiniMax H3 2x detail decoder (the Loader's extra VAE). The frames then come out twice as large."}),
             },
-            "hidden": {"unique_id": "UNIQUE_ID"},
+            "hidden": {"unique_id": "UNIQUE_ID", "prompt": "PROMPT"},
         }
 
     def generate(self, model, clip, vae, audio_vae, writer, idea, seed, references=None, format=None, continuity=None, sampling=None, second_stage=None,
-                 preview=None, performance=None, continue_from=None, modes=None, parts=None, decode_vae=None, unique_id=None):
+                 preview=None, performance=None, continue_from=None, modes=None, parts=None, decode_vae=None, unique_id=None, prompt=None):
         story = h3_settings.settings("idea", idea)
         refs = h3_settings.settings("references", references)
         fmt = h3_settings.settings("format", format)
@@ -256,6 +255,7 @@ class PROMPTFORGE_H3Generate:
         second = h3_settings.settings("second_stage", second_stage) if second_stage is not None and modes["two_stage_upscale"] else None
         if not modes["extend_existing_video"] or (continue_from is not None and continue_from["video"] is None):
             continue_from = None
+        wants_first_pass = any(isinstance(link, list) and link[0] == str(unique_id) and link[1] in (4, 5) for node in (prompt or {}).values() for link in node["inputs"].values())
         preview = h3_settings.settings("preview", preview)
         perf = h3_settings.settings("performance", performance)
 
@@ -390,7 +390,7 @@ class PROMPTFORGE_H3Generate:
                     latent_out = self._guard("sampling", lambda: self._stage(model, positive, negative, latent, seed + index + 1000 * attempt, sampling["steps"], sampling, preview, unique_id, f"part {index + 1}, first stage"))
                     marks["sample"] = time.time() - clock_sample
                     first_pass = None
-                    if second is not None and second["return_first_pass"]:
+                    if second is not None and wants_first_pass:
                         self._status(unique_id, f"Part {index + 1}/{total}: decoding the first pass")
                         self._release()
                         first_pass = self._decode(latent_out, decode_vae, vae, audio_vae)
@@ -451,9 +451,13 @@ class PROMPTFORGE_H3Generate:
             parts_audio.insert(0, self._resample(old, parts_audio[0].shape[0], sample_rate, source.shape[0]))
         video = self._assemble(parts_frames)
         text = "\n\n".join(f"--- Part {number + 1} ---\n{prompt}" for number, prompt in enumerate(prompts))
-        first_video = self._assemble(first_parts) if first_parts else None
-        first_audio = {"waveform": torch.cat(first_waves, dim=1)[None], "sample_rate": first_rate} if first_waves else None
-        return (video, {"waveform": torch.cat(parts_audio, dim=1)[None], "sample_rate": sample_rate}, text, "\n".join(report), first_video, first_audio)
+        audio = {"waveform": torch.cat(parts_audio, dim=1)[None], "sample_rate": sample_rate}
+        if second is None:
+            first_video, first_audio = (video, audio) if wants_first_pass else (None, None)  # without a second stage the video is the first pass
+        else:
+            first_video = self._assemble(first_parts) if first_parts else None
+            first_audio = {"waveform": torch.cat(first_waves, dim=1)[None], "sample_rate": first_rate} if first_waves else None
+        return (video, audio, text, "\n".join(report), first_video, first_audio)
 
     def _guard(self, label, work):
         """Runs `work`; when the GPU runs out of memory everything is unloaded and it runs once more."""

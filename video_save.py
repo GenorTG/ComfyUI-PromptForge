@@ -125,7 +125,7 @@ class PROMPTFORGE_SaveVideo:
     def save(self, images, frame_rate, filename_prefix, codec, speed, rate_control, quality, bitrate_mbit, bit_depth,
              save_output, pingpong, save_metadata, audio=None, audio_bitrate_kbps=192, show_preview=True, loop_preview=True, autoplay_preview=True, film_grain=0.0, prompt=None, extra_pnginfo=None):
         if images is None:
-            print("[PromptForge] Save Video: nothing to save, its input is empty (for the first pass, switch return_first_pass on in the Second Stage node and keep the second stage on).")
+            print("[PromptForge] Save Video: nothing to save, its input is empty.")
             return {"ui": {}}
         count, height, width = (int(size) for size in images.shape[:3])
         bits = int(bit_depth)
@@ -181,7 +181,7 @@ class PROMPTFORGE_SaveVideo:
             shutil.rmtree(scratch, ignore_errors=True)
 
         preview = {"filename": filename, "subfolder": subfolder, "type": "output" if save_output else "temp"}
-        return {"ui": {"promptforge_video": [preview]}}
+        return {"ui": {"images": [preview], "animated": (True,), "promptforge_video": [preview]}}
 
     def _encode(self, args, images, order, bits, total, grain):
         device = model_management.get_torch_device()
