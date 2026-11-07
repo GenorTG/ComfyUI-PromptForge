@@ -2411,6 +2411,8 @@ class PROMPTFORGE_PromptEnhancer:
                 del model, processor, tokenizer
 
         import comfy.sd
+        if torch.cuda.is_available() and src_path.stat().st_size > torch.cuda.mem_get_info()[0] - 1.5 * 1024 ** 3:
+            print(f"[PromptForge] this writer file is {src_path.stat().st_size / 1024 ** 3:.1f} GB and only {torch.cuda.mem_get_info()[0] / 1024 ** 3:.1f} GB of VRAM is free: it streams from RAM and writes slowly. A smaller file (NVFP4, about 9 GB) or a GGUF is much faster.")
         try:
             clip_obj = comfy.sd.load_clip(ckpt_paths=[src])
         except Exception as exc:
