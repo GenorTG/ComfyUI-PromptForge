@@ -1809,6 +1809,7 @@ class PROMPTFORGE_PromptEnhancer:
         dialogue_language_other="",
         continuation="",
         context_video=None,
+        rules="",
         **kwargs,
     ):
         if enhancement_preset == "auto" and pipe:
@@ -1868,14 +1869,14 @@ class PROMPTFORGE_PromptEnhancer:
                 "of the desired state; never name them inside the prompt itself."
             )
         continuation_block = (continuation or "").strip() if minimax_key else ""
-        system_parts = [p for p in (sys_text, media_line, minimax_block, continuation_block, dialogue_block, negative_line, guard) if p and p.strip()]
+        system_parts = [p for p in (sys_text, media_line, minimax_block, continuation_block, dialogue_block, rules, negative_line, guard) if p and p.strip()]
         user_parts = [p for p in (user_text, duration_line) if p and p.strip()]
         system_prompt = "\n\n".join(system_parts)
         user_prompt = "\n\n".join(user_parts)
         full_prompt = "\n\n".join(p for p in (system_prompt, user_prompt) if p)
         self.last_request = {
             "preset": enhancement_preset, "mode": mode, "images": sum(value is not None for value in (image, image2, image3)), "video": video is not None, "user": user_prompt,
-            "sections": [(name, text) for name, text in (("media", media_line), ("MiniMax mode", minimax_block), ("continuation", continuation_block), ("dialogue", dialogue_block), ("negative prompt", negative_line),
+            "sections": [(name, text) for name, text in (("media", media_line), ("MiniMax mode", minimax_block), ("continuation", continuation_block), ("dialogue", dialogue_block), ("rules", rules), ("negative prompt", negative_line),
                                                           ("output rules", guard), ("template", sys_text)) if text and text.strip()],
         }
 

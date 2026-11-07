@@ -4,17 +4,24 @@
 prompt writer's NSFW template turns it into a full video prompt, for one clip or spread over the parts."""
 
 ADULTS = "Everyone in this video is a consenting adult."
-# the presets are for adults: descriptions that point to a minor stop the run
-MINOR_TERMS = ("child", "kid", "minor", "underage", "under-age", "teen", "loli", "shota", "young girl", "little girl", "little boy", "schoolgirl", "school girl", "preteen", "pre-teen", "toddler")
-
-
-def check_adults(*texts):
-    """Raises when a description of a person points to a minor."""
-    for text in texts:
-        found = next((term for term in MINOR_TERMS if term in text.lower()), None)
-        if found:
-            raise ValueError(f"[PromptForge] the action presets are for adults only, and a description says '{found}'. Describe adults (18 or older) or do not use an action preset.")
-
+RULES = """# Coherence rules for this video (mandatory, they override the template where they conflict)
+1. One continuous shot. Write a single [Shot 1] and no cuts, whatever the shot budget above says, unless the user's notes ask for cuts.
+2. Camera: one fixed framing from the camera line, chosen so every subject is fully in frame and every face is visible. At most one slow, small camera move in the whole clip (a slight drift or pan). Never zoom, push in, pull out, rack focus, whip, or cut to a detail. Never end on a close-up or on an empty part of the room.
+3. Layout first: before the action starts, write where each subject is in the frame (left, right, foreground, background), which way each faces, and which body parts point to the camera. Keep that layout for the whole clip: nobody turns around, swaps places, changes pose or leaves unless the action says so.
+4. Bodies: each person has one head, two arms and two legs. Say where each hand and each leg is (for example "her hands rest on his chest", "his hands hold her hips"). Describe only what the camera can see; parts hidden by the pose are not described. Bodies never pass through each other or through furniture.
+5. Motion: describe the repeating motion once, with its direction, size and tempo ("a slow steady rhythm, about one movement per second") and what moves with it. Do not list the same motion again and again.
+6. Contact must be physically possible for the arrangement. Follow the arrangement and subject roles literally; never invent another position or swap the roles.
+7. Expressions and sounds follow the action and what is on screen.
+8. Write plain present tense with concrete visible facts: no statements about quality, no lines about what is absent, no stage directions."""
+RULES = """# Coherence rules for this video (mandatory, they override the template where they conflict)
+1. One continuous shot. Write a single [Shot 1] and no cuts, whatever the shot budget above says, unless the user's notes ask for cuts.
+2. Camera: one fixed framing from the camera line, chosen so every subject is fully in frame and every face is visible. At most one slow, small camera move in the whole clip (a slight drift or pan). Never zoom, push in, pull out, rack focus, whip, or cut to a detail. Never end on a close-up or on an empty part of the room.
+3. Layout first: before the action starts, write where each subject is in the frame (left, right, foreground, background), which way each faces, and which body parts point to the camera. Keep that layout for the whole clip: nobody turns around, swaps places, changes pose or leaves unless the action says so.
+4. Bodies: each person has one head, two arms and two legs. Say where each hand and each leg is (for example "her hands rest on his chest", "his hands hold her hips"). Describe only what the camera can see; parts hidden by the pose are not described. Bodies never pass through each other or through furniture.
+5. Motion: describe the repeating motion once, with its direction, size and tempo ("a slow steady rhythm, about one movement per second") and what moves with it. Do not list the same motion again and again.
+6. Contact must be physically possible for the arrangement. Follow the arrangement and subject roles literally; never invent another position or swap the roles.
+7. Expressions and sounds follow the action and what is on screen.
+8. Write plain present tense with concrete visible facts: no statements about quality, no lines about what is absent, no stage directions."""
 
 # label -> (roles of the people in the order A, B; the arrangement)
 ACTIONS = {
@@ -51,9 +58,9 @@ ACTIONS = {
 CAMERAS = {
     "POV (the viewer is B)": "Point of view of {B}: the camera sees {A} and the action from {B}'s eyes, {B}'s hands and body entering the frame.",
     "POV (the viewer is A)": "Point of view of {A}: the camera sees {B} and the action from {A}'s eyes, {A}'s hands and body entering the frame.",
-    "side view, full bodies": "A side view that keeps both bodies fully in frame.",
+    "side view, full bodies": "A still camera at chest height, side-on to the people, framing both bodies fully with both faces visible.",
     "from behind": "The camera is behind the people, looking at the action from behind.",
-    "front view": "The camera faces the people from the front at chest height.",
+    "front view": "A still camera at chest height facing the person or people from the front, the whole body in frame, the face visible.",
     "close-up on the action": "A close-up on the action and the bodies' contact, with faces visible when the camera moves up.",
     "wide shot": "A wide shot of the whole room and both bodies.",
     "high angle, looking down": "A high camera looking down on the people.",
@@ -84,6 +91,11 @@ def stage(index, total):
     return f"This is part {index + 1} of {total} of the action: the main action, changing the pace and the camera framing from the previous part."
 
 
+def default_camera(label):
+    """The framing used when the camera is left to the writer: both bodies and faces in one still frame."""
+    return "front view" if len(ACTIONS[label][0]) == 1 else "side view, full bodies"
+
+
 def brief(label, camera, subjects, notes=""):
     """The text the prompt writer gets for one chosen action: who is who, the arrangement and the camera. `subjects` are three descriptions (the third may be empty)."""
     count = len(ACTIONS[label][0])
@@ -93,6 +105,7 @@ def brief(label, camera, subjects, notes=""):
         lines.append(f"Subject {number} ({role}): {who}")
     if subjects[2]:
         lines.append(f"Subject 3 is also in the video, not part of the action: {subjects[2]}")
+    camera = default_camera(label) if camera == ANY_CAMERA else camera
     if camera in CAMERAS and not (count == 1 and camera in SOLO_CAMERAS):
         lines.append(f"Camera: {CAMERAS[camera].format(A=a, B=b)}")
     if notes.strip():

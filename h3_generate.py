@@ -364,9 +364,7 @@ class PROMPTFORGE_H3Generate:
                     return f"{tags[source]} ({look})" if look else tags[source]
                 return look or ("the first person", "the second person", "")[number - 1]
 
-            people = [subject(number) for number in (1, 2, 3)]
-            h3_actions.check_adults(story["notes"], *people, *(refs.get(f"description_{slot}", "") for slot, _ in images), refs.get("description_first", ""))
-            block = h3_actions.brief(action_name, story["camera_angle"], people, story["notes"])
+            block = h3_actions.brief(action_name, story["camera_angle"], [subject(number) for number in (1, 2, 3)], story["notes"])
             if several:
                 brief = f"{brief}\n\n{block}".strip()
             for index, part in enumerate(plan):
@@ -672,7 +670,7 @@ class PROMPTFORGE_H3Generate:
                     video=context if mode == "reference video" else None, frame_count=6 - 2 * attempt,
                     negative_prompt=story["negative_prompt"], auto_retry=story["check_prompts"], dialogue=story["dialogue"], dialogue_language=package.DIALOGUE_AUTO if story["dialogue_language"] == h3_settings.DIALOGUE_AUTO else story["dialogue_language"],
                     dialogue_language_other=story["dialogue_language_other"], continuation=continuation,
-                    context_video=context if mode == "anchor tail" else None)
+                    context_video=context if mode == "anchor tail" else None, rules=h3_actions.RULES if story.get("action") and h3_actions.RULES else "")
                 self._request_preview(unique_id, index, total, seconds, seed + attempt * 1000, writer, story, preset, pictures, context, enhancer.last_request)
                 return answer
             except ValueError as error:

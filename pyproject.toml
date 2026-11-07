@@ -1,7 +1,7 @@
 [project]
 name = "ComfyUI-PromptForge"
 description = "ComfyUI prompt enhancement suite: model/config node with GPU-aware auto settings, prompt enhancer with a preset catalog, and a standalone config finder."
-version = "1.27.1"
+version = "1.27.2"
 license = { file = "LICENSE" }
 dependencies = [
     "transformers",
