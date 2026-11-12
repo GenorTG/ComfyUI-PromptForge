@@ -580,7 +580,7 @@ def _dialogue_block(instructions, language, other, seconds):
 Write every spoken line {where}. Only the spoken words are in that language; the rest of the prompt stays in English. The words are what a native speaker would really say, never a translation.
 
 Exact shape of every spoken line, copy it:
-the young woman with a quiet, breathy voice (S1) says: <d>[{name}] the spoken words in {name}</d>
+the woman with a quiet, breathy voice (S1) says: <d>[{name}] the spoken words in {name}</d>
 
 Rules, all mandatory:
 1. The words are wrapped in <d> and </d>. The closing </d> is never left out.
@@ -2793,7 +2793,7 @@ class PROMPTFORGE_PromptEnhancer:
         """Describe only the media that actually reached the node."""
         if mode == "text_only":
             return (
-                "# Provided inputs (authoritative)\n"
+                "# Provided inputs (what is attached)\n"
                 "No media is used in text_only mode. Write a text-only prompt. "
                 "Do not mention images, references, video, or frames."
             )
@@ -2815,16 +2815,17 @@ class PROMPTFORGE_PromptEnhancer:
             media.append(f"1 video ({frames} sampled frame{'s' if frames != 1 else ''})")
         if not media:
             return (
-                "# Provided inputs (authoritative)\n"
+                "# Provided inputs (what is attached)\n"
                 "No image or video is connected. Write a text-only prompt. "
                 "Do not mention images, references, video, or frames."
             )
         return (
-            "# Provided inputs (authoritative)\n"
+            "# Provided inputs (what is attached)\n"
             f"The only media connected to this node: {' and '.join(media)}. "
             "Nothing else is connected: no additional images, references, video, or frames. "
             "Write the prompt for exactly these inputs. Never mention, imply, reference, or invent "
-            "any other image, reference, video, frame, or media."
+            "any other image, reference, video, frame, or media. The user's text still wins on age, "
+            "body size, proportions, pose, act and camera; use the media for identity, face, hair and detail."
         )
 
     def _minimax_inputs(self, mode_key, mode, image, image2, image3, video, frame_count, seconds):

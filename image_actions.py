@@ -284,6 +284,8 @@ def brief(action, people, camera="auto", place="auto", lighting="auto", outfit="
         camera = "three-quarter side" if action in POSE_NOTES else "side view, full bodies"
     if camera != "auto":
         lines.append(f"Camera: {CAMERAS[camera]}")
+        if camera.startswith("POV"):
+            lines.append("POV overrides any 'face to the camera' in the action: the viewpoint holder's face stays out of frame.")
     if count == 2 and camera in CAMERA_STAGE:
         lines.append(f"Camera stage: {CAMERA_STAGE[camera]}")
     if lighting != "auto":

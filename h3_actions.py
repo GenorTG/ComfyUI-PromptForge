@@ -322,6 +322,8 @@ def brief(label, camera, subjects, notes="", penetration="vaginal"):
     camera = default_camera(label) if camera == ANY_CAMERA else camera
     if camera in CAMERAS and not (counts == 1 and camera in SOLO_CAMERAS):
         lines.append(f"Camera: {CAMERAS[camera].format(A=a, B=b)}")
+        if camera.startswith("POV"):
+            lines.append("The POV viewpoint holder's face never appears; only their body edge enters the frame.")
         if camera.startswith("POV") and penetration_modes(label):
             lines.append("In POV the shaft comes in from the bottom edge: angle the hips and lift the shaft so it enters the named hole; the other hole stays empty and beside it.")
     if notes.strip():

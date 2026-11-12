@@ -87,6 +87,19 @@ The writer settings (template, style, sampling, retries) are described under the
 `PromptForge_H3_AllInOne_Modes_v5.api.json` is already in `/prompt` format; the normal workflow stores the
 image picker as an extra leading widget, which order-based converters must skip.
 
+### Body and age sliders
+
+The base model treats body size loosely; a prompt alone cannot hold a flat chest or a narrow frame. These
+community sliders work on top of H3 and stack, so test one at a time at a low strength:
+
+- `HMBreastsV2.safetensors` — trigger `HMBreasts`, then plain size/shape words (`tiny`, `small`, `natural`, `perky`).
+- `ButtSlider_V1.safetensors` — signed; negative is smaller, positive larger.
+- `MM-H3 - Weight Slider.safetensors` — signed overall figure weight, roughly -5 to +5.
+- `Minimax_H3-Age_Slider` — age; use the `Ref2VA - Age Slider v2 - EXPERIMENTAL` file with reference modes.
+
+The first three are trained on the base model, not on reference mode, so reference conditioning can fight
+them. Keep the strength modest and keep the body words in the prompt exact.
+
 ## Shared node reference
 
 ### PromptForge Model (`PROMPTFORGE_Model`)
@@ -126,6 +139,9 @@ Takes the `MODEL` bundle and writes the prompt. Only generation inputs live here
 - **Auto-retry** (`auto_retry` toggle on the Prompt Enhancer, on by default; off keeps the first output): rejects empty, too-short, degenerate/repetitive, leaked-reasoning ("Okay, the user wants…"), refusal or broken-contract output and retries up to two more times with new seeds; if every try is a loop, the longest one is returned with repeated sentences removed. Status lines name the reason (too short, repetitive, reasoning leak, refusal, negative wording). Outputs under 400 chars (40 for refine/technical presets, 400 for the Anima tag preset, 2 characters per word of the applied cap) count as too short.
 - **Repetition guard**: the sampler is only stopped on an unmistakable 12-gram loop; repeated sentences and repeated 5–10 word phrases are rejected afterwards. Qwen3-VL runs at its tuned 0.7 / 0.8 / 20 / 1.0 with presence penalty 1.5; a hard `no_repeat_ngram_size` is not forced, because it distorts long structured prompts.
 - **Negative prompt**: a non-empty `negative_prompt` feeds exclusions into the generation request so the model writes around them instead of naming them.
+- **Text beats pictures**: the user's prompt and action block win on age, body size, proportions, clothing state, pose, act and camera. Images supply identity and detail; a caption's guesses never override a direct user word.
+- **Size fidelity**: size words are exact (`flat`, `small`, `narrow`, `skinny`, `slim`, `full`, `thick`, `curvy`), never promoted to a safer synonym or hedged with “average”. A requested size difference is carried by relative height, width, hands and how the larger body covers or lifts the smaller one.
+- **Camera fidelity**: the chosen camera is written as its exact geometry. POV is the viewer's eyes with their face out of frame and only their body edge at the lower border, never a neutral full-body shot.
 - **No embellishment**: every preset forbids unrequested moisture (sweat, wetness, droplets, sheen) and forbids inventing subjects, actions or scene changes.
 - **No negatives in the positive prompt**: Krea 2, Qwen Image and MiniMax H3 run at distilled CFG where negatives are weak or ignored; MOSS Image / Anima have a separate negative prompt. Presets require positive-only wording; the node retries if classic negative-prompt vocabulary appears ("no blurry", "without watermark", "avoid extra fingers"). Ordinary wording such as "no people" is accepted.
 - **Chat templates**: GGUF text generation renders the model's own `tokenizer.chat_template` with `enable_thinking=false` (Qwen3/3.5 empty think block, Gemma 4 primed thought channel) and runs a plain completion, so thinking models answer directly. Models without a template fall back to a family format (Gemma, Llama-3, ChatML/Qwen, Mistral) with the llama.cpp reasoning budget set to zero. Prompts are sent as a real system turn plus a user turn. The connected-CLIP route passes the preset as the encoder's `system_prompt` (same contract as ComfyUI's Generate Text node) and wraps the turns in ChatML itself for encoders whose tokenizer has no chat template. Output cleanup strips role markers across all engines.
@@ -149,7 +165,7 @@ Standalone output node; it never generates a prompt.
 RIFE / FILM frame interpolation for large frames (for example the 2x-decoded MiniMax output) that backs off by itself instead of crashing ComfyUI. It uses ComfyUI's own interpolation models, so no other node pack is needed.
 
 - **`ckpt_name`**: every model in `models/frame_interpolation` (RIFE 4.25+, FILM), plus `blend`, a plain cross-fade that needs no model and is instant (ghosts on motion). Older RIFE `.pth` files (rife47 / 49 / 417) are not supported by ComfyUI's loader.
-- When the whole clip does not fit in memory it is interpolated in shorter overlapping runs (down to 4 frames), and what is still too much is cross-faded. The clip's RAM need is checked up front.
+- **`batch_size`, `overlap`, `scale`, `clear_cache`**: the whole clip runs in one piece by default (`batch_size 0`), which gives the cleanest motion. If memory is tight, `batch_size` splits it, `overlap` shares context frames and cross-fades the seam, `scale` interpolates smaller and scales back, and `clear_cache` releases memory between runs. OOM still backs off automatically (down to 4 frames), then cross-fades.
 
 ### PromptForge Save Video (`PROMPTFORGE_SaveVideo`)
 

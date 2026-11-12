@@ -9,6 +9,7 @@ import gc
 
 import psutil
 import torch
+import torch.nn.functional as F
 
 import comfy.model_management as model_management
 import comfy.model_patcher
@@ -20,7 +21,6 @@ from comfy_extras.nodes_frame_interpolation import FrameInterpolate, FrameInterp
 BLEND = "blend (no model, instant)"
 NO_CKPT = "(no frame interpolation model found)"
 MIN_RUN = 4
-RUN = 24
 
 
 def _checkpoints():
@@ -54,19 +54,29 @@ class PROMPTFORGE_FrameInterpolate:
                 "frames": ("IMAGE",),
                 "multiplier": ("INT", {"default": 2, "min": 2, "max": 8, "tooltip": "2 doubles the frame count, 3 triples it, and so on."}),
                 "ckpt_name": (names + [BLEND], {"default": preferred, "tooltip": "RIFE or FILM model. blend is a plain cross-fade: instant, no model, ghosting on motion."}),
-            }
+            },
+            "optional": {
+                "batch_size": ("INT", {"default": 0, "min": 0, "max": 240, "tooltip": "Frames per model run. 0 = the whole clip in one run (best continuity). Only lower it if memory is tight; runs are shortened further on OOM."}),
+                "overlap": ("INT", {"default": 2, "min": 1, "max": 12, "tooltip": "Context frames shared by neighbouring runs when the clip is split. More overlap cross-fades a wider seam at chunk boundaries."}),
+                "scale": ("FLOAT", {"default": 1.0, "min": 0.25, "max": 1.0, "step": 0.05, "tooltip": "Interpolate at a smaller size, then scale back. 0.5 is much faster and uses far less memory; fine detail softens."}),
+                "clear_cache": ("BOOLEAN", {"default": True, "tooltip": "Empty the cache after each run when the clip is split. Off is slightly faster, on is safer on low VRAM."}),
+            },
         }
 
     RETURN_TYPES = ("IMAGE",)
     FUNCTION = "interpolate"
     CATEGORY = "🔮 PromptForge/Video"
-    DESCRIPTION = "RIFE / FILM frame interpolation with ComfyUI's own models that interpolates in shorter runs, or cross-fades, instead of running out of memory."
+    DESCRIPTION = "RIFE / FILM frame interpolation with ComfyUI's own models, with a run size, overlap, scale and cache control; splits only when needed and cross-fades the seams."
 
-    def interpolate(self, frames, multiplier, ckpt_name):
+    def interpolate(self, frames, multiplier, ckpt_name, batch_size=0, overlap=2, scale=1.0, clear_cache=True):
         count = int(frames.shape[0])
         if count < 2:
             return (frames,)
         frames = frames[..., :3]
+        if scale < 1.0:
+            height, width = frames.shape[1:3]
+            small = (max(2, round(height * scale / 2) * 2), max(2, round(width * scale / 2) * 2))
+            frames = F.interpolate(frames.movedim(-1, 1), size=small, mode="bilinear", align_corners=False).movedim(1, -1)
         total = (count - 1) * multiplier + 1
         available = psutil.virtual_memory().available
         values = total * frames.shape[1] * frames.shape[2] * 3
@@ -76,13 +86,14 @@ class PROMPTFORGE_FrameInterpolate:
         out = torch.empty((total, *frames.shape[1:]), dtype=dtype)
         if ckpt_name == BLEND:
             out.copy_(_blend(frames, multiplier))
+            out = F.interpolate(out.movedim(-1, 1), size=(height, width), mode="bilinear", align_corners=False).movedim(1, -1) if scale < 1.0 else out
             return (out,)
         paths = _checkpoints()
         if ckpt_name not in paths:
             raise ValueError("[PromptForge] no frame interpolation model was found. Put a RIFE 4.25+ or FILM model in models/frame_interpolation (for example rife_v4.26.safetensors), or choose blend.")
         patcher = _load(paths[ckpt_name])
 
-        start, span, filled = 0, min(count, RUN), 0
+        start, span, filled, written_end = 0, min(count, batch_size) if batch_size else count, 0, 0
         pbar = comfy.utils.ProgressBar(count - 1)
         while start < count - 1:
             model_management.throw_exception_if_processing_interrupted()
@@ -99,14 +110,29 @@ class PROMPTFORGE_FrameInterpolate:
                     continue
                 print("[PromptForge] frame interpolation ran out of memory even in short runs; cross-fading the rest.")
                 result = _blend(run, multiplier)
-            result = result if filled == 0 else result[1:]
-            out[filled:filled + len(result)] = result
-            filled += len(result)
+            if filled == 0:
+                out[filled:filled + len(result)] = result
+                filled += len(result)
+            else:
+                shared = (written_end - 1 - start) * multiplier + 1
+                head = result[:shared]
+                tail = result[shared:]
+                weights = torch.arange(1, shared + 1, dtype=head.dtype).view(-1, 1, 1, 1) / shared
+                before = out[filled - shared:filled]
+                out[filled - shared:filled] = before * (1 - weights) + head * weights
+                out[filled:filled + len(tail)] = tail
+                filled += len(tail)
+            written_end = end
             pbar.update(end - 1 - start)
-            start = end - 1
+            start = min(end - 1, max(start + 1, end - 1 - overlap))
+            if clear_cache:
+                gc.collect()
+                model_management.soft_empty_cache()
         del patcher
         gc.collect()
         model_management.soft_empty_cache()
+        if scale < 1.0:
+            out = F.interpolate(out.movedim(-1, 1), size=(height, width), mode="bilinear", align_corners=False).movedim(1, -1)
         return (out,)
 
 
