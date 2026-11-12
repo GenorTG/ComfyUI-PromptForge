@@ -1,0 +1,4 @@
+.env
+node.zip
+__pycache__/
+workflows/

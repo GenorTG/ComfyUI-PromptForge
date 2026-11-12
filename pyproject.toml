@@ -1,0 +1,30 @@
+[project]
+name = "ComfyUI-PromptForge"
+description = "ComfyUI model workflow suite: model, LoRA and media loaders, prompt enhancement with per-family presets, encoding, sampling, upscaling and saving."
+version = "1.29.8"
+license = { file = "LICENSE" }
+dependencies = [
+    "transformers",
+    "torch",
+    "huggingface-hub",
+    "hf_xet",
+    "psutil",
+    "numpy",
+    "Pillow",
+    "bitsandbytes",
+    "accelerate",
+    "llama-cpp-python",
+    "imageio-ffmpeg",
+    "gguf>=0.13.0",
+    "flash-linear-attention",
+]
+
+[project.urls]
+Repository = "https://github.com/GenorTG/ComfyUI-PromptForge"
+
+[tool.comfy]
+PublisherId = "genortg"
+DisplayName = "PromptForge: Model Workflow Suite"
+Icon = "https://raw.githubusercontent.com/GenorTG/ComfyUI-PromptForge/main/icon.png"
+Banner = "https://raw.githubusercontent.com/GenorTG/ComfyUI-PromptForge/main/banner.png"
+Category = "video"
