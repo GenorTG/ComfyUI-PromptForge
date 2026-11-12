@@ -1,7 +1,7 @@
 [project]
 name = "ComfyUI-PromptForge"
 description = "ComfyUI model workflow suite: model, LoRA and media loaders, prompt enhancement with per-family presets, encoding, sampling, upscaling and saving."
-version = "1.29.9"
+version = "1.29.10"
 license = { file = "LICENSE" }
 dependencies = [
     "transformers",
