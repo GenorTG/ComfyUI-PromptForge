@@ -1990,6 +1990,7 @@ class PROMPTFORGE_PromptEnhancer:
                 "continuation": ("STRING", {"default": "", "multiline": True, "tooltip": "Video presets only (MiniMax H3). A continuation brief added to the system prompt; the Endless Video node fills this in."}),
                 "context_video": ("IMAGE", {"tooltip": "Video presets only (MiniMax H3). Frames the generator will start from. The model looks at them to continue the action, but they are never cited as <Video 1>."}),
                 "rules": ("STRING", {"default": "", "multiline": True, "tooltip": "Video presets only (MiniMax H3). Extra binding rules appended to the system prompt, for example the one-shot action rules of the H3 Generate node."}),
+                "frame_info": ("STRING", {"default": "", "tooltip": "FRAME_INFO from the Empty Latent node. Tells the writer the target aspect ratio so it plans a composition that fits the frame."}),
                 "action": ("PROMPTFORGE_ACTION", {"tooltip": "From a PromptForge Action node: a pose, place, camera, light and outfit as a binding brief."}),
                 "use_action": ("BOOLEAN", {"default": True, "tooltip": "Off ignores the connected Action node and writes from your own text alone; use it for custom scenes while the node stays connected."}),
                 "length_words": ("INT", {"default": 0, "min": 0, "max": 10000, "tooltip": "Hard output cap in words (tags for Anima). 0 = automatic for the preset: Krea 220, Krea edit 220, MOSS 320, MOSS edit 80, Qwen 380, Qwen edit 160, Anima 150 tags, H3 750-900. Set a number to override."}),
@@ -2029,6 +2030,7 @@ class PROMPTFORGE_PromptEnhancer:
         continuation="",
         context_video=None,
         rules="",
+        frame_info="",
         action=None,
         use_action=True,
         length_words=0,
@@ -2102,6 +2104,11 @@ class PROMPTFORGE_PromptEnhancer:
                 "of the desired state; never name them inside the prompt itself."
             )
         continuation_block = (continuation or "").strip() if minimax_key else ""
+        frame_info = (frame_info or "").strip()
+        frame_line = ""
+        if frame_info:
+            frame_line = ("# Target frame\n" + frame_info + ". Plan the bodies for this shape: a portrait frame fits standing, sitting, kneeling, stacked or POV bodies; "
+                          "a landscape frame fits lying side by side, horizontal or wide arrangements. Turn the arrangement if it cannot fit, and keep heads, faces and feet inside the frame.")
         is_tags = "tags" in (enhancement_preset or "").lower()
         length_cap = _output_cap(DEFAULT_PRESET if enhancement_preset == "auto" else enhancement_preset, video_seconds)
         length_auto = int(length_words or 0) <= 0
@@ -2114,7 +2121,7 @@ class PROMPTFORGE_PromptEnhancer:
             length_line = (f"# Output length\nHard limit: at most {length_cap} {unit}. "
                            + ("Set by the user; " if not length_auto else "Chosen for this model family; ")
                            + "aim for the range in the output section and compress detail to fit. Never drop a requested element.")
-        system_parts = [p for p in (sys_text, length_line, media_line, minimax_block, continuation_block, dialogue_block, rules, negative_line, guard) if p and p.strip()]
+        system_parts = [p for p in (sys_text, length_line, frame_line, media_line, minimax_block, continuation_block, dialogue_block, rules, negative_line, guard) if p and p.strip()]
         action_active = bool(action_block)
         user_parts = [p for p in ("" if action_active else user_text, action_block, duration_line) if p and p.strip()]
         system_prompt = "\n\n".join(system_parts)
@@ -2122,7 +2129,7 @@ class PROMPTFORGE_PromptEnhancer:
         full_prompt = "\n\n".join(p for p in (system_prompt, user_prompt) if p)
         self.last_request = {
             "preset": enhancement_preset, "mode": mode, "images": sum(value is not None for value in (image, image2, image3)), "video": video is not None, "user": user_prompt,
-            "sections": [(name, text) for name, text in (("media", media_line), ("MiniMax mode", minimax_block), ("continuation", continuation_block), ("dialogue", dialogue_block), ("rules", rules), ("negative prompt", negative_line),
+            "sections": [(name, text) for name, text in (("media", media_line), ("frame", frame_line), ("MiniMax mode", minimax_block), ("continuation", continuation_block), ("dialogue", dialogue_block), ("rules", rules), ("negative prompt", negative_line),
                                                           ("output rules", guard), ("template", sys_text)) if text and text.strip()],
         }
 

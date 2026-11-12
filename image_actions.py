@@ -175,8 +175,8 @@ CAMERAS = {
     "top-down": "Camera directly overhead, the body flat against the floor or bed and the limbs spread into the frame.",
     "dutch angle": "Camera tilted fifteen to thirty degrees off level, the horizon or verticals running diagonally.",
     "over the shoulder, tight": "Camera close behind the near person's shoulder, the far person sharp and the near shoulder soft at the edge.",
-    "POV (the viewer is A)": "Strict first-person POV of A: the camera sits at A's eye height and tilts down along A's own body, so A's chest, stomach and hips fill the lower third of the frame. B is at arm's length with the whole torso and hips inside the frame, contact visible, A's hands may enter. A's face stays out. This is a medium-wide POV, not a macro close-up.",
-    "POV (the viewer is B)": "Strict first-person POV of B: the camera sits at B's eye height and tilts down along B's own body, so B's chest, stomach and hips fill the lower third of the frame. A is at arm's length with the whole torso and hips inside the frame, contact visible, B's hands may enter. B's face stays out. This is a medium-wide POV, not a macro close-up.",
+    "POV (the viewer is A)": "Strict first-person POV of A: the camera sits at A's eye height and tilts down along A's own body, so A's chest, stomach and hips fill the lower third of the frame. B is at arm's length with the whole torso and hips inside the frame, contact visible, B's whole head and face fully inside the upper part of the frame, A's hands may enter; never crop B's head. A's face stays out. This is a medium-wide POV, not a macro close-up.",
+    "POV (the viewer is B)": "Strict first-person POV of B: the camera sits at B's eye height and tilts down along B's own body, so B's chest, stomach and hips fill the lower third of the frame. A is at arm's length with the whole torso and hips inside the frame, contact visible, A's whole head and face fully inside the upper part of the frame, B's hands may enter; never crop A's head. B's face stays out. This is a medium-wide POV, not a macro close-up.",
     "handheld, slight tilt": "Handheld framing with a slight roll and off-centre horizon, as if shot at arm's length.",
     "locked off, dead level": "Static camera at chest height, dead level, perfectly centred and symmetrical.",
     "wide environmental": "Wide framing with the subject small in a large, fully visible room.",
@@ -294,7 +294,7 @@ def brief(action, people, camera="auto", place="auto", lighting="auto", outfit="
     if camera != "auto":
         lines.append(f"Camera: {CAMERAS[camera]}")
         if camera.startswith("POV"):
-            lines.append("POV overrides any 'face to the camera' in the action: the viewpoint holder's face stays out, their chest and stomach stay in the lower third, and the framing stays wide enough for the other whole torso.")
+            lines.append("POV overrides any 'face to the camera' in the action: the viewpoint holder's face stays out, their chest and stomach stay in the lower third, the other whole torso and their whole head and face stay in frame, and the framing stays medium-wide.")
     if count == 2 and camera in CAMERA_STAGE:
         lines.append(f"Camera stage: {CAMERA_STAGE[camera]}")
     if lighting != "auto":
@@ -309,7 +309,7 @@ def brief(action, people, camera="auto", place="auto", lighting="auto", outfit="
         lines.append(f"Overrides: {overrides.strip()}")
     if count == 2:
         if action.startswith("Sex - "):
-            lines.append("Her body stays whole under him: his hips sit between, behind or above her thighs, never inside her torso. Show the point where the bodies join, with the penetration visible: where the shaft meets her body, how far it is outside her, and how the labia sit around its base.")
+            lines.append("Her body stays whole under him: his hips sit between, behind or above her thighs, never inside her torso. Show the join with exact anatomy: the shaft enters the named opening, the labia grip the shaft, the clitoris stays visible above, and some shaft stays outside her. Never let the shaft merge into the belly or thigh.")
         else:
             lines.append("Show the point of contact between the two bodies clearly.")
     if action in POSE_NOTES:

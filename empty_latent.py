@@ -61,6 +61,15 @@ def snap_frames(family_key, frames):
     return max(1, math.ceil((frames - 1) / step) * step + 1)
 
 
+def frame_info(width, height, kind, count):
+    """What the prompt writer needs to plan a composition that fits."""
+    from math import gcd
+    divisor = gcd(int(width), int(height))
+    orientation = "portrait" if height > width else "landscape" if width > height else "square"
+    ratio = f"{width // divisor}:{height // divisor}"
+    return f"{width}x{height} px, {ratio} {orientation}, {kind}" + (f", {count} frames" if kind == "video" else "")
+
+
 class PROMPTFORGE_EmptyLatent:
     @classmethod
     def INPUT_TYPES(cls):
@@ -90,8 +99,8 @@ class PROMPTFORGE_EmptyLatent:
             },
         }
 
-    RETURN_TYPES = ("LATENT", "INT", "INT", "INT", "STRING")
-    RETURN_NAMES = ("LATENT", "WIDTH", "HEIGHT", "FRAMES", "INFO")
+    RETURN_TYPES = ("LATENT", "INT", "INT", "INT", "STRING", "STRING")
+    RETURN_NAMES = ("LATENT", "WIDTH", "HEIGHT", "FRAMES", "INFO", "FRAME_INFO")
     FUNCTION = "make"
     CATEGORY = "🔮 PromptForge/Sampling"
     DESCRIPTION = "Empty latent for any model family: custom size, preset or aspect ratio + megapixels, image or video."
@@ -129,7 +138,7 @@ class PROMPTFORGE_EmptyLatent:
             latent = nodes.NODE_CLASS_MAPPINGS["EmptyMiniMaxH3LatentAV"].execute(width, height, count).args[0]
             if batch_size > 1:
                 raise ValueError("[PromptForge] MiniMax H3 latents are made one at a time (batch_size 1).")
-            return (latent, width, height, count, f"{width}x{height}, {count} frames (MiniMax H3 grid)")
+            return (latent, width, height, count, f"{width}x{height}, {count} frames (MiniMax H3 grid)", frame_info(width, height, kind, count))
 
         shape = [batch_size, latent_format.latent_channels, height // ratio, width // ratio]
         if kind == "video":
@@ -137,7 +146,8 @@ class PROMPTFORGE_EmptyLatent:
         samples = torch.zeros(shape, device=model_management.intermediate_device(), dtype=model_management.intermediate_dtype())
         latent = {"samples": samples, "downscale_ratio_spacial": ratio}
         label = chosen.label if chosen else type(latent_format).__name__
-        return (latent, width, height, count, f"{label}: {width}x{height}" + (f" ({aspect_ratio} {orientation})" if randomize_ratio or randomize_orientation else "") + (f", {count} frames" if kind == "video" else "") + f" -> latent {list(samples.shape)}")
+        return (latent, width, height, count, f"{label}: {width}x{height}" + (f" ({aspect_ratio} {orientation})" if randomize_ratio or randomize_orientation else "") + (f", {count} frames" if kind == "video" else "") + f" -> latent {list(samples.shape)}",
+                frame_info(width, height, kind, count))
 
 
 NODE_CLASS_MAPPINGS = {"PROMPTFORGE_EmptyLatent": PROMPTFORGE_EmptyLatent}
