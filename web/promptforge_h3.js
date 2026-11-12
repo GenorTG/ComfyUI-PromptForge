@@ -13,6 +13,7 @@ const REFERENCES = "PROMPTFORGE_H3References";
 const LIBRARY = "PROMPTFORGE_PromptLibrary";
 const SUBJECT_DISABLED = "disabled (not in the video)";
 const ANY_CAMERA = "(writer's choice)";
+const RANDOM = "random";
 // the description box of a slot is shown only while its picture / video / sound is connected and the description is not itself wired
 const DESCRIPTIONS = { description_: "image_", video_description_: "video_", audio_description_: "audio_" };
 const SIZE_WIDGETS = { "scale by multiplier": ["scale"], megapixels: ["megapixels"], "target dimensions": ["width", "height"] };
@@ -211,6 +212,7 @@ app.registerExtension({
     const node = (event) => app.graph.getNodeById(Number(event.detail.node));
     api.addEventListener("promptforge.prompt", (event) => node(event)?.promptforgeShowPrompt?.(event.detail));
     api.addEventListener("promptforge.request", (event) => node(event)?.promptforgeShowRequest?.(event.detail));
+    api.addEventListener("promptforge.random", (event) => node(event)?.promptforgeShowRandom?.(event.detail));
   },
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name === SECOND_STAGE) {
@@ -358,7 +360,9 @@ app.registerExtension({
         const action = find("action");
         const category = find("category");
         const penetration = find("penetration");
-        const allActions = [...(action.options?.values || [])];
+        const cameraWidget = find("camera_angle");
+        const allActions = [...(action.options?.values || [])].filter((value) => value !== RANDOM);
+        const allCameras = [...(cameraWidget?.options?.values || [])].filter((value) => value !== RANDOM && value !== ANY_CAMERA);
         node.widgets.splice(node.widgets.indexOf(roles), 1);
         node.widgets.splice(node.widgets.indexOf(action) + 1, 0, roles);
         const nameFor = (gender, index, list = []) => {
@@ -371,29 +375,31 @@ app.registerExtension({
         let known = null;
         const refresh = async () => {
           known = known || await (await api.fetchApi("/promptforge/actions")).json();
-          const values = allActions.filter((value) => known[value]?.category === category.value);
-          action.options = { ...(action.options || {}), values };
-          if (!values.includes(action.value) && values.length) action.value = values[0];
+          const scattered = category.value === RANDOM || action.value === RANDOM;
+          const values = category.value === RANDOM ? allActions : allActions.filter((value) => known[value]?.category === category.value);
+          action.options = { ...(action.options || {}), values: [RANDOM, ...values] };
+          if (action.value !== RANDOM && !values.includes(action.value) && values.length) action.value = values[0];
           const entry = known[String(action.value)] || { roles: [] };
           const list = entry.roles || [];
-          const modes = entry.penetration || [];
+          const modes = scattered ? ["vaginal", "anal"] : (entry.penetration || []);
           if (penetration) {
             setShown(penetration, modes.length > 0);
             if (modes.length) {
-              penetration.options = { ...(penetration.options || {}), values: modes };
-              if (!modes.includes(penetration.value)) penetration.value = String(action.value).toLowerCase().includes("anal") ? "anal" : modes[0];
+              penetration.options = { ...(penetration.options || {}), values: scattered ? [RANDOM, ...modes] : modes };
+              if (!penetration.options.values.includes(penetration.value)) penetration.value = String(action.value).toLowerCase().includes("anal") ? "anal" : modes[0];
             }
           }
-          const camera = find("camera_angle");
-          if (camera) {
-            const values = [ANY_CAMERA, ...(entry.cameras || [])];
-            camera.options = { ...(camera.options || {}), values };
-            if (!values.includes(camera.value)) camera.value = values[0];
+          if (cameraWidget) {
+            const values = [RANDOM, ANY_CAMERA, ...(scattered ? allCameras : (entry.cameras || []))];
+            cameraWidget.options = { ...(cameraWidget.options || {}), values };
+            if (!values.includes(cameraWidget.value)) cameraWidget.value = ANY_CAMERA;
           }
           const shape = entry.aspect === "9:16" ? "portrait" : "landscape";
-          label.innerHTML = list.map((item, index) => `<b>${nameFor(item.gender, index, list)}</b>: ${item.role}`).join("<br>")
+          label.innerHTML = (scattered ? "<b>Random</b>: the act is rolled when the prompt is written<br>" : "")
+            + list.map((item, index) => `<b>${nameFor(item.gender, index, list)}</b>: ${item.role}`).join("<br>")
             + (entry.aspect ? `<br><b>Frame</b>: ${entry.aspect} (${shape})` : "")
-            + "<br><b>Extra</b>: a person in the video but not in the act (optional)";
+            + "<br><b>Extra</b>: a person in the video but not in the act (optional)"
+            + (node.promptforgeRandomText ? `<br><b>${node.promptforgeRandomText}</b>` : "");
           for (let number = 1; number <= 3; number++) {
             const used = number <= list.length || number === 3;
             const gender = list[number - 1]?.gender;
@@ -432,6 +438,7 @@ app.registerExtension({
         const callback = action.callback;
         action.callback = (...args) => { callback?.apply(action, args); refresh(); };
         node.promptforgeRefreshAction = refresh;
+        node.promptforgeShowRandom = ({ picks }) => { node.promptforgeRandomText = picks.length ? "Rolled: " + picks.map(([name, value]) => `${name} = ${value}`).join(", ") : ""; refresh(); };
         refresh();
         node.promptforgeRestoreActionSize();
       };
@@ -563,13 +570,26 @@ app.registerExtension({
       const category = find("category");
       const actionWidget = find("action");
       const penetration = find("penetration");
+      const cameraWidget = find("camera_angle");
+      const allCameras = [...(cameraWidget?.options?.values || [])].filter((value) => value !== RANDOM && value !== ANY_CAMERA);
       let known = null;
       const filter = async () => {
         if (!known) known = await (await api.fetchApi("/promptforge/actions")).json();
-        const values = Object.keys(known).filter((value) => known[value].category === category.value);
-        actionWidget.options = { ...(actionWidget.options || {}), values };
-        if (!values.includes(actionWidget.value) && values.length) actionWidget.value = values[0];
-        if (penetration) setShown(penetration, (known[actionWidget.value]?.penetration || []).length > 0);
+        const scattered = category.value === RANDOM || actionWidget.value === RANDOM;
+        const values = category.value === RANDOM ? Object.keys(known) : Object.keys(known).filter((value) => known[value].category === category.value);
+        actionWidget.options = { ...(actionWidget.options || {}), values: [RANDOM, ...values] };
+        if (actionWidget.value !== RANDOM && !values.includes(actionWidget.value) && values.length) actionWidget.value = values[0];
+        const modes = scattered ? ["vaginal", "anal"] : (known[actionWidget.value]?.penetration || []);
+        if (penetration) {
+          setShown(penetration, modes.length > 0);
+          if (modes.length) penetration.options = { ...(penetration.options || {}), values: scattered ? [RANDOM, ...modes] : modes };
+        }
+        if (cameraWidget) {
+          const pool = scattered ? allCameras : (known[actionWidget.value]?.cameras || []);
+          const cameras = [RANDOM, ANY_CAMERA, ...pool];
+          cameraWidget.options = { ...(cameraWidget.options || {}), values: cameras };
+          if (!cameras.includes(cameraWidget.value)) cameraWidget.value = ANY_CAMERA;
+        }
         node.setDirtyCanvas(true, true);
       };
       category.callback = ((original) => (...args) => { original?.apply(category, args); filter(); })(category.callback);
@@ -583,13 +603,14 @@ app.registerExtension({
       frame.addEventListener("pointerdown", (event) => event.stopPropagation());
       root.addEventListener("wheel", (event) => event.stopPropagation());
 
+      const randomLine = el("div", { opacity: ".85", flex: "0 0 auto" });
       const header = el("div", { display: "flex", alignItems: "center", gap: "6px", flex: "0 0 auto" });
       const minus = el("button", { cursor: "pointer", width: "24px" }, { textContent: "−" });
       const plus = el("button", { cursor: "pointer", width: "24px" }, { textContent: "+" });
       const count = el("input", { width: "52px", textAlign: "center", background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)", border: "1px solid var(--border-color, #555)", borderRadius: "3px" }, { type: "number", min: 1, max: 200, step: 1 });
       header.append("Parts", minus, count, plus, el("span", { opacity: ".6", marginLeft: "6px" }, { textContent: "What happens in each part. Start a box with (10s) for a longer part, or raw: to use your own finished prompt." }));
       const list = el("div", { display: "flex", flexDirection: "column", gap: "4px" });
-      root.append(header, list);
+      root.append(header, randomLine, list);
 
       node.properties = node.properties || {};
       const heights = () => (node.properties.partHeights = node.properties.partHeights || []);
@@ -628,6 +649,7 @@ app.registerExtension({
         }));
       }
 
+      node.promptforgeShowRandom = ({ picks }) => { randomLine.textContent = picks.length ? "Rolled: " + picks.map(([name, value]) => `${name} = ${value}`).join(", ") : ""; };
       const setCount = (value) => {
         countWidget.value = Math.min(200, Math.max(1, Math.round(value)));
         render();

@@ -20,7 +20,7 @@ import importlib
 
 import comfy.samplers
 
-from . import h3_actions, h3_upscaler, preview_decoder
+from . import h3_actions, h3_upscaler, preview_decoder, random_picks
 from . import empty_latent
 
 CATEGORY = "🔮 PromptForge/Endless Video"
@@ -82,6 +82,34 @@ class _Settings:
         return (values,)
 
 
+def _roll_action(values, node_id):
+    """Resolve the action pickers set to random once per run, and show the roll on the node."""
+    if "action" not in values:
+        return values
+    picks = []
+    category = values.get("category")
+    if values["action"] == random_picks.RANDOM:
+        pool = [label for label in h3_actions.ACTIONS
+                if category == random_picks.RANDOM or h3_actions.action_category(label) == category]
+        values["action"] = random_picks.pick(pool)
+    label = values["action"]
+    crafted = h3_actions.action_category(label)
+    if category == random_picks.RANDOM or category != crafted:
+        values["category"] = crafted
+        picks.append(("Category", crafted))
+    picks.append(("Action", label))
+    if values.get("camera_angle") == random_picks.RANDOM:
+        values["camera_angle"] = random_picks.pick(h3_actions.cameras(label) or h3_actions.CAMERAS)
+        picks.append(("Camera", values["camera_angle"]))
+    if values.get("penetration") == random_picks.RANDOM:
+        modes = h3_actions.penetration_modes(label)
+        values["penetration"] = random_picks.pick(modes) if modes else "vaginal"
+        if modes:
+            picks.append(("Penetration", values["penetration"]))
+    random_picks.announce(node_id, picks)
+    return values
+
+
 def _dialogue_inputs():
     return {
         "negative_prompt": ("STRING", {"default": "", "multiline": True, "tooltip": "Things the video must not contain."}),
@@ -117,7 +145,7 @@ class PROMPTFORGE_H3Action(_Settings):
     DESCRIPTION = ("Adult content from a preset instead of your own text: a solo act or a position with clearly defined roles, who is who, and a camera angle. Every role has its own picture picker, "
                    "so the woman and the man each get their own reference picture (Picture 1, 2, 3 ...), the first frame, or none and only a description. The preset also recommends the frame shape: "
                    "9:16 for standing, sitting, on-top and solo action, 16:9 for lying and side arrangements. The prompt writer writes the whole video prompt (the mode's template), for one clip or spread over the parts. "
-                   "Works with every mode. The Modes node chooses between this node and the Idea node.")
+                   "Every action picker has a random option that rolls a concrete value per run and shows it on the node. Works with every mode. The Modes node chooses between this node and the Idea node.")
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -127,17 +155,21 @@ class PROMPTFORGE_H3Action(_Settings):
             subjects[f"subject_{number}_look"] = ("STRING", {"default": "", "multiline": True, "tooltip": "The person in words: hair, body, face, age. Used when no picture is chosen for this role, and added to the picture when one is."})
         return {
             "required": {
-                "category": (list(h3_actions.ACTION_CATEGORIES), {"default": h3_actions.ACTION_CATEGORIES[0], "tooltip": "Filters the action list; the act itself is chosen below."}),
-                "action": (list(h3_actions.ACTIONS), {"default": next(iter(h3_actions.ACTIONS)), "tooltip": "The act or position. The roles of the subjects are shown below it."}),
-                "camera_angle": ([h3_actions.ANY_CAMERA] + list(h3_actions.CAMERAS), {"default": h3_actions.ANY_CAMERA, "tooltip": "How it is filmed. POV (the viewer is B) is what subject 2 sees."}),
+                "category": ([random_picks.RANDOM] + list(h3_actions.ACTION_CATEGORIES), {"default": h3_actions.ACTION_CATEGORIES[0], "tooltip": "Filters the action list; the act itself is chosen below. random rolls a category and an action."}),
+                "action": ([random_picks.RANDOM] + list(h3_actions.ACTIONS), {"default": next(iter(h3_actions.ACTIONS)), "tooltip": "The act or position. The roles of the subjects are shown below it. random rolls one from the category."}),
+                "camera_angle": ([random_picks.RANDOM, h3_actions.ANY_CAMERA] + list(h3_actions.CAMERAS), {"default": h3_actions.ANY_CAMERA, "tooltip": "How it is filmed. POV (the viewer is B) is what subject 2 sees. random rolls a useful camera for the act."}),
             },
             "optional": {
-                "penetration": (list(h3_actions.PENETRATION_MODES), {"default": "vaginal", "tooltip": "For penetrative sex: vagina or anus. Forces the named hole for the whole clip so the writer never swaps them."}),
+                "penetration": ([random_picks.RANDOM] + list(h3_actions.PENETRATION_MODES), {"default": "vaginal", "tooltip": "For penetrative sex: vagina or anus. Forces the named hole for the whole clip so the writer never swaps them. random rolls one when the act uses it."}),
                 **subjects,
                 "notes": ("STRING", {"default": "", "multiline": True, "placeholder": "Setting, looks, mood, sounds. Not the act: that is the action above.", "tooltip": "Anything else the video needs: the room, the lighting, the mood, the sounds."}),
                 **_dialogue_inputs(),
             },
+            "hidden": {"unique_id": "UNIQUE_ID"},
         }
+
+    def build(self, unique_id=None, **values):
+        return (_roll_action(values, unique_id),)
 
 
 class PROMPTFORGE_H3Writer(_Settings):
@@ -189,17 +221,21 @@ class PROMPTFORGE_H3Parts(_Settings):
                 "parts": ("INT", {"default": 3, "min": 1, "max": 200, "tooltip": "Number of parts. Press + / - on the node."}),
                 "part_prompts": ("STRING", {"default": "", "multiline": True, "tooltip": "The part boxes (kept by the node)."}),
                 "part_notes": ("STRING", {"default": "", "multiline": True, "tooltip": "One line per part with what changes in that part: 1: speed up, 2: pause and talk, 3: pull out and come on her stomach. Lines are matched to parts in order."}),
-                "category": (list(h3_actions.ACTION_CATEGORIES), {"default": h3_actions.ACTION_CATEGORIES[0]}),
-                "action": (list(h3_actions.ACTIONS), {"default": next(iter(h3_actions.ACTIONS))}),
+                "category": ([random_picks.RANDOM] + list(h3_actions.ACTION_CATEGORIES), {"default": h3_actions.ACTION_CATEGORIES[0]}),
+                "action": ([random_picks.RANDOM] + list(h3_actions.ACTIONS), {"default": next(iter(h3_actions.ACTIONS))}),
             },
             "optional": {
-                "penetration": (list(h3_actions.PENETRATION_MODES), {"default": "vaginal"}),
-                "camera_angle": ([h3_actions.ANY_CAMERA] + list(h3_actions.CAMERAS), {"default": h3_actions.ANY_CAMERA}),
+                "penetration": ([random_picks.RANDOM] + list(h3_actions.PENETRATION_MODES), {"default": "vaginal"}),
+                "camera_angle": ([random_picks.RANDOM, h3_actions.ANY_CAMERA] + list(h3_actions.CAMERAS), {"default": h3_actions.ANY_CAMERA}),
                 "subject_1_from": (list(SUBJECT_SOURCES), {"default": "none (describe in words)"}), "subject_1_look": ("STRING", {"default": "", "multiline": True}),
                 "subject_2_from": (list(SUBJECT_SOURCES), {"default": "none (describe in words)"}), "subject_2_look": ("STRING", {"default": "", "multiline": True}),
                 "subject_3_from": (list(SUBJECT_SOURCES), {"default": SUBJECT_DISABLED}), "subject_3_look": ("STRING", {"default": "", "multiline": True}),
             },
+            "hidden": {"unique_id": "UNIQUE_ID"},
         }
+
+    def build(self, unique_id=None, **values):
+        return (_roll_action(values, unique_id),)
 
 
 class PROMPTFORGE_H3Modes(_Settings):
