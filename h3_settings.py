@@ -17,6 +17,7 @@ Every node is optional except the Idea or the Action node, whichever the Modes n
 what turns the second stage on, so none of them has an on/off switch for a whole section.
 """
 import importlib
+import time
 
 import comfy.samplers
 
@@ -80,6 +81,10 @@ class _Settings:
 
     def build(self, **values):
         return (values,)
+
+    @classmethod
+    def IS_CHANGED(cls, **values):
+        return time.time_ns() if random_picks.RANDOM in values.values() else "static"
 
 
 def _roll_action(values, node_id):

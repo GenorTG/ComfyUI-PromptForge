@@ -1,4 +1,6 @@
 """PromptForge Action node: a pose or act plus place, camera, light and outfit for still-image prompts."""
+import time
+
 from . import image_actions, random_picks
 
 
@@ -34,6 +36,10 @@ class PROMPTFORGE_ImageAction:
             },
             "hidden": {"unique_id": "UNIQUE_ID"},
         }
+
+    @classmethod
+    def IS_CHANGED(cls, **values):
+        return time.time_ns() if random_picks.RANDOM in values.values() else "static"
 
     def build(self, category, action, source, place, camera, lighting, outfit, style,
               subject_1="", subject_2="", notes="", overrides="", instructions="", unique_id=None):

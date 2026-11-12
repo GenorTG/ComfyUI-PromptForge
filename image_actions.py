@@ -5,6 +5,7 @@ where the face points and what the camera sees. Places, cameras, lighting and ou
 so one pose can be reused in any scene. `{A}` and `{B}` are the two subjects; the brief keeps the
 subject descriptions from the Action node, or points at the input image for image-to-image work.
 """
+import re
 
 CATEGORIES = (
     "SFW - portrait and expression",
@@ -86,20 +87,20 @@ ACTIONS = {
     "Striptease - bottom pulled down": (1, "NSFW - solo", "{A} stands facing the camera topless with the bottoms pulled down to the thighs, bent slightly forward, one hand on the fabric, face to the camera."),
 
     # ----------------------------------------------------------- couple NSFW
-    "Sex - missionary": (2, "NSFW - couple", "{B} lies on top of {A} between the open legs, face to face, {A}'s hands on {B}'s shoulders and legs around the waist, {B}'s erect penis inside {A}, bodies joined at the pelvis."),
-    "Sex - cowgirl": (2, "NSFW - couple", "{A} straddles {B} facing the camera, sitting down on {B}'s erect penis with the shaft buried inside her, hands on {B}'s chest, {B}'s hands on {A}'s hips, both bodies upright and joined."),
+    "Sex - missionary": (2, "NSFW - couple", "{A} lies on her back with both shoulders and hips on the bed, knees up and open. {B} lies above her between her legs, forearms beside her shoulders taking his weight, hips between her thighs, face above hers. His erect penis enters her vagina from the front; her hands hold his shoulders and her legs wrap his waist. Only their pelvises meet."),
+    "Sex - cowgirl": (2, "NSFW - couple", "{B} lies flat on his back on the bed, head on the pillow, legs together. {A} kneels astride his hips facing him, both knees planted on the bed beside his waist, and sits down on his erect penis with the shaft buried inside her. Her hands rest on his chest, his hands hold her hips. Both torsos upright, joined only at the pelvis."),
     "Sex - reverse cowgirl": (2, "NSFW - couple", "{A} straddles {B} facing away from {B}'s head, sitting down on the erect penis with the shaft buried inside her, hands on {B}'s knees, rear toward {B}, the face turned back over one shoulder."),
-    "Sex - doggy style": (2, "NSFW - couple", "{A} is on hands and knees with the back arched, {B} kneels behind holding {A}'s hips, erect penis inside {A}, side-on to the camera."),
-    "Sex - prone bone": (2, "NSFW - couple", "{A} lies face down flat on the stomach, {B} lies over the back with the chest on {A}'s back and hips between the legs, penis inside {A}, faces close."),
-    "Sex - spooning": (2, "NSFW - couple", "{A} and {B} lie on the same side, {B} pressed against {A}'s back with one arm under the head and the hand on the hip, penis inside {A}."),
+    "Sex - doggy style": (2, "NSFW - couple", "{A} is on the bed on hands and knees, both palms and both knees planted, back arched. {B} kneels behind her on both knees, thighs against the backs of her thighs, holding her hips. His erect penis enters her vagina from behind, side-on to the camera."),
+    "Sex - prone bone": (2, "NSFW - couple", "{A} lies face down flat on the bed, stomach and hips on the mattress, arms beside her head, legs together and straight. {B} lies on top of her along the same line, chest on her back, legs outside hers, hips over her hips, his face beside her head, both facing the same way. His erect penis enters her vagina from behind and above, not from the front; a side view shows the two stacked bodies."),
+    "Sex - spooning": (2, "NSFW - couple", "Both lie on the same side in the same direction on the bed, {A} in front and {B} behind her back, their legs stacked. {B}'s lower arm is under her head, his upper hand on her hip, his hips against her rear, penis inside her vagina from behind. Both heads on the same side of the frame."),
     "Sex - standing from behind": (2, "NSFW - couple", "{A} stands bent forward with hands on a wall, {B} stands behind holding the hips, penis inside {A}, both faces turned to the camera."),
     "Sex - standing face to face": (2, "NSFW - couple", "{B} holds {A} up against a wall with both hands under the thighs, {A}'s legs around the waist and arms around the neck, penis inside {A}, faces close."),
     "Sex - one leg up": (2, "NSFW - couple", "{A} and {B} stand facing each other, {B} holds one of {A}'s legs raised at the thigh, penis inside {A}, {A}'s arms around {B}'s neck."),
-    "Sex - legs on shoulders": (2, "NSFW - couple", "{A} lies on the back with both legs raised onto {B}'s shoulders, {B} kneels in front and leans over {A}, penis inside {A}, both faces to the camera."),
-    "Sex - edge of the bed": (2, "NSFW - couple", "{A} lies on the back at the edge of a bed with the legs hanging open, {B} stands between the legs and leans in, penis inside {A}, side-on to the camera."),
+    "Sex - legs on shoulders": (2, "NSFW - couple", "{A} lies on her back with hips on the bed, both legs raised and resting over {B}'s shoulders. {B} kneels between the mattress edge and her hips, upright, holding her thighs, penis entering her from the front. Both faces visible past her legs."),
+    "Sex - edge of the bed": (2, "NSFW - couple", "{A} lies on her back at the edge of the bed, head toward the pillow, hips at the mattress edge, both legs hanging over the side and open. {B} stands on the floor at the foot of the bed between her legs, both feet planted, leaning over her with his hands beside her hips. His erect penis enters her vagina from the front, not from behind; side-on to the camera."),
     "Sex - against the wall": (2, "NSFW - couple", "{B} stands and pins {A} against a wall, {A}'s legs around the waist and arms around the neck, penis inside {A}, profile to the camera."),
-    "Sex - lap": (2, "NSFW - couple", "{B} sits and {A} sits on the lap facing {B}, arms around each other, penis inside {A}, both seated, side-on to the camera."),
-    "Sex - scissors": (2, "NSFW - couple", "{A} and {B} lie facing each other with the legs interlocked and hips pressed together, genitals in contact, both faces to the camera."),
+    "Sex - lap": (2, "NSFW - couple", "{B} sits on the edge of a bed or a chair, back supported, both feet on the floor. {A} sits on his lap facing him, knees astride his hips, arms around his neck, his hands on her waist. His erect penis enters her from the front; both torsos upright and close, side-on to the camera."),
+    "Sex - scissors": (2, "NSFW - couple", "Both lie on their sides on the bed facing each other, heads at opposite ends, one of {B}'s legs over {A}'s lower leg and one of {A}'s legs between his, hips pressed together, genitals in contact. Both upper bodies propped on an elbow, faces to the camera."),
     "Oral - kneeling blowjob": (2, "NSFW - couple", "{A} kneels in front of {B} who stands, {A}'s hands on {B}'s hips, the erect penis in the mouth, cheeks hollowed, eyes up to the camera."),
     "Oral - lying blowjob": (2, "NSFW - couple", "{B} lies on the back with the knees bent, {A} lies between the legs with the penis in the mouth, one hand at the base, eyes to the camera."),
     "Oral - cunnilingus": (2, "NSFW - couple", "{A} lies on the back with the knees up and apart, {B} kneels between the legs with the mouth on the vulva, hands on the thighs, eyes to the camera."),
@@ -174,8 +175,8 @@ CAMERAS = {
     "top-down": "Camera directly overhead, the body flat against the floor or bed and the limbs spread into the frame.",
     "dutch angle": "Camera tilted fifteen to thirty degrees off level, the horizon or verticals running diagonally.",
     "over the shoulder, tight": "Camera close behind the near person's shoulder, the far person sharp and the near shoulder soft at the edge.",
-    "POV (the viewer is A)": "Strict first-person POV of A: the camera is A's eyes, B and the contact fill the frame, only A's hands, forearms, chest or thighs enter at the lower edge, A's face stays out of frame.",
-    "POV (the viewer is B)": "Strict first-person POV of B: the camera is B's eyes, A and the contact fill the frame, only B's hands, forearms, chest or thighs enter at the lower edge, B's face stays out of frame.",
+    "POV (the viewer is A)": "Strict first-person POV of A: the camera sits at A's eye height and tilts down along A's own body, so A's chest, stomach and hips fill the lower third of the frame. B is at arm's length with the whole torso and hips inside the frame, contact visible, A's hands may enter. A's face stays out. This is a medium-wide POV, not a macro close-up.",
+    "POV (the viewer is B)": "Strict first-person POV of B: the camera sits at B's eye height and tilts down along B's own body, so B's chest, stomach and hips fill the lower third of the frame. A is at arm's length with the whole torso and hips inside the frame, contact visible, B's hands may enter. B's face stays out. This is a medium-wide POV, not a macro close-up.",
     "handheld, slight tilt": "Handheld framing with a slight roll and off-centre horizon, as if shot at arm's length.",
     "locked off, dead level": "Static camera at chest height, dead level, perfectly centred and symmetrical.",
     "wide environmental": "Wide framing with the subject small in a large, fully visible room.",
@@ -263,14 +264,22 @@ def brief(action, people, camera="auto", place="auto", lighting="auto", outfit="
     count, _, arrangement = ACTIONS[action]
     subjects = [people[0].strip() or ("the person in the input image" if source == "input image" else "the woman"),
                 people[1].strip() or ("the other person in the input image" if source == "input image" else "the man")]
-    lines = ["# Image action preset", f"Action: {arrangement.format(A=subjects[0], B=subjects[1])}"]
+    labels = ["the woman in the input image" if source == "input image" else "the woman", "the man"]
+    action_text = arrangement.format(A=labels[0], B=labels[1])
+    action_text = re.sub(r"(?<=[.!?])\s+([a-z])", lambda m: m.group(0)[:-1] + m.group(1).upper(), action_text)
+    lines = ["# Image action preset", "Action: " + action_text[:1].upper() + action_text[1:]]
     if action in POSE_NOTES:
         lines.append(f"STAGE LAYOUT (follow exactly): {POSE_NOTES[action]}")
+    if people[0].strip():
+        lines.append(f"Subject 1 (the woman): {people[0].strip()}")
+    if count == 2 and people[1].strip():
+        lines.append(f"Subject 2 (the man): {people[1].strip()}")
     if count == 1:
         lines.append("Only this one person appears in the frame." if source != "input image" else
                      "Only this one person appears; the input image supplies the identity.")
     else:
         lines.append("Both people appear in the frame together; the second person is never a background extra.")
+        lines.append("Two complete, separate bodies: two heads, two torsos, four arms and four legs. Name what supports each body (bed, floor, wall, chair) and where the free limbs are; the torsos meet only at the named contact.")
     if source == "input image":
         lines.append("The input image supplies identity only: keep the face and body, but replace its pose and framing with the action below; do not keep the source pose.")
         lines.append("Keep the identity, face and body of the person from the input image unchanged.")
@@ -278,14 +287,14 @@ def brief(action, people, camera="auto", place="auto", lighting="auto", outfit="
         lines.append(f"Place: {PLACES[place]}")
     if count == 2:
         lines.append("Replace the source pose: the arrangement below is authoritative, even if the source is sitting.")
-        if not any(word in action.lower() for word in ("standing", "seated", "sits", "sitting", "straddle", "cowgirl", "rides", "lap", "lotus", "squat", "footjob", "crouch")):
+        if not any(word in action.lower() for word in ("standing", "seated", "sits", "sitting", "straddle", "cowgirl", "rides", "lap", "lotus", "squat", "footjob", "crouch", "edge of the bed")):
             lines.append("Both bodies are horizontal on a bed or the floor.")
     if count == 2 and camera == "auto":
         camera = "three-quarter side" if action in POSE_NOTES else "side view, full bodies"
     if camera != "auto":
         lines.append(f"Camera: {CAMERAS[camera]}")
         if camera.startswith("POV"):
-            lines.append("POV overrides any 'face to the camera' in the action: the viewpoint holder's face stays out of frame.")
+            lines.append("POV overrides any 'face to the camera' in the action: the viewpoint holder's face stays out, their chest and stomach stay in the lower third, and the framing stays wide enough for the other whole torso.")
     if count == 2 and camera in CAMERA_STAGE:
         lines.append(f"Camera stage: {CAMERA_STAGE[camera]}")
     if lighting != "auto":
@@ -300,7 +309,7 @@ def brief(action, people, camera="auto", place="auto", lighting="auto", outfit="
         lines.append(f"Overrides: {overrides.strip()}")
     if count == 2:
         if action.startswith("Sex - "):
-            lines.append("Show the point where the bodies join, with the penetration visible: where the shaft meets her body, how far it is outside her, and how the labia sit around its base.")
+            lines.append("Her body stays whole under him: his hips sit between, behind or above her thighs, never inside her torso. Show the point where the bodies join, with the penetration visible: where the shaft meets her body, how far it is outside her, and how the labia sit around its base.")
         else:
             lines.append("Show the point of contact between the two bodies clearly.")
     if action in POSE_NOTES:

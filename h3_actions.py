@@ -152,8 +152,8 @@ def action_category(label):
 
 
 CAMERAS = {
-    "POV (the viewer is B)": "STRICT POV of {B}: the camera IS {B}'s eyes. {A} and the action fill the frame; only {B}'s hands, forearms, chest or thighs enter from the bottom edge, and {B}'s own genitals stay as they are. Never show {B}'s face (only in a mirror), never cut away from this angle.",
-    "POV (the viewer is A)": "STRICT POV of {A}: the camera IS {A}'s eyes. {B} and the action fill the frame; only {A}'s hands, forearms, chest or thighs enter from the bottom edge, and {A}'s own genitals stay as they are. Never show {A}'s face (only in a mirror), never cut away from this angle.",
+    "POV (the viewer is B)": "STRICT POV of {B}: the camera IS {B}'s eyes, at eye height, tilted down along {B}'s own body. {B}'s chest, stomach and hips stay visible across the lower third of the frame, and {B}'s hands, forearms or thighs may enter it. {A} stays at arm's length with the whole torso and hips in frame and the contact visible. {B}'s own genitals stay as they are. Never show {B}'s face (only in a mirror), never cut away from this angle. Keep it medium-wide, not a macro close-up.",
+    "POV (the viewer is A)": "STRICT POV of {A}: the camera IS {A}'s eyes, at eye height, tilted down along {A}'s own body. {A}'s chest, stomach and hips stay visible across the lower third of the frame, and {A}'s hands, forearms or thighs may enter it. {B} stays at arm's length with the whole torso and hips in frame and the contact visible. {A}'s own genitals stay as they are. Never show {A}'s face (only in a mirror), never cut away from this angle. Keep it medium-wide, not a macro close-up.",
     "side view, full bodies": "A still camera at chest height, side-on to the people, framing both bodies fully with both faces visible.",
     "from behind": "The camera is behind the people, looking at the action from behind.",
     "front view": "A still camera at chest height facing the person or people from the front, the whole body in frame, the face visible.",
@@ -264,12 +264,21 @@ def brief(label, camera, subjects, notes="", penetration="vaginal"):
     counts = stages_for(label)
     genders = [gender for gender, _role in ACTIONS[label][0]]
     names = [_role_name(genders, index) for index in range(counts)]
-    a, b = subjects[0], subjects[1]
+    a, b = "Subject 1", "Subject 2"
     ratio = aspect(label)
     shape = "portrait" if ratio == "9:16" else "landscape"
     lines = [
         f"Action preset: {label}.",
         f"Action: {with_penetration(ACTIONS[label][1], penetration).format(A=a, B=b)}",
+    ]
+    camera = default_camera(label) if camera == ANY_CAMERA else camera
+    if camera in CAMERAS and not (counts == 1 and camera in SOLO_CAMERAS):
+        lines.append(f"Camera: {CAMERAS[camera].format(A=a, B=b)}")
+        if camera.startswith("POV"):
+            lines.append("The POV viewpoint holder's face never appears; their chest, stomach and hips stay in the lower third and the framing stays medium-wide, never a macro crop.")
+        if camera.startswith("POV") and penetration_modes(label):
+            lines.append("In POV the shaft comes in from the bottom edge: angle the hips and lift the shaft so it enters the named hole; the other hole stays empty and beside it.")
+    lines += [
         "This action is exactly what happens, from the first second to the last; the notes only give the setting, the looks, the nudity and the mood.",
         "The act is already in progress in the first sentence: the genitals, hands or mouths are already in contact and moving; no setup.",
         f"Recommended aspect ratio: {ratio} ({shape}). Frame every body and face fully inside it and keep that framing for the whole clip.",
@@ -319,13 +328,6 @@ def brief(label, camera, subjects, notes="", penetration="vaginal"):
             lines.append("This is a striptease: Subject 1 starts dressed and ends naked; no clothing from the pictures remains once it is removed.")
         else:
             lines.append("Both subjects are fully naked from the first frame; no clothing from the pictures remains.")
-    camera = default_camera(label) if camera == ANY_CAMERA else camera
-    if camera in CAMERAS and not (counts == 1 and camera in SOLO_CAMERAS):
-        lines.append(f"Camera: {CAMERAS[camera].format(A=a, B=b)}")
-        if camera.startswith("POV"):
-            lines.append("The POV viewpoint holder's face never appears; only their body edge enters the frame.")
-        if camera.startswith("POV") and penetration_modes(label):
-            lines.append("In POV the shaft comes in from the bottom edge: angle the hips and lift the shaft so it enters the named hole; the other hole stays empty and beside it.")
     if notes.strip():
         lines.append(f"Notes: {notes.strip()}")
     return "\n".join(lines)
