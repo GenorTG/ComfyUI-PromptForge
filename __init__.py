@@ -439,6 +439,25 @@ def _inject_reference_labels(text, user_text):
     return text[:start.end()] + body + (text[start.end() + end.start():] if end else "")
 
 
+def _normalize_first_shot(text):
+    """The first shot carries no timestamp (the official guide); drop one if the writer added it."""
+    return re.sub(r"(\[Shot 1\])\s*At\s+\d{1,2}:\d{2}\.\d{3}\s*,?\s*", r"\1 ", text)
+
+
+def _ensure_alignment_line(text, mode_key, picture_count, seconds):
+    """The frame modes must open on their fixed alignment line, before the blank line and fields."""
+    line = _minimax_alignment_line(mode_key, picture_count, seconds)
+    if not line:
+        return text
+    first = text.split("\n", 1)[0].lower()
+    if "align" in first or "fully referenced" in first:
+        return text
+    shots = [int(number) for number in re.findall(r"\[Shot (\d+)\]", text)]
+    if shots:
+        line = line.replace("Shot N", f"Shot {max(shots)}")
+    return line + "\n\n" + text.lstrip()
+
+
 def _minimax_format_problem(text, mode, one_shot, hint="", picture_count=0):
     """Return what breaks the H3 output contract, or '' when the prompt is usable."""
     sections = _MINIMAX_SECTIONS.get(mode)
@@ -462,6 +481,10 @@ def _minimax_format_problem(text, mode, one_shot, hint="", picture_count=0):
     body = text[positions[sections.index("detailed_description")]:] if "detailed_description" in sections else text[positions[0]:]
     body = body.split("overall_soundscape:")[0]
     shots = [int(number) for number in re.findall(r"\[Shot (\d+)\]", body)]
+    if not shots:
+        return "no [Shot 1] label in the description"
+    if shots[0] != 1:
+        return "the description must open with [Shot 1]"
     if one_shot:
         if shots != [1]:
             return "the action must be a single [Shot 1]"
@@ -564,12 +587,27 @@ def _dialogue_language(language, other):
     return "" if language == DIALOGUE_AUTO else language
 
 
+_NO_DIALOGUE_RE = re.compile(
+    r"\b(?:no|without)\s+(?:spoken\s+|audible\s+)?(?:dialogue|dialog|speech|talking|words|lines|voices?)\b"
+    r"|\b(?:wordless|non-?verbal only|sounds? only|only sounds?|just sounds?)\b"
+    r"|\b(?:just|only)\s+(?:moans?|breaths?|breath sounds?|gasps?|noise|noises)\b", re.I)
+
+
+def _dialogue_disabled(instructions):
+    """The user wrote that the video has no spoken dialogue."""
+    return bool(_NO_DIALOGUE_RE.search(instructions or ""))
+
+
 def _dialogue_block(instructions, language, other, seconds):
     """System prompt section asking for dialogue in the video prompt, sized to what fits in `seconds`; '' when off."""
     instructions = (instructions or "").strip()
     chosen = _dialogue_language(language, other)
     if not instructions and not chosen:
         return ""
+    if _dialogue_disabled(instructions):
+        return f"""# Dialogue (none)
+The user says this video has no spoken dialogue. Do not write any <d> line, language tags or speaker IDs. Voices exist only as breath, gasps, sighs and moans inside the action and in overall_soundscape.
+Dialogue instructions from the user: {instructions}"""
     unit, rate = ("characters", 4.0) if chosen in CHARACTER_LANGUAGES else ("words", 2.3)
     budget = max(3, round(max(seconds - 1.0, 1.0) * rate))
     name = chosen or "LANGUAGE"
@@ -597,8 +635,10 @@ Before you answer, check every <d>: it has [{name}] right after it, the words ar
 DIALOGUE_TAG = re.compile(r"<d>\s*\[([^\]]*)\]\s*(.+?)\s*</d>", re.S)
 
 
-def _dialogue_problem(text, language):
+def _dialogue_problem(text, language, disabled=False):
     """What is wrong with the dialogue tags in `text`, or '' when they are right. `language` '' skips the language check."""
+    if disabled:
+        return ""
     tags = DIALOGUE_TAG.findall(text)
     if not tags:
         return "no <d>[Language] words</d> dialogue line was written" if "<d>" not in text and "</d>" not in text else "the <d> tags are incomplete: every line needs <d>[Language] words</d>"
@@ -1943,7 +1983,7 @@ class PROMPTFORGE_PromptEnhancer:
                 "frame_count": ("INT", {"default": 16, "min": 1, "max": 64, "tooltip": "Frames sampled from video input."}),
                 "negative_prompt": ("STRING", {"default": "", "multiline": True, "tooltip": "What the generated prompt/scene must not contain."}),
                 "pipe": ("PROMPTFORGE_PIPE", {"tooltip": "From a PromptForge Loader. With enhancement_preset on auto, the preset for that model family is used."}),
-                "dialogue": ("STRING", {"default": "", "multiline": True, "tooltip": "Video presets only (MiniMax H3). What the dialogue should be about and how it should sound, in your own words. The enhancer writes the lines, speaker IDs and tags, sized to video_seconds. Empty (with language on auto) = no dialogue instructions."}),
+                "dialogue": ("STRING", {"default": "", "multiline": True, "tooltip": "Video presets only (MiniMax H3). What the dialogue should be about and how it should sound, in your own words. Write 'no dialogue' for sounds only; then no lines, tags or speaker IDs are required. Empty (with language on auto) = no dialogue instructions."}),
                 "dialogue_language": ([DIALOGUE_AUTO, *DIALOGUE_LANGUAGES, DIALOGUE_OTHER], {"default": DIALOGUE_AUTO, "tooltip": "Language of the spoken lines. The list is what MiniMax H3 speaks reliably."}),
                 "dialogue_language_other": ("STRING", {"default": "", "tooltip": "Used when dialogue_language is 'other', for example Polish. Languages outside the list are only partially supported by the video model."}),
                 "auto_retry": ("BOOLEAN", {"default": True, "tooltip": "Regenerate with a new seed (up to 3 tries) when the output looks empty, repetitive, leaked reasoning or a refusal. Turn off to always keep the first output."}),
@@ -2181,6 +2221,7 @@ class PROMPTFORGE_PromptEnhancer:
             enhanced = run(seed, system_prompt)
             answer, thinking = _split_thinking(enhanced)
             if minimax_key:
+                answer = _normalize_first_shot(answer)
                 answer = _normalize_minimax_sections(answer, minimax_key)
             if minimax_key and rules.strip():
                 answer = _strip_inner_timestamps(answer, minimax_key)
@@ -2203,9 +2244,10 @@ class PROMPTFORGE_PromptEnhancer:
         if minimax_key:
             answer = _ensure_minimax_sections(answer, minimax_key)
             answer = _normalize_minimax_sections(answer, minimax_key)
+            answer = _normalize_first_shot(answer)
             if minimax_key == "ref2va":
                 answer = _inject_reference_labels(answer, user_text)
-        if dialogue_block and auto_retry and (dialogue or "").strip():
+        if dialogue_block and auto_retry and (dialogue or "").strip() and not _dialogue_disabled(dialogue):
             language = _dialogue_language(dialogue_language, dialogue_language_other)
             for attempt in range(1, 2):
                 problem = _dialogue_problem(answer, language)
@@ -2215,11 +2257,15 @@ class PROMPTFORGE_PromptEnhancer:
                 seed = _next_seed(seed)
                 enhanced = run(seed, system_prompt + f"\n\n# Correction\nYour previous answer broke the dialogue format: {problem}. Write the whole prompt again and follow the Dialogue section exactly.")
                 answer, thinking = _split_thinking(enhanced)
+                if minimax_key:
+                    answer = _normalize_first_shot(answer)
         answer = _clean_prompt_output(answer)
         answer = _land_text(answer)
         if minimax_key:
             answer = _drop_absent_references(answer, sum(value is not None for value in (image, image2, image3)), labelled_video, user_text)
         preset_lower = (enhancement_preset or "").lower()
+        if minimax_key:
+            answer = _ensure_alignment_line(answer, minimax_key, sum(value is not None for value in (image, image2, image3)), duration_text)
         if not any(marker in preset_lower for marker in ("minimax", "wan", "ltx", "ace-step")):
             answer = _strip_video_meta(answer)
         if not answer.strip():

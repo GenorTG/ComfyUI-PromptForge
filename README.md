@@ -87,6 +87,8 @@ The writer settings (template, style, sampling, retries) are described under the
 `PromptForge_H3_AllInOne_Modes_v5.api.json` is already in `/prompt` format; the normal workflow stores the
 image picker as an extra leading widget, which order-based converters must skip.
 
+H3 prompts always open on `[Shot 1]` with no timestamp; later shots are `[Shot 2] At MM:SS.mmm, the camera cuts to...` with strictly increasing times. The node adds a missing `[Shot 1]` check, strips a timestamp from the first shot, and keeps the mode's fixed frame-alignment line as the first line.
+
 ### Body and age sliders
 
 The base model treats body size loosely; a prompt alone cannot hold a flat chest or a narrow frame. These
@@ -296,7 +298,7 @@ Live preview for any sampler, shown in the node itself. Put it between the model
 
 ### Dialogue in video prompts
 
-On the Prompt Enhancer, the MiniMax H3 presets accept `dialogue` (what the spoken lines should be about), `dialogue_language` and `dialogue_language_other` (for example Polish). The enhancer writes the lines in that language inside the dialogue tags with the language tag, keeps everything else in English, and sizes the dialogue to `video_seconds`. The instruction block spells out the exact line shape (`speaker (S1) says: <d>[Language] words</d>`), the rules and the common mistakes, and the output is checked: if a `<d>` tag has no `[Language]` tag, no closing `</d>`, or the wrong language name, the enhancer retries with the problem named (twice at most, with `auto_retry` on) (about 2.3 words or 4 characters per second after a one second lead-in, with pauses between speakers). The language list is what MiniMax H3 speaks reliably according to third-party model cards (Arabic, Chinese, English, French, German, Italian, Japanese, Korean, Portuguese, Russian, Spanish); other languages are partially supported.
+On the Prompt Enhancer, the MiniMax H3 presets accept `dialogue` (what the spoken lines should be about), `dialogue_language` and `dialogue_language_other` (for example Polish). Writing “no dialogue” (or “just sounds”, “no words”, “only moans”) makes it a sounds-only video: no lines, tags or speaker IDs are required and the dialogue check is skipped. Otherwise the enhancer writes the lines in that language inside the dialogue tags with the language tag, keeps everything else in English, and sizes the dialogue to `video_seconds`. The instruction block spells out the exact line shape (`speaker (S1) says: <d>[Language] words</d>`), the rules and the common mistakes, and the output is checked: if a `<d>` tag has no `[Language]` tag, no closing `</d>`, or the wrong language name, the enhancer retries with the problem named (twice at most, with `auto_retry` on) (about 2.3 words or 4 characters per second after a one second lead-in, with pauses between speakers). The language list is what MiniMax H3 speaks reliably according to third-party model cards (Arabic, Chinese, English, French, German, Italian, Japanese, Korean, Portuguese, Russian, Spanish); other languages are partially supported.
 
 ### Wiring nodes together
 
