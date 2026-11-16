@@ -1,5 +1,10 @@
 # ComfyUI PromptForge
 
+> **1.30.0: this node set is frozen as legacy.** Same behaviour, bug fixes only. The per-family
+> nodes (Krea 2, Anima, MOSS Image, ACE-Step, MiniMax H3) replace the all-in-one nodes and their
+> hand-carried configs. Legacy nodes are listed as `PromptForge Legacy · …` in the picker and saved
+> workflows keep working. See [LEGACY.md](LEGACY.md).
+
 A full model workflow suite, not just a prompt enhancer: load the model, encode the prompt and references,
 generate, upscale and save. It covers **Krea 2**, **MOSS Image**, **Qwen Image**, **Anima**, **MiniMax H3** and
 other families, plus shared loader, sampler, latent, action, prompt and save tooling.
@@ -334,6 +339,21 @@ The front-end extension adds a button to both nodes:
 ## Workflow values and schema stability
 
 ComfyUI execution prompts are keyed by **input name**, so queued/API workflows are safe. This refactor splits the old all-in-one node into `PromptForge Model` + `PromptForge Enhancer`; saved PromptForge nodes need to be rebuilt once — connect a `PromptForge Model` node to the enhancer's `model` input, and replace the old `PROMPTFORGE_Settings` node. Enable **Settings → Workflow → Named values restore** (`Comfy.Workflow.NamedValuesRestore`) so widget values are restored by name while you migrate.
+
+## Content, ages and licenses
+
+The presets describe **adults: 18 or older**. A number or age word from the user always wins over that
+baseline, and a neutral "adult" is only used when a body description needs a frame. Canon characters in
+anime-style prompts are written as adults (aged up) unless the user gives an age, so a scene is never
+"maybe a minor".
+
+The text is written for NSFW-capable models and is deliberately literal: anatomical terms, positions and
+penetration are named, not implied. Nothing in the presets depends on a specific checkpoint license.
+
+Licenses: the node code and the prompt presets are **MIT** (see `LICENSE`). Model weights, VAEs, text
+encoders and LoRAs keep their own licenses — Apache-2.0 for the Qwen and Gemma families, MiniMax's,
+MOSS's, Krea's and ACE-Step's own terms for theirs — and are only named here. Community sliders and LoRAs
+are third-party downloads; check the source page before commercial use.
 
 ## Privacy
 
