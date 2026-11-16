@@ -472,11 +472,10 @@ app.registerExtension({
     }
 
     if (nodeData.name === WRITER) {
-      // the style only matters while the template is automatic
+      // every template is NSFW capable, so the old style toggle stays only as a hidden legacy value
       const onCreated = nodeType.prototype.onNodeCreated;
       const refresh = (node) => {
-        const template = node.widgets.find((widget) => widget.name === "prompt_template");
-        setShown(node.widgets.find((widget) => widget.name === "prompt_style"), String(template.value).startsWith("automatic"));
+        setShown(node.widgets.find((widget) => widget.name === "prompt_style"), false);
         node.setSize([node.size[0], node.computeSize()[1]]);
         node.setDirtyCanvas(true, true);
       };

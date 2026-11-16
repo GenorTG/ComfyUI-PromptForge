@@ -466,12 +466,12 @@ class PROMPTFORGE_H3Generate:
                         # still sit in VRAM while the bigger second pass samples
                         self._status(unique_id, f"Part {index + 1}/{total}: decoding the first pass")
                         self._release()
-                        first_pass = self._decode(first_latent, decode_vae, vae, audio_vae)
+                        first_pass = self._decode(first_latent, decode_vae, vae, audio_vae, perf)
                         del first_latent
                     self._status(unique_id, f"Part {index + 1}/{total}: decoding")
                     self._release()
                     clock_decode = time.time()
-                    frames, audio = self._guard("decoding", lambda: self._decode(latent_out, decode_vae, vae, audio_vae))
+                    frames, audio = self._guard("decoding", lambda: self._decode(latent_out, decode_vae, vae, audio_vae, perf))
                     del latent_out
                     if not check:
                         break
@@ -543,9 +543,13 @@ class PROMPTFORGE_H3Generate:
                 raise
 
     @staticmethod
-    def _decode(latent_out, decode_vae, vae, audio_vae):
-        """(frames, audio) of an AV latent."""
-        frames = minimax_decode.PROMPTFORGE_MiniMaxDecode().decode(latent_out, decode_vae if decode_vae is not None else vae, 0, 0, "cpu", True)[0]
+    def _decode(latent_out, decode_vae, vae, audio_vae, perf):
+        """(frames, audio) of an AV latent, frames on the CPU."""
+        frames = minimax_decode.PROMPTFORGE_MiniMaxDecode().decode(
+            latent_out, decode_vae if decode_vae is not None else vae, int(perf["decode_tile"]), int(perf["decode_frames"]),
+            int(perf["decode_tiles"]), perf["decode_output"], bool(perf["decode_retry"]))[0]
+        if frames.is_cuda:  # free the VRAM before the audio VAE loads
+            frames = frames.cpu()
         return frames, nodes_audio.vae_decode_audio(audio_vae, {"samples": latent_out["samples"].unbind()[1]})
 
     @staticmethod
@@ -569,10 +573,11 @@ class PROMPTFORGE_H3Generate:
 
     @staticmethod
     def _assemble(parts):
-        """All parts as one IMAGE batch: float32 when the RAM allows it, else float16."""
+        """All parts as one IMAGE batch: float32 only while that stays small, else float16."""
         count = sum(part.shape[0] for part in parts)
         size = count * parts[0].shape[1] * parts[0].shape[2] * 3
-        dtype = torch.float32 if size * 4 < 0.4 * psutil.virtual_memory().available else torch.float16
+        # a 10 second 1MP part is already over 6 GB as float32, and the copy would double it; float16 is enough for video
+        dtype = torch.float32 if size * 4 < min(0.4 * psutil.virtual_memory().available, 2 << 30) else torch.float16
         if dtype == torch.float16:
             print("[PromptForge] endless video: the video is large, so the frames are returned as float16 to save RAM.")
         video = torch.empty((count, *parts[0].shape[1:]), dtype=dtype)

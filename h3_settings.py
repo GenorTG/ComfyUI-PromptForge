@@ -63,7 +63,8 @@ DEFAULTS = {
     "second_stage": {"upscale_model": h3_upscaler.default_model(), "size_mode": h3_upscaler.MODES[0], "scale": 2.0, "megapixels": 1.0, "width": 1280, "height": 704, "align": 32,
                     "precision": "fp16", "steps": 3, "start_sigma": 0.9035, "sampler_name": "er_sde"},
     "preview": {"mode": PREVIEW_MODES[0], "frames": 4, "fps": 8, "size": 512, "decoder": preview_decoder.default_decoder()},
-    "performance": {"attention": ATTENTION[0], "ffn_chunks": 3, "sparse_attention": True, "keep_percent": 10.0},
+    "performance": {"attention": ATTENTION[0], "ffn_chunks": 3, "sparse_attention": True, "keep_percent": 10.0,
+                    "decode_tile": 0, "decode_frames": 0, "decode_tiles": 0, "decode_output": "auto", "decode_retry": True},
     "continue_from": {},
 }
 
@@ -199,7 +200,7 @@ class PROMPTFORGE_H3Writer(_Settings):
             "required": {
                 "use_prompt_writer": ("BOOLEAN", {"default": True, "tooltip": "On: the language model turns your idea into a full H3 prompt. Off: your idea text is used as the finished prompt, as it is (an action preset needs the writer)."}),
                 "prompt_template": (templates, {"default": AUTOMATIC_TEMPLATE, "tooltip": "The prompt writer's template. Every preset is NSFW capable, so a template you pick is used as it is, ignoring the style. Automatic picks the one of the mode (T2VA, I2VA, L2VA, FL2VA, Ref2VA)."}),
-                "prompt_style": (list(PROMPT_STYLES), {"default": "standard", "tooltip": "Kept for older workflows; every preset is NSFW capable now, so it changes nothing."}),
+                "prompt_style": (list(PROMPT_STYLES), {"default": "standard", "tooltip": "Hidden legacy value for older workflows; every template is NSFW capable, so it does nothing."}),
                 "writer_creativity": ("FLOAT", {"default": 0.7, "min": 0.01, "max": 2.0, "step": 0.05, "tooltip": "The writer's temperature: how freely it words things. Lower sticks closer to your text."}),
                 "writer_top_p": ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "The writer's top_p."}),
                 "writer_top_k": ("INT", {"default": 20, "min": 0, "max": 1000, "tooltip": "The writer's top_k."}),
@@ -405,7 +406,7 @@ class PROMPTFORGE_H3Performance(_Settings):
     KEY = "performance"
     RETURN_TYPES = ("PROMPTFORGE_H3_PERFORMANCE",)
     RETURN_NAMES = ("performance",)
-    DESCRIPTION = "Speed and memory settings of the diffusion model. The defaults (INT8 attention, feed-forward in 3 chunks) are the fast ones."
+    DESCRIPTION = ("Speed and memory settings of the diffusion model and of the final decode. The defaults (INT8 attention, feed-forward in 3 chunks, memory-sized decode) are the fast ones.")
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -415,6 +416,11 @@ class PROMPTFORGE_H3Performance(_Settings):
                 "ffn_chunks": ("INT", {"default": 3, "min": 1, "max": 64, "tooltip": "Splits the model's feed-forward layers into this many chunks: lower peak VRAM, same result. 1 = off."}),
                 "sparse_attention": ("BOOLEAN", {"default": False, "tooltip": "Video sparse attention (VSA): faster, but the 10Eros Max two-pass workflow gets cleaner detail with it off. Turn on to save memory; keep off for other H3 checkpoints."}),
                 "keep_percent": ("FLOAT", {"default": 10.0, "min": 0.5, "max": 95.0, "step": 0.5, "tooltip": "Share of the video each part of the picture attends to. FastH3 models are trained at 10 (90% sparse)."}),
+                "decode_tile": ("INT", {"default": 0, "min": 0, "max": 4096, "step": 256, "tooltip": "Decode tile size. 0 = auto: 256 px, the size H3's decoder was built for; whole frames and larger tiles decode faster but look fried and banded."}),
+                "decode_frames": ("INT", {"default": 0, "min": 0, "max": 4096, "step": 17, "tooltip": "Frames decoded per pass. 0 = auto: the whole part in one pass, which is the fastest; on out-of-memory it retries shorter. Fewer frames per pass use less VRAM but decode their context again."}),
+                "decode_tiles": ("INT", {"default": 0, "min": 0, "max": 16, "tooltip": "Tiles decoded in one call. 0 = auto: from free memory. More is faster and uses more VRAM."}),
+                "decode_output": (["auto", "gpu", "cpu"], {"default": "auto", "tooltip": "Where the decoded frames are kept while decoding. auto: gpu while the whole part fits there four times over, else ram. The frames are copied to RAM afterwards either way."}),
+                "decode_retry": ("BOOLEAN", {"default": True, "tooltip": "On out-of-memory, decode again with shorter passes and smaller tiles instead of failing the part."}),
             },
         }
 

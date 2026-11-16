@@ -1,29 +1,31 @@
 """PromptForge MiniMax H3 VAE Decode: the H3 video decoder with an out-of-memory ladder.
 
 The stock decode gives up on an OOM by switching to a generic tiler that ignores H3's blend rules. This node
-calls H3's own decoder instead and, when memory runs out, steps down a ladder that keeps the same quality:
+calls H3's own decoder instead and, when memory runs out, halves the frames per pass and then the tile size,
+which keeps the same quality. Whole-frame or larger tiles look fried and banded with H3, so they are never
+chosen automatically.
 
-    256 px tiles (the size H3's decoder was built for) -> 85 / 34 / 17 frames per pass
+The decoder emits 12 packed sub-pixel channels per pixel for the 2x detail VAEs, so the frames are unpacked to
+RGB inside the decoder: blending and the output buffer then work on the final video instead of on four times
+the sub-pixels. Decoding straight into the finished buffer also means the clip is never copied a second time.
 
-Whole-frame or larger tiles look fried and banded with H3, so they are never chosen automatically.
-The rung that worked for a given latent size is remembered, so the next run does not repeat the failed
-attempts. Output is written into one preallocated buffer (no list-then-concatenate), non-finite pixels are
-repaired and reported, and a model that has a 2x packed output projection (like the Wan 2x VAE trick) is
-pixel-shuffled a few frames at a time.
+A clip decodes in one pass straight into its output frames. Only when a pass runs out of memory is it split into
+shorter passes with causal context. Every pass also decodes one group past its end, so its last frames are
+decoded against the real continuation and the passes are pixel-identical to the whole clip. How far a latent
+size had to be split is remembered, so the next run starts there. Non-finite pixels are repaired and reported.
 """
 import gc
 import math
 
 import torch
-import torch.nn.functional as F
 
 import comfy.model_management as model_management
 import comfy.utils
 
-CONTEXT_GROUPS = 2
-# (spatial tile; frame groups per pass, 0 = whole clip). One group = 17 frames, 5 latent steps.
-LADDER = ((256, 0), (256, 5), (256, 2), (256, 1))
-SHUFFLE_FRAMES = 8
+CONTEXT_GROUPS = 1  # latents kept before a pass for the causal context; one group (5) already covers the 3 the decoder trims
+TILES_PER_CALL_MAX = 16
+RESERVE = 512 << 20
+AUTO_GROUPS = 4  # pass size the first out-of-memory drops the whole clip to; out-of-memory halves it from there
 _worked = {}
 
 
@@ -42,45 +44,40 @@ def _video(samples):
     return video
 
 
-def _packing(inner):
-    """PixelShuffle factor of a decoder whose projection emits packed RGB sub-pixels (1 for the stock H3 decoder)."""
+def _check_packing(inner):
+    """The decoder must emit three RGB channels or packed sub-pixels of them, or the buffer sizes below do not mean anything."""
     decoder = inner.decoder
     channels = decoder.proj_out.weight.shape[0] // (decoder.patch_size_t * decoder.patch_size ** 2)
     factor = math.isqrt(channels // 3)
     if channels % 3 or factor * factor * 3 != channels:
         raise ValueError(f"[PromptForge] the H3 decoder emits {channels} channels per pixel, which is not a packed RGB layout.")
-    return channels, factor
 
 
-def _expand(stat, channels):
-    return stat if stat.shape[1] == channels else stat.repeat_interleave(channels // 3, dim=1)
+def _final_bytes(vae, video):
+    """Bytes of the finished frames, which is exactly the buffer the decode writes into."""
+    return math.prod(vae.first_stage_model.decode_output_shape(video.shape)) * model_management.dtype_size(vae.vae_output_dtype())
 
 
-def _shuffle(pixels, factor):
-    """[B, C, T, H, W] packed channels -> [B, T, H * factor, W * factor, 3], a few frames at a time."""
-    batch, channels, frames, height, width = pixels.shape
-    out = torch.empty(batch, frames, height * factor, width * factor, channels // factor ** 2, device=pixels.device, dtype=pixels.dtype)
-    for start in range(0, frames, SHUFFLE_FRAMES):
-        part = pixels[:, :, start:start + SHUFFLE_FRAMES]
-        count = part.shape[2]
-        part = F.pixel_shuffle(part.movedim(1, 2).reshape(batch * count, channels, height, width), factor)
-        out[:, start:start + count] = part.reshape(batch, count, -1, height * factor, width * factor).movedim(2, -1)
-    return out
+def _destination(choice, final):
+    """Where the finished frames are kept: auto puts them on the GPU while the clip and its passes fit there."""
+    if choice == "gpu":
+        return model_management.get_torch_device()
+    if choice == "cpu":
+        return model_management.intermediate_device()
+    gpu = model_management.get_torch_device()
+    return gpu if model_management.get_free_memory(gpu) > 4 * final + RESERVE else model_management.intermediate_device()
 
 
-def _decode(vae, video, device, factor):
-    """One decode pass of `video` with the tiling currently set on the model; returns [B, T, H, W, 3] on `device`."""
-    vae.throw_exception_if_invalid()
+def _decode(vae, video, dest, work, drop=0):
+    """One decode pass of `video` into a buffer on `work` (the dest itself for a single pass); frames end up on `dest`."""
     inner = vae.first_stage_model
     with model_management.cuda_device_context(vae.device):
-        model_management.load_models_gpu([vae.patcher], memory_required=vae.memory_used_decode(video.shape, vae.vae_dtype), force_full_load=vae.disable_offload)
-        if factor > 1:  # a dynamic load can restore the 3-channel statistics, so expand them after it
-            inner.pixel_mean = _expand(inner.pixel_mean, inner.decoder.out_channels)
-            inner.pixel_std = _expand(inner.pixel_std, inner.decoder.out_channels)
-        pixels = torch.empty(inner.decode_output_shape(video.shape), device=device, dtype=vae.vae_output_dtype())
+        pixels = torch.empty(inner.decode_output_shape(video.shape), device=work, dtype=vae.vae_output_dtype())
         inner.decode(video.to(device=vae.device, dtype=vae.vae_dtype), output_buffer=pixels)
         vae.process_output(pixels)
-        return _shuffle(pixels, factor) if factor > 1 else pixels.movedim(1, -1)
+    frames = pixels.movedim(1, -1)[:, drop:]
+    del pixels
+    return frames if frames.device == dest else frames.to(dest)
 
 
 def _windows(latent_steps, groups):
@@ -94,30 +91,41 @@ def _windows(latent_steps, groups):
         done += core
 
 
-def _run(vae, video, device, factor, rung):
-    tile, groups = rung
+def _run(vae, video, dest, tile, groups, tiles_per_call):
     inner = vae.first_stage_model
     inner.tiling = tile > 0
+    inner.tiles_per_call = tiles_per_call
     if tile:
         inner.tile_size, inner.tile_overlap_min = tile, max(64, tile // 4)
-    if not groups or video.shape[2] < 2 or (video.shape[2] - 2) % 5 or (video.shape[2] - 2) // 5 <= groups:
-        return _decode(vae, video, device, factor)
+    total = (video.shape[2] - 2) // 5
+    if not groups or video.shape[2] < 2 or (video.shape[2] - 2) % 5 or groups >= total:
+        return _decode(vae, video, dest, dest)
 
+    # a pass decodes on the GPU and leaves only its finished frames on `dest`, so a long clip never needs a
+    # whole-clip buffer anywhere and the packed sub-pixels never cross the bus
+    work = vae.device if vae.device.type == "cuda" else dest
     windows = list(_windows(video.shape[2], groups))
     progress = comfy.utils.ProgressBar(len(windows))
     out = None
     position = 0
     for start, end, drop in windows:
         model_management.throw_exception_if_processing_interrupted()
-        piece = _decode(vae, video[:, :, start:end], device, factor)[:, drop:]
+        # one more group of latents after the pass, decoded only for its continuation: without it the last 4
+        # frames of every pass would be decoded against the clip end instead of what really follows
+        tail = min(5, 2 + 5 * total - end)
+        piece = _decode(vae, video[:, :, start:end + tail], dest, work, drop)
+        if tail:
+            piece = piece[:, :5 + 17 * ((end - start - 2) // 5) - drop]
         if out is None:
-            frames = 5 + 17 * ((video.shape[2] - 2) // 5)
-            out = torch.empty(piece.shape[0], frames, *piece.shape[2:], device=piece.device, dtype=piece.dtype)
-        out[:, position:position + piece.shape[1]] = piece
-        position += piece.shape[1]
+            frames = 5 + 17 * total
+            # frames-first, so the final reshape is a view and the clip is not copied once more at the size of a whole video
+            out = torch.empty(frames, *piece.shape[2:], device=piece.device, dtype=piece.dtype)
+        part = piece.reshape(-1, *piece.shape[2:])
+        out[position:position + part.shape[0]] = part
+        position += part.shape[0]
         progress.update(1)
-        del piece
-    return out[:, :position]
+        del part, piece
+    return out[:position].unsqueeze(0)
 
 
 class PROMPTFORGE_MiniMaxDecode:
@@ -128,9 +136,10 @@ class PROMPTFORGE_MiniMaxDecode:
                 "samples": ("LATENT",),
                 "vae": ("VAE", {"tooltip": "The MiniMax H3 video VAE."}),
                 "tile_size": ("INT", {"default": 0, "min": 0, "max": 4096, "step": 16, "tooltip": "0 = auto: 256 px tiles, the size H3's decoder was built for. Larger tiles or the whole frame decode faster but look fried and banded. Overlap is a quarter of the tile."}),
-                "frames_per_pass": ("INT", {"default": 0, "min": 0, "max": 4096, "step": 17, "tooltip": "0 = auto: the whole clip, then fewer frames per pass on out-of-memory. A number decodes the clip in passes of about that many frames, with causal context."}),
-                "output_device": (["cpu", "gpu"], {"default": "cpu", "tooltip": "Where the finished frames are kept. gpu skips the copy to RAM but needs VRAM for the whole clip."}),
-                "retry_on_oom": ("BOOLEAN", {"default": True, "tooltip": "On out-of-memory, step down to smaller tiles and shorter passes instead of failing."}),
+                "frames_per_pass": ("INT", {"default": 0, "min": 0, "max": 4096, "step": 17, "tooltip": "0 = auto: the whole clip in one pass, which is the fastest. A number decodes it in passes of about that many frames with causal context: less VRAM, but each pass decodes its context again."}),
+                "tiles_per_call": ("INT", {"default": 0, "min": 0, "max": TILES_PER_CALL_MAX, "tooltip": "0 = auto: from free memory. Neighbouring tiles decode in one batched call: more is faster and uses more VRAM."}),
+                "output_device": (["auto", "gpu", "cpu"], {"default": "auto", "tooltip": "Where the finished frames are kept. auto: gpu while the whole clip fits there four times over, else cpu. gpu skips the copies to RAM but needs VRAM for the whole clip."}),
+                "retry_on_oom": ("BOOLEAN", {"default": True, "tooltip": "On out-of-memory, decode again in shorter passes and with fewer tiles instead of failing."}),
             },
         }
 
@@ -140,41 +149,53 @@ class PROMPTFORGE_MiniMaxDecode:
     CATEGORY = "🔮 PromptForge/Video"
     DESCRIPTION = "MiniMax H3 video decode with 256px tiles that steps down to shorter passes on out-of-memory instead of failing, and remembers what worked."
 
-    def decode(self, samples, vae, tile_size, frames_per_pass, output_device, retry_on_oom):
+    def decode(self, samples, vae, tile_size, frames_per_pass, tiles_per_call, output_device, retry_on_oom):
         inner = _inner(vae)
         video = _video(samples)
-        channels, factor = _packing(inner)
-        device = model_management.get_torch_device() if output_device == "gpu" else model_management.intermediate_device()
+        _check_packing(inner)
         key = tuple(video.shape)
 
-        if tile_size or frames_per_pass:
-            forced = (max(256, tile_size // 16 * 16), max(1, round(frames_per_pass / 17)) if frames_per_pass else 0)
-            unlimited = lambda value: value or 10 ** 9
-            safer = [rung for rung in LADDER if unlimited(rung[0]) < unlimited(forced[0]) or rung[0] == forced[0] and unlimited(rung[1]) < unlimited(forced[1])]
-            ladder = [forced] + (safer if retry_on_oom else [])
-        else:
-            ladder = list(LADDER[_worked.get(key, 0):]) if retry_on_oom else [LADDER[_worked.get(key, 0)]]
+        vae.throw_exception_if_invalid()
+        with model_management.cuda_device_context(vae.device):
+            model_management.load_models_gpu([vae.patcher], memory_required=vae.memory_used_decode(video.shape, vae.vae_dtype), force_full_load=vae.disable_offload)
+        model_management.soft_empty_cache()  # the plan below must see the memory that is really left, not reserved blocks
+        final = _final_bytes(vae, video)
+        dest = _destination(output_device, final)
+        total = (video.shape[2] - 2) // 5
+        tile = max(256, tile_size // 16 * 16) if tile_size else 256
+        # one pass writes the frames straight into the output, so shorter passes only save VRAM; start with the
+        # whole clip and only the pass size this latent size already had to drop to wins over that
+        groups = min(total, _worked.get(key, total))
+        if frames_per_pass:
+            groups = min(total, max(1, round(frames_per_pass / 17)))
 
-        saved = (inner.tiling, inner.tile_size, inner.tile_overlap_min, inner.decoder.out_channels, inner.pixel_mean, inner.pixel_std)
-        inner.decoder.out_channels = channels
-        failures = []
+        saved = (inner.tiling, inner.tile_size, inner.tile_overlap_min, inner.tiles_per_call)
+        failures = 0
         try:
-            for index, rung in enumerate(ladder):
+            while True:
                 try:
-                    images = _run(vae, video, device, factor, rung)
+                    images = _run(vae, video, dest, tile, groups, tiles_per_call)
                 except model_management.OOM_EXCEPTION:
-                    failures.append(rung)
                     gc.collect()
                     model_management.soft_empty_cache()
-                    if index == len(ladder) - 1:
+                    if not retry_on_oom or groups == 1 and tile <= 256:
                         raise
+                    failures += 1
+                    if groups > AUTO_GROUPS:
+                        groups = AUTO_GROUPS
+                    else:
+                        groups = (groups + 1) // 2
+                        if groups == 1:
+                            tile = 256
+                    if dest.type == "cuda":
+                        dest = model_management.intermediate_device()
                     continue
                 break
         finally:
-            inner.tiling, inner.tile_size, inner.tile_overlap_min, inner.decoder.out_channels, inner.pixel_mean, inner.pixel_std = saved
+            inner.tiling, inner.tile_size, inner.tile_overlap_min, inner.tiles_per_call = saved
 
-        if not tile_size and not frames_per_pass and rung in LADDER:
-            _worked[key] = LADDER.index(rung)
+        if not frames_per_pass and groups < _worked.get(key, total):
+            _worked[key] = groups
         repaired = False
         for start in range(0, images.shape[1], 16):
             part = images[:, start:start + 16]
@@ -182,8 +203,9 @@ class PROMPTFORGE_MiniMaxDecode:
                 torch.nan_to_num_(part, nan=0.0, posinf=1.0, neginf=0.0)
                 repaired = True
 
-        how = f"{rung[0]}px tiles" + (f", {17 * rung[1]} frames per pass" if rung[1] else "")
-        info = f"{images.shape[1]} frames {images.shape[3]}x{images.shape[2]}, {how}" + (f" (after {len(failures)} out-of-memory retries)" if failures else "") + (", non-finite pixels were repaired" if repaired else "")
+        how = f"{tile}px tiles" + (f", {17 * groups} frames per pass" if groups < total else "")
+        info = (f"{images.shape[1]} frames {images.shape[3]}x{images.shape[2]}, {how}, {tiles_per_call or 'auto'} tiles per call, kept in {str(dest).upper()}"
+                + (f" (after {failures} out-of-memory retries)" if failures else "") + (", non-finite pixels were repaired" if repaired else ""))
         return (images.reshape(-1, *images.shape[-3:]), info)
 
 

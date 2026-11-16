@@ -152,8 +152,8 @@ def action_category(label):
 
 
 CAMERAS = {
-    "POV (the viewer is B)": "STRICT POV of {B}: the camera IS {B}'s eyes, at eye height, tilted down along {B}'s own body. {B}'s chest, stomach and hips stay visible across the lower third of the frame, and {B}'s hands, forearms or thighs may enter it. {A} stays at arm's length with the whole torso and hips in frame, the contact visible, and {A}'s whole head and face fully inside the upper part of the frame; never crop the head. {B}'s own genitals stay as they are. Never show {B}'s face (only in a mirror), never cut away from this angle. Keep it medium-wide, not a macro close-up.",
-    "POV (the viewer is A)": "STRICT POV of {A}: the camera IS {A}'s eyes, at eye height, tilted down along {A}'s own body. {A}'s chest, stomach and hips stay visible across the lower third of the frame, and {A}'s hands, forearms or thighs may enter it. {B} stays at arm's length with the whole torso and hips in frame, the contact visible, and {B}'s whole head and face fully inside the upper part of the frame; never crop the head. {A}'s own genitals stay as they are. Never show {A}'s face (only in a mirror), never cut away from this angle. Keep it medium-wide, not a macro close-up.",
+    "POV (the viewer is B)": "STRICT POV of {B}: the camera IS {B}'s eyes, at eye height, tilted down along {B}'s own body. {B}'s chest, stomach and hips stay visible across the lower third of the frame, and {B}'s hands, forearms or thighs may enter it. {A} stays at arm's length with the whole torso and hips in frame, the contact visible, and {A}'s whole head and face fully inside the upper part of the frame, with headroom above the crown; never crop the head. {B}'s own genitals stay as they are. Never show {B}'s face (only in a mirror), never cut away from this angle. Keep it medium-wide, not a macro close-up. The viewpoint holder's belly and pubic mound stay low in the foreground and must not hide the join.",
+    "POV (the viewer is A)": "STRICT POV of {A}: the camera IS {A}'s eyes, at eye height, tilted down along {A}'s own body. {A}'s chest, stomach and hips stay visible across the lower third of the frame, and {A}'s hands, forearms or thighs may enter it. {B} stays at arm's length with the whole torso and hips in frame, the contact visible, and {B}'s whole head and face fully inside the upper part of the frame, with headroom above the crown; never crop the head. {A}'s own genitals stay as they are. Never show {A}'s face (only in a mirror), never cut away from this angle. Keep it medium-wide, not a macro close-up. The viewpoint holder's belly and pubic mound stay low in the foreground and must not hide the join.",
     "side view, full bodies": "A still camera at chest height, side-on to the people, framing both bodies fully with both faces visible.",
     "from behind": "The camera is behind the people, looking at the action from behind.",
     "front view": "A still camera at chest height facing the person or people from the front, the whole body in frame, the face visible.",
@@ -275,7 +275,7 @@ def brief(label, camera, subjects, notes="", penetration="vaginal"):
     if camera in CAMERAS and not (counts == 1 and camera in SOLO_CAMERAS):
         lines.append(f"Camera: {CAMERAS[camera].format(A=a, B=b)}")
         if camera.startswith("POV"):
-            lines.append("The POV viewpoint holder's face never appears; their chest, stomach and hips stay in the lower third, the framing stays medium-wide, and the other person's whole head and face stay fully inside the upper part of the frame with no crop.")
+            lines.append("The POV viewpoint holder's face never appears; their chest, stomach and hips stay in the lower third, their belly and pubic mound stay low enough not to hide the join, the framing stays medium-wide, and the other person's whole head and face stay fully inside the upper part of the frame with clear headroom and no crop.")
         if camera.startswith("POV") and penetration_modes(label):
             lines.append("In POV the shaft comes in from the bottom edge: angle the hips and lift the shaft so it enters the named hole; the other hole stays empty and beside it.")
     lines += [
@@ -300,9 +300,10 @@ def brief(label, camera, subjects, notes="", penetration="vaginal"):
             woman = genders.index("female") + 1
             man = genders.index("male") + 1
             lines.append(f"The penis is Subject {man}\'s and it goes into Subject {woman}; Subject {woman} never grows a penis and Subject {man} never gets a vagina.")
+            lines.append(f"The penis base stays attached between Subject {man}\'s hips, so the shaft emerges from his body; it is never a separate object, never floats and is never pasted over the bodies.")
     if counts == 1:
         if subjects[1]:
-            lines.append(f"Attached reference only, not in the video: Subject 2 ({subjects[1]}). Use it for anatomy, scale and detail.")
+            lines.append(f"Attached reference only, not in the video: Subject 2 ({subjects[1]}). Use it for anatomy and scale only; it is not a separate object.")
         if subjects[2]:
             lines.append(subjects[2] if subjects[2].startswith("The other attached") else f"Attached reference only, not in the video: Subject 3 ({subjects[2]}).")
         lines.append("Subject 1 is the only body in the scene; only Subject 1's genitals are described. The extra reference pictures are anatomy examples, never a second body.")
@@ -320,11 +321,11 @@ def brief(label, camera, subjects, notes="", penetration="vaginal"):
     if penetration_modes(label):
         rear = camera in (BEHIND, OVER) or any(word in label.lower() for word in ("from behind", "doggy", "prone", "spooning"))
         if penetration == "anal":
-            lines.append("PENETRATION: ANAL SEX. The penis is in the anus, not the vagina, for the whole clip. The anus is the lower opening; the shaft visibly enters it and the ring of the anus grips the shaft. The vulva, labia and clitoris stay visible above, the vagina stays empty, the strokes are slower and tighter. On each pull-back some shaft and the glans stay outside.")
+            lines.append("PENETRATION: ANAL SEX. The penis is in the anus, not the vagina, for the whole clip. The anus is the lower opening; the shaft rises from the base at his pelvis and its glans disappears into the anus, the ring gripping the shaft. The vulva, labia and clitoris stay visible above, the vagina stays empty, the strokes are slower and tighter. On each pull-back some shaft and the glans stay outside.")
         elif rear:
             lines.append("PENETRATION: VAGINAL SEX. The penis is in the vagina, not the anus, for the whole clip. The vagina is the upper opening, the anus is the lower one; the shaft visibly enters the upper opening, the labia majora and minora grip the shaft, the clitoris stays visible above the join, the anus stays closed and empty below. On each pull-back some shaft and the glans stay outside, then slide back in. Never move the penis into the anus and never let the shaft disappear into the belly.")
         else:
-            lines.append("PENETRATION: VAGINAL SEX. The penis is in the vagina, not the anus, for the whole clip. The shaft visibly enters the vaginal opening, the labia majora and minora grip the shaft, the clitoris stays visible above the join. On each pull-back some shaft and the glans stay outside, then slide back in. Describe the anus only if this angle actually shows it; never let the shaft disappear into the belly.")
+            lines.append("PENETRATION: VAGINAL SEX. The penis is in the vagina, not the anus, for the whole clip. The shaft rises from the base at his pelvis and disappears into the vaginal opening; the glans is buried inside her, not resting on the outside. The labia majora and minora wrap the shaft at the entry point and the clitoris stays visible above it. The shaft crosses the gap under her mons and enters below the clitoris; it never lies on top of her pubic mound. On each pull-back only the lower shaft stays visible, then slides back in. Describe the anus only if this angle actually shows it; never let the shaft disappear into the belly.")
     lines.append("Use the pictures for identity and anatomy only: ignore their clothing, pose, lighting and background.")
     if "nudity" in notes.lower() or "naked" in notes.lower():
         if "striptease" in label.lower():
