@@ -915,31 +915,38 @@ HERETIC_MODEL_ENTRIES = (
 )
 
 
-def _cache_has(repo_id, filename):
-    if not repo_id or not filename:
-        return False
-    from huggingface_hub.constants import HF_HUB_CACHE
-    hub = Path(HF_HUB_CACHE)
-    snapshots = hub / f"models--{repo_id.replace('/', '--')}" / "snapshots"
-    if not snapshots.is_dir():
-        return False
-    return any((snapshot / filename).is_file() for snapshot in snapshots.iterdir())
+def _models_dir():
+    return Path(folder_paths.models_dir) if folder_paths is not None else Path(".")
+
+
+def _entry_dir(entry):
+    """Where an entry's files sit in the ComfyUI models folder, downloaded or not. Not created."""
+    return _models_dir() / ((entry or {}).get("base_dir") or ("LLM/GGUF" if (entry or {}).get("kind") == "gguf" else "LLM"))
+
+
+def _download_dir(entry):
+    """Exact folder an entry downloads into: quants and their mmproj beside each other, a repository in its own folder."""
+    base = _entry_dir(entry)
+    repo = (entry or {}).get("repo_id") or ""
+    return base / Path(repo).name if (entry or {}).get("kind") == "hf" and repo else base
+
+
+def _model_dir(entry):
+    """`_download_dir` for writing: the folder is created on demand."""
+    path = _download_dir(entry)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def _gguf_local_quants(entry):
     quant_files = entry.get("quant_files") or {}
     if not quant_files:
         return []
-    base_dir = Path(entry.get("base_dir") or "LLM/GGUF")
-    if folder_paths is not None:
-        models_dir = getattr(folder_paths, "models_dir", "") or ""
-        if models_dir:
-            base_dir = Path(models_dir) / base_dir
+    base_dir = _entry_dir(entry)
     scanned = _SCANNED_GGUF_NAMES
-    repo_id = entry.get("repo_id")
     return [
         quant for quant, filename in quant_files.items()
-        if (base_dir / filename).is_file() or filename in scanned or _cache_has(repo_id, filename)
+        if (base_dir / filename).is_file() or filename in scanned
     ]
 
 
@@ -972,7 +979,7 @@ def _vision_tag(entry):
     if local and any(Path(local).parent.glob("*mmproj*.gguf")):
         return " [VISION]"
     mmproj = entry.get("mmproj_file")
-    if mmproj and _cache_has(entry.get("repo_id"), mmproj):
+    if mmproj and (_entry_dir(entry) / mmproj).is_file():
         return " [VISION]"
     return " [VISION dl]" if mmproj else " [TEXT]"
 
@@ -987,7 +994,7 @@ def _entry_label(entry):
             ordered = [q for q in ("q4", "q5", "q6", "q8") if q in quants]
             return f"[LOCAL {'/'.join(q.upper() for q in ordered)}]{tag} {label}", True
         return f"[DOWNLOAD]{tag} {label}", False
-    if _entry_local_path(entry) or _cache_has(entry.get("repo_id"), "config.json"):
+    if _entry_local_path(entry) or (_download_dir(entry) / "config.json").is_file():
         return f"[LOCAL] {label}", True
     return f"[DOWNLOAD] {label}", False
 
@@ -1419,11 +1426,7 @@ def _find_gguf(entry, quantization, download=True, exact=False):
     if exact:
         order = order[:1]
 
-    base_dir = Path(entry.get("base_dir") or "LLM/GGUF")
-    if folder_paths is not None:
-        models_dir = getattr(folder_paths, "models_dir", "") or ""
-        if models_dir:
-            base_dir = Path(models_dir) / base_dir
+    base_dir = _model_dir(entry)
     scanned = _scanned_ggufs()
     repo_id = (entry or {}).get("repo_id")
 
@@ -1437,18 +1440,12 @@ def _find_gguf(entry, quantization, download=True, exact=False):
         return None
 
     def download_q(name):
-        if not repo_id:
+        if not repo_id or not download:
             return None
         from huggingface_hub import hf_hub_download
         try:
-            return Path(hf_hub_download(repo_id=repo_id, filename=name, local_files_only=True))
-        except Exception:
-            pass
-        if not download:
-            return None
-        try:
-            print("[PromptForge] downloading GGUF model (first use).")
-            return Path(hf_hub_download(repo_id=repo_id, filename=name))
+            print(f"[PromptForge] downloading {name} into {base_dir} (first use).")
+            return Path(hf_hub_download(repo_id=repo_id, filename=name, local_dir=base_dir))
         except Exception:
             return None
 
@@ -1523,7 +1520,7 @@ def _resolve_mmproj(gguf_path, entry, override=""):
     if repo_id and name:
         try:
             from huggingface_hub import hf_hub_download
-            return Path(hf_hub_download(repo_id=repo_id, filename=name))
+            return Path(hf_hub_download(repo_id=repo_id, filename=name, local_dir=gguf_path.parent))
         except Exception as exc:
             raise ValueError(f"[PromptForge] Could not download mmproj '{name}' from {repo_id}: {exc}") from exc
     return _find_mmproj(gguf_path, entry)
@@ -1614,7 +1611,7 @@ def _display_model(name, source):
         return f"[DOWNLOAD] {bare}"
     local = (resolved or {}).get("local_path") or ""
     repo = (resolved or {}).get("repo_id") or ""
-    if local or (repo and _cache_has(repo, "config.json")):
+    if local or (repo and (_download_dir(resolved) / "config.json").is_file()):
         return f"[LOCAL] {bare}"
     return f"[DOWNLOAD] {bare}"
 
@@ -1882,7 +1879,7 @@ class PROMPTFORGE_Model:
             resolved = _resolve_model_entry(safetensors_model)
             repo = (resolved or {}).get("repo_id") or ""
             local = (resolved or {}).get("local_path") or ""
-            if repo and not local and not _cache_has(repo, "config.json"):
+            if repo and not local and not (_download_dir(resolved) / "config.json").is_file():
                 print(f"[PromptForge] {safetensors_model} is not local; it will download on first use.")
         if source == "connected clip":
             if clip is None:
@@ -2585,7 +2582,7 @@ class PROMPTFORGE_PromptEnhancer:
         src_path = Path(src)
         if not src_path.exists():
             from huggingface_hub import snapshot_download
-            src = snapshot_download(repo_id=src, local_dir=None)
+            src = snapshot_download(repo_id=src, local_dir=_model_dir(resolved))
             src_path = Path(src)
 
         if quant in ("q8", "q4") and not src_path.is_dir():
