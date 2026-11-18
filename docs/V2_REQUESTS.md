@@ -65,6 +65,10 @@ Every item is required. Keep the status current; do not drop one silently.
 - [x] Single-route sampling nodes are titled "Sampling"; first/refine stays only where both passes exist.
 - [x] Show Text node added; every `triggers`/`report` output is wired to one.
 
+## Quality tuning
+- [x] Per-mode sampling: reference and multipart modes get 0.8 MP first pass, 10 steps, 4 refine steps; single-shot modes stay 0.5 MP, 8 steps, 3 refine steps.
+- [x] Writer asks for 650-900 words of body facts instead of 1200-1600 of prose.
+
 ## Optional / research
 - [x] Latent upscale research: image families need a 2D upscaler (SesquiLSR `upscaler_Wan21` for Anima/Krea 2, `upscaler_Flux2` for MOSS); H3's 3D model is 24-channel and cannot be reused. Refine denoise 0.20-0.25, never raise CFG.
 - [x] Implement optional two-stage for the image families: 2D latent upscale node + refine stage, settings mirroring the H3 refine section.
