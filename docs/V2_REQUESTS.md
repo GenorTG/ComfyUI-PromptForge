@@ -29,7 +29,7 @@ Every item is required. Keep the status current; do not drop one silently.
 ## Writer and model loader
 - [x] Writer thinking toggle (default off).
 - [x] Writer retries: "retry count" off/1/2/3, first passing try kept, nothing else written.
-- [ ] Writer node exposes the preset, default `auto (from pipe)`; a manual pick overrides only the writer template, never the pipe.
+- [x] Writer node exposes the preset, default `auto (from pipe)`; a manual pick overrides only the writer template, never the pipe.
 - [x] Model loader filters checkpoint / diffusion lists to the chosen family; `auto` shows every model.
 - [x] Model rows get the same info window as loras (sample images, recommended settings, author text) and only when `comfyui-lora-manager` is present.
 
@@ -45,19 +45,23 @@ Every item is required. Keep the status current; do not drop one silently.
 - [x] Multipart references: first pass back to 0.5 MP and overlap 8 so the join stops ghosting.
 
 ## Resource readout
-- [ ] Own top-bar system readout (CPU, RAM, VRAM, GPU, disk) built into the pack, no third-party pack needed.
-- [ ] Settings toggle to hide it entirely and to choose which meters show, in which order.
+- [x] Own top-bar system readout (CPU, RAM, VRAM, GPU, disk) built into the pack, no third-party pack needed.
+- [x] Settings toggle to hide it entirely and to choose which meters show, in which order.
+
+## Per-model generation presets
+- [ ] Model loader offers "apply saved generation settings for this model": writes sampler, scheduler, steps, cfg and clip skip from the preset store for that checkpoint so switching models is one click. The preset store STAYS in its own node (history lives there); the loader only applies. Reason: merging would duplicate storage and bloat the loader, while keeping it separate also serves workflows that never touch the loader.
 
 ## Seeds
 - [x] Writer sampling: top_p, top_k, repetition and presence penalty exposed (temperature alone caused gibberish tails).
-- [ ] One seed field only: drop the duplicate on the sampler node, keep it on the sampling settings.
+- [x] One seed field only: drop the duplicate on the sampler node, keep it on the sampling settings.
 
 ## Naming and wiring
 - [x] Single-route sampling nodes are titled "Sampling"; first/refine stays only where both passes exist.
 - [x] Show Text node added; every `triggers`/`report` output is wired to one.
 
 ## Optional / research
-- [ ] Look into latent upscale models for anima/krea/moss so a two-stage pass makes sense there too.
+- [x] Latent upscale research: image families need a 2D upscaler (SesquiLSR `upscaler_Wan21` for Anima/Krea 2, `upscaler_Flux2` for MOSS); H3's 3D model is 24-channel and cannot be reused. Refine denoise 0.20-0.25, never raise CFG.
+- [x] Implement optional two-stage for the image families: 2D latent upscale node + refine stage, settings mirroring the H3 refine section.
 
 ## Ongoing
 - [x] Finish and test every H3 mode workflow (t2v, i2v, fl2v, l2v, continue, ref2v, multipart t2v, multipart references) and keep the visual pass on each.

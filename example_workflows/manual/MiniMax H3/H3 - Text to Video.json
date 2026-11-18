@@ -552,9 +552,10 @@
           "loras": "{\"filter\":\"all\",\"items\":[]}",
           "layer_controls": "auto",
           "seed": 0,
+          "control_after_generate": "fixed",
           "skip_mismatched": true,
           "balance": false,
-          "balance_floor": 0
+          "balance_floor": -0.0
         },
         "ue_properties": {
           "widget_ue_connectable": {},
@@ -566,7 +567,7 @@
         "{\"filter\":\"all\",\"items\":[]}",
         "auto",
         0,
-        false,
+        "fixed",
         true,
         false,
         -0.0,
@@ -576,7 +577,7 @@
         "loras": "{\"filter\":\"all\",\"items\":[]}",
         "layer_controls": "auto",
         "seed": 0,
-        "control_after_generate": false,
+        "control_after_generate": "fixed",
         "skip_mismatched": true,
         "balance": false,
         "balance_floor": -0.0,
@@ -814,7 +815,11 @@
           "attention": "as loaded",
           "ffn_chunks": 2,
           "sparse_attention": false,
-          "keep_percent": 10
+          "keep_percent": 10,
+          "use_slg": false,
+          "slg_layers": "22",
+          "slg_start": 0,
+          "slg_end": 0.5
         },
         "ue_properties": {
           "widget_ue_connectable": {},
@@ -1232,12 +1237,12 @@
         "Node name for S&R": "PROMPTFORGE_V2_H3_FORMAT",
         "promptforge_role": "format",
         "promptforge_v2_widget_values": {
-          "width": 848,
-          "height": 480,
+          "width": 944,
+          "height": 528,
           "seconds": 5,
-          "aspect": "custom",
-          "megapixels": 1,
-          "orientation": "as selected"
+          "aspect": "16:9",
+          "megapixels": 0.5,
+          "orientation": "landscape"
         },
         "ue_properties": {
           "widget_ue_connectable": {},
@@ -1435,7 +1440,8 @@
         "promptforge_role": "references",
         "promptforge_v2_widget_values": {
           "mode": "t2v",
-          "ref_image_size": "match"
+          "ref_image_size": "match",
+          "frame_fit": "match first frame"
         },
         "ue_properties": {
           "widget_ue_connectable": {},
@@ -1932,8 +1938,11 @@
           "subject_1": "",
           "subject_2": "",
           "subject_3": "",
-          "camera": "auto",
-          "notes": ""
+          "camera": "POV (the viewer is B)",
+          "notes": "",
+          "soundscape": "",
+          "music": "N/A",
+          "generation": "minimax"
         },
         "ue_properties": {
           "widget_ue_connectable": {},
@@ -1953,6 +1962,7 @@
         "",
         "",
         "N/A",
+        "minimax",
         ""
       ],
       "widgets_values_named": {
@@ -1967,7 +1977,8 @@
         "notes": "",
         "soundscape": "",
         "music": "N/A",
-        "prompt_source_and_saves": ""
+        "generation": "minimax",
+        "prompt_controls": ""
       },
       "color": "#2c5237",
       "bgcolor": "#4e7459"
@@ -2181,12 +2192,19 @@
         "Node name for S&R": "PROMPTFORGE_V2_H3_PROMPT_WRITER",
         "promptforge_role": "prompt_writer",
         "promptforge_v2_widget_values": {
+          "writer_preset": "auto",
           "seed": 1,
-          "max_tokens": 3072,
-          "max_words": 0,
+          "control_after_generate": "fixed",
+          "max_tokens": 4096,
           "style_prefix": "",
-          "temperature": 0.7,
-          "attempts": 3
+          "temperature": 0.55,
+          "top_p": 0.9,
+          "top_k": 40,
+          "repetition_penalty": 1.05,
+          "presence_penalty": 0.4,
+          "thinking": "off",
+          "checks": "strict",
+          "retries": "2"
         },
         "ue_properties": {
           "widget_ue_connectable": {},
@@ -2195,23 +2213,35 @@
         }
       },
       "widgets_values": [
+        "auto",
         1,
-        false,
+        "fixed",
         4096,
-        0,
         "",
         0.55,
-        3,
+        0.9,
+        40,
+        1.05,
+        0.4,
+        "off",
+        "strict",
+        "2",
         ""
       ],
       "widgets_values_named": {
+        "writer_preset": "auto",
         "seed": 1,
-        "control_after_generate": false,
+        "control_after_generate": "fixed",
         "max_tokens": 4096,
-        "max_words": 0,
         "style_prefix": "",
         "temperature": 0.55,
-        "attempts": 3,
+        "top_p": 0.9,
+        "top_k": 40,
+        "repetition_penalty": 1.05,
+        "presence_penalty": 0.4,
+        "thinking": "off",
+        "checks": "strict",
+        "retries": "2",
         "output_inspector": ""
       },
       "color": "#2c5237",
@@ -2314,9 +2344,11 @@
         }
       },
       "widgets_values": [
+        "",
         ""
       ],
       "widgets_values_named": {
+        "report_view": "",
         "output_inspector": ""
       },
       "color": "#2c5237",
@@ -2586,16 +2618,17 @@
         "promptforge_role": "sampling_first_and_refine",
         "promptforge_v2_widget_values": {
           "seed": 0,
-          "steps": 8,
-          "cfg": 1,
-          "sampler_name": "euler",
-          "scheduler": "beta57",
-          "shift_video": 0,
-          "shift_audio": 0,
-          "refine_steps": 3,
-          "refine_cfg": 1,
-          "refine_sampler": "er_sde",
-          "refine_scheduler": "linear from start",
+          "control_after_generate": "fixed",
+          "steps": 1,
+          "cfg": "euler",
+          "sampler_name": "beta57",
+          "scheduler": 12.0,
+          "shift_video": 3.0,
+          "shift_audio": 3,
+          "refine_steps": 1,
+          "refine_cfg": "er_sde",
+          "refine_sampler": "linear from start",
+          "refine_scheduler": 0.9035,
           "start_sigma": 0.9035
         },
         "ue_properties": {
@@ -2606,7 +2639,7 @@
       },
       "widgets_values": [
         0,
-        8,
+        "fixed",
         1,
         "euler",
         "beta57",
@@ -2621,12 +2654,12 @@
       ],
       "widgets_values_named": {
         "seed": 0,
-        "control_after_generate": 8,
+        "control_after_generate": "fixed",
         "steps": 1,
         "cfg": "euler",
         "sampler_name": "beta57",
-        "scheduler": -0.0,
-        "shift_video": -0.0,
+        "scheduler": 12.0,
+        "shift_video": 3.0,
         "shift_audio": 3,
         "refine_steps": 1,
         "refine_cfg": "er_sde",
@@ -2782,9 +2815,10 @@
         "promptforge_role": "upscale_settings",
         "promptforge_v2_widget_values": {
           "upscale_model": "",
-          "width": 1184,
-          "height": 672,
-          "enabled": false
+          "enabled": true,
+          "mode": "percent",
+          "percent": 200,
+          "megapixels": 1
         },
         "ue_properties": {
           "widget_ue_connectable": {},
@@ -2795,9 +2829,9 @@
       "widgets_values": [
         "",
         true,
-        "megapixels",
-        200.0,
-        1.0
+        "percent",
+        200,
+        1
       ],
       "widgets_values_named": {
         "upscale_model": "",
@@ -3013,7 +3047,9 @@
         "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
         "Node name for S&R": "PROMPTFORGE_V2_H3_ENCODE",
         "promptforge_role": "encode",
-        "promptforge_v2_widget_values": {},
+        "promptforge_v2_widget_values": {
+          "clip_skip": -1
+        },
         "ue_properties": {
           "widget_ue_connectable": {},
           "version": "8.0.1",
@@ -3301,7 +3337,15 @@
         "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
         "Node name for S&R": "PROMPTFORGE_V2_H3_SAMPLE",
         "promptforge_role": "sample_first",
-        "promptforge_v2_widget_values": {},
+        "promptforge_v2_widget_values": {
+          "pipe_settings": true,
+          "steps": 8,
+          "cfg": 1,
+          "sampler_name": "euler",
+          "scheduler": "beta57",
+          "shift_video": 0,
+          "shift_audio": 0
+        },
         "ue_properties": {
           "widget_ue_connectable": {},
           "version": "8.0.1",
@@ -3310,8 +3354,6 @@
       },
       "widgets_values": [
         true,
-        0,
-        "randomize",
         8,
         1,
         "euler",
@@ -3321,8 +3363,6 @@
       ],
       "widgets_values_named": {
         "pipe_settings": true,
-        "seed": 0,
-        "control_after_generate": "randomize",
         "steps": 8,
         "cfg": 1,
         "sampler_name": "euler",
@@ -3444,7 +3484,8 @@
         "promptforge_role": "first_pass_preview",
         "promptforge_v2_widget_values": {
           "enabled": true,
-          "filename_prefix": "video/PromptForge_H3_first_pass"
+          "save": true,
+          "filename_prefix": "video/PromptForge/h3_t2v_first"
         },
         "ue_properties": {
           "widget_ue_connectable": {},
@@ -3942,7 +3983,9 @@
         "promptforge_v2_widget_values": {
           "tile_size": 256,
           "frames_per_pass": 0,
-          "output_device": "auto"
+          "output_device": "auto",
+          "audio_normalize": true,
+          "audio_gain_db": -0.0
         },
         "ue_properties": {
           "widget_ue_connectable": {},
@@ -4162,10 +4205,10 @@
         "Node name for S&R": "PROMPTFORGE_V2_FRAME_INTERPOLATE",
         "promptforge_role": "optional_rife",
         "promptforge_v2_widget_values": {
-          "enabled": false,
+          "enabled": true,
           "multiplier": 2,
           "model_name": "",
-          "batch_size": 0,
+          "batch_size": 24,
           "overlap": 2,
           "scale": 1
         },
@@ -4554,8 +4597,9 @@
         "Node name for S&R": "PROMPTFORGE_V2_H3_PREVIEW_SAVE",
         "promptforge_role": "save_video",
         "promptforge_v2_widget_values": {
-          "save": true,
-          "filename_prefix": "video/PromptForge/h3_t2v",
+          "save": "PromptForge/template",
+          "filename_prefix": "video/PromptForge/h3_t2v_prism_two",
+          "encoder_preset": "high quality",
           "codec": "h264 (cpu x264)",
           "speed": "slow",
           "rate_control": "quality",
@@ -4563,7 +4607,7 @@
           "bitrate_mbit": 15,
           "bit_depth": "8",
           "audio_bitrate_kbps": 192,
-          "film_grain": 0,
+          "film_grain": -0.0,
           "pingpong": false,
           "save_metadata": true,
           "show_preview": true,
@@ -4579,6 +4623,7 @@
       "widgets_values": [
         "PromptForge/template",
         "video/PromptForge/h3_t2v_prism_two",
+        "high quality",
         "h264 (cpu x264)",
         "slow",
         "quality",
@@ -4594,8 +4639,9 @@
         true
       ],
       "widgets_values_named": {
-        "save": true,
-        "filename_prefix": "video/PromptForge/h3_t2v_second",
+        "save": "PromptForge/template",
+        "filename_prefix": "video/PromptForge/h3_t2v_prism_two",
+        "encoder_preset": "high quality",
         "codec": "h264 (cpu x264)",
         "speed": "slow",
         "rate_control": "quality",
@@ -4828,9 +4874,11 @@
         }
       },
       "widgets_values": [
+        "",
         ""
       ],
       "widgets_values_named": {
+        "report_view": "",
         "output_inspector": ""
       },
       "color": "#245a52",
@@ -5014,12 +5062,10 @@
         "promptforge_role": "optional_cleanup",
         "promptforge_v2_widget_values": {
           "enabled": true,
-          "mode": "Deblur",
-          "quality": "High",
-          "denoise": true,
+          "denoise": false,
           "denoise_quality": "Ultra",
           "deblur": true,
-          "deblur_quality": "Ultra"
+          "deblur_quality": "Low"
         },
         "ue_properties": {
           "widget_ue_connectable": {},

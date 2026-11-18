@@ -10,6 +10,7 @@ that resolves outside it. Templates are read from `example_workflows/manual`, on
 model family.
 """
 import asyncio
+import hashlib
 import json
 import os
 import threading
@@ -17,9 +18,11 @@ import time
 from pathlib import Path
 
 from aiohttp import web
+from PIL import Image, ImageOps
 from server import PromptServer
 
 import folder_paths
+import node_helpers
 
 from .. import image_library
 
@@ -142,8 +145,42 @@ async def _file(request):
         return web.Response(status=400, text=str(error))
     if not path.is_file():
         return web.Response(status=404, text="File not found.")
-    headers = {"Cache-Control": "private, max-age=60"}
+    headers = {"Cache-Control": "private, max-age=300"}
     return web.FileResponse(path, headers=headers)
+
+
+def _thumbnail(path, size):
+    stat = path.stat()
+    digest = hashlib.sha1(f"{path}|{stat.st_mtime_ns}|{stat.st_size}|{size}".encode()).hexdigest()
+    cached = image_library.store_dir() / "browser_thumbs" / f"{digest}.jpg"
+    if not cached.exists():
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        with node_helpers.pillow(Image.open, str(path)) as image:
+            image.draft("RGB", (size, size))
+            image = node_helpers.pillow(ImageOps.exif_transpose, image)
+            if image.mode in ("RGBA", "LA", "P"):
+                image = image.convert("RGBA")
+                image = Image.alpha_composite(Image.new("RGBA", image.size, (24, 24, 24, 255)), image)
+            image = image.convert("RGB")
+            image.thumbnail((size, size))
+            image.save(cached, "JPEG", quality=82)
+    return cached
+
+
+@routes.get("/promptforge/browser/thumb")
+async def _thumb(request):
+    try:
+        _, path = _resolve(request.query.get("root", "output"), request.query.get("path", ""))
+        size = min(512, max(48, int(request.query.get("size", 192))))
+    except ValueError:
+        return web.Response(status=400, text="Use root=output|input, a path and a size.")
+    if not path.is_file() or path.suffix.lower() not in KINDS["image"]:
+        return web.Response(status=404, text="No thumbnail for that file.")
+    try:
+        cached = await asyncio.get_running_loop().run_in_executor(None, _thumbnail, path, size)
+    except OSError:
+        return web.Response(status=422, text="The image could not be decoded.")
+    return web.FileResponse(cached, headers={"Cache-Control": "private, max-age=86400"})
 
 
 @routes.post("/promptforge/browser/rename")

@@ -257,6 +257,7 @@
         "",
         "",
         "",
+        "",
         "auto",
         "balanced",
         "default"
@@ -264,6 +265,7 @@
       "widgets_values_named": {
         "family": "krea2",
         "model": "",
+        "model_picker": "",
         "clip": "",
         "vae": "",
         "weight_dtype": "auto",
@@ -535,9 +537,10 @@
           "loras": "{\"filter\":\"all\",\"items\":[]}",
           "layer_controls": "auto",
           "seed": 0,
+          "control_after_generate": "fixed",
           "skip_mismatched": true,
           "balance": false,
-          "balance_floor": 0
+          "balance_floor": -0.0
         },
         "ue_properties": {
           "widget_ue_connectable": {},
@@ -549,7 +552,7 @@
         "{\"filter\":\"all\",\"items\":[]}",
         "auto",
         0,
-        false,
+        "fixed",
         true,
         false,
         -0.0,
@@ -559,7 +562,7 @@
         "loras": "{\"filter\":\"all\",\"items\":[]}",
         "layer_controls": "auto",
         "seed": 0,
-        "control_after_generate": false,
+        "control_after_generate": "fixed",
         "skip_mismatched": true,
         "balance": false,
         "balance_floor": -0.0,
@@ -983,6 +986,8 @@
         "Node name for S&R": "PROMPTFORGE_V2_IMAGE_FORMAT",
         "promptforge_role": "format",
         "promptforge_v2_widget_values": {
+          "sizing": "megapixels",
+          "preset": "krea square 1024x1024",
           "aspect": "4:3",
           "megapixels": 1.5,
           "orientation": "portrait",
@@ -997,20 +1002,26 @@
         }
       },
       "widgets_values": [
+        "megapixels",
+        "krea square 1024x1024",
         "4:3",
         1.5,
         "portrait",
         1024,
         1024,
-        1
+        1,
+        ""
       ],
       "widgets_values_named": {
+        "sizing": "megapixels",
+        "preset": "krea square 1024x1024",
         "aspect": "4:3",
         "megapixels": 1.5,
         "orientation": "portrait",
         "width": 1024,
         "height": 1024,
-        "batch_size": 1
+        "batch_size": 1,
+        "format_controls": ""
       },
       "color": "#54502a",
       "bgcolor": "#76724c"
@@ -1260,11 +1271,14 @@
         "promptforge_role": "sampling_first",
         "promptforge_v2_widget_values": {
           "seed": 0,
+          "control_after_generate": "fixed",
           "steps": 10,
           "cfg": 1,
           "sampler_name": "euler",
           "scheduler": "simple",
           "denoise": 1,
+          "refine_denoise": 0.25,
+          "refine_steps": 4,
           "use_nag": false,
           "nag_phi": 4,
           "nag_tau": 2.5,
@@ -1284,6 +1298,8 @@
         "euler",
         "simple",
         1,
+        0.25,
+        4,
         false,
         4,
         2.5,
@@ -1297,6 +1313,8 @@
         "sampler_name": "euler",
         "scheduler": "simple",
         "denoise": 1,
+        "refine_denoise": 0.25,
+        "refine_steps": 4,
         "use_nag": false,
         "nag_phi": 4,
         "nag_tau": 2.5,
@@ -2493,7 +2511,10 @@
           "subject_2": "",
           "subject_3": "",
           "camera": "auto",
-          "notes": ""
+          "notes": "",
+          "soundscape": "",
+          "music": "N/A",
+          "generation": "image"
         },
         "ue_properties": {
           "widget_ue_connectable": {},
@@ -2511,6 +2532,9 @@
         "",
         "auto",
         "",
+        "",
+        "N/A",
+        "image",
         ""
       ],
       "widgets_values_named": {
@@ -2523,7 +2547,10 @@
         "subject_3": "",
         "camera": "auto",
         "notes": "",
-        "prompt_source_and_saves": ""
+        "soundscape": "",
+        "music": "N/A",
+        "generation": "image",
+        "prompt_controls": ""
       },
       "color": "#2c5237",
       "bgcolor": "#4e7459"
@@ -2737,12 +2764,19 @@
         "Node name for S&R": "PROMPTFORGE_V2_IMAGE_PROMPT_WRITER",
         "promptforge_role": "prompt_writer",
         "promptforge_v2_widget_values": {
+          "writer_preset": "auto",
           "seed": 1,
+          "control_after_generate": "fixed",
           "max_tokens": 3072,
-          "max_words": 0,
           "style_prefix": "",
           "temperature": 0.7,
-          "attempts": 3
+          "top_p": 0.9,
+          "top_k": 40,
+          "repetition_penalty": 1.05,
+          "presence_penalty": 0.4,
+          "thinking": "off",
+          "checks": "strict",
+          "retries": "2"
         },
         "ue_properties": {
           "widget_ue_connectable": {},
@@ -2751,23 +2785,35 @@
         }
       },
       "widgets_values": [
+        "auto",
         1,
-        false,
+        "fixed",
         3072,
-        0,
         "",
         0.7,
-        3,
+        0.9,
+        40,
+        1.05,
+        0.4,
+        "off",
+        "strict",
+        "2",
         ""
       ],
       "widgets_values_named": {
+        "writer_preset": "auto",
         "seed": 1,
-        "control_after_generate": false,
+        "control_after_generate": "fixed",
         "max_tokens": 3072,
-        "max_words": 0,
         "style_prefix": "",
         "temperature": 0.7,
-        "attempts": 3,
+        "top_p": 0.9,
+        "top_k": 40,
+        "repetition_penalty": 1.05,
+        "presence_penalty": 0.4,
+        "thinking": "off",
+        "checks": "strict",
+        "retries": "2",
         "output_inspector": ""
       },
       "color": "#2c5237",
@@ -2870,9 +2916,11 @@
         }
       },
       "widgets_values": [
+        "",
         ""
       ],
       "widgets_values_named": {
+        "report_view": "",
         "output_inspector": ""
       },
       "color": "#2c5237",
@@ -3151,7 +3199,12 @@
         "Node name for S&R": "PROMPTFORGE_V2_IMAGE_ENCODE",
         "promptforge_role": "encode",
         "promptforge_v2_widget_values": {
-          "task": "edit"
+          "task": "edit",
+          "clip_skip": -1,
+          "pipe_format": true,
+          "width": 1024,
+          "height": 1024,
+          "batch_size": 1
         },
         "ue_properties": {
           "widget_ue_connectable": {},
@@ -3161,6 +3214,7 @@
       },
       "widgets_values": [
         "edit",
+        -1,
         true,
         1024,
         1024,
@@ -3168,6 +3222,7 @@
       ],
       "widgets_values_named": {
         "task": "edit",
+        "clip_skip": -1,
         "pipe_format": true,
         "width": 1024,
         "height": 1024,
@@ -3431,7 +3486,14 @@
         "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
         "Node name for S&R": "PROMPTFORGE_V2_IMAGE_SAMPLE",
         "promptforge_role": "sample_first",
-        "promptforge_v2_widget_values": {},
+        "promptforge_v2_widget_values": {
+          "pipe_settings": true,
+          "steps": 10,
+          "cfg": 1,
+          "sampler_name": "euler",
+          "scheduler": "simple",
+          "denoise": 1
+        },
         "ue_properties": {
           "widget_ue_connectable": {},
           "version": "8.0.1",
@@ -3440,8 +3502,6 @@
       },
       "widgets_values": [
         true,
-        0,
-        "randomize",
         10,
         1,
         "euler",
@@ -3450,8 +3510,6 @@
       ],
       "widgets_values_named": {
         "pipe_settings": true,
-        "seed": 0,
-        "control_after_generate": "randomize",
         "steps": 10,
         "cfg": 1,
         "sampler_name": "euler",
@@ -3575,7 +3633,9 @@
         }
       },
       "color": "#7a2735",
-      "bgcolor": "#9c4957"
+      "bgcolor": "#9c4957",
+      "widgets_values": [],
+      "widgets_values_named": {}
     },
     {
       "id": 17,
@@ -3684,7 +3744,7 @@
         "Node name for S&R": "PROMPTFORGE_V2_IMAGE_SAVE",
         "promptforge_role": "save_image",
         "promptforge_v2_widget_values": {
-          "filename_prefix": "PromptForge/krea_edit"
+          "filename_prefix": "PromptForge/krea_ref2i"
         },
         "ue_properties": {
           "widget_ue_connectable": {},
@@ -3693,7 +3753,7 @@
         }
       },
       "widgets_values": [
-        "PromptForge/template"
+        "PromptForge/krea_ref2i"
       ],
       "widgets_values_named": {
         "filename_prefix": "PromptForge/krea_ref2i"
@@ -3916,9 +3976,11 @@
         }
       },
       "widgets_values": [
+        "",
         ""
       ],
       "widgets_values_named": {
+        "report_view": "",
         "output_inspector": ""
       },
       "color": "#245a52",

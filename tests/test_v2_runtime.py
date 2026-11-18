@@ -127,6 +127,36 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(sampler.call_args.args,(model,17,8,1.,"euler","simple",positive,negative,latent))
         self.assertEqual(sampler.call_args.kwargs,{"denoise":.7})
 
+    def test_refine_upscales_before_the_second_pass(self):
+        image, torch = self.v2.image, self.torch
+        latent = {"samples": torch.zeros(1, 16, 2, 2), "downscale_ratio_spacial": 8}
+        pipe = self.pipe(model=object(), positive=object(), negative=object(), latent=latent)
+        pipe = image.ImageSamplingSettings.execute(pipe, 17, 8, 1., "euler", "simple", .7, .3, 3).args[0]
+        pipe = image.evolve(pipe, "upscale", {"enabled": True, "method": "bicubic", "scale": 2.0})
+        sampled = {"samples": torch.ones(1, 16, 4, 4)}
+        upscaled = {"samples": torch.zeros(1, 16, 4, 4)}
+        with patch.object(image, "upscale_latent", return_value=upscaled) as upscaler, \
+                patch.object(image.nodes, "common_ksampler", return_value=(sampled,)) as sampler:
+            result = image.refine(pipe, latent)
+        upscaler.assert_called_once_with(pipe, latent, "bicubic", 2.0)
+        self.assertEqual(sampler.call_args.args[1:3], (18, 3))
+        self.assertEqual(sampler.call_args.kwargs, {"denoise": .3})
+        self.assertIs(result["artifacts"]["latent"], sampled)
+
+    def test_sampler_seed_comes_from_sampling_settings(self):
+        image, torch = self.v2.image, self.torch
+        latent = {"samples":torch.zeros(1,16,2,2)}
+        pipe = self.pipe(model=object(),positive=object(),negative=object(),latent=latent)
+        pipe = image.ImageSamplingSettings.execute(pipe, 17, 8, 1., "euler", "simple", .7).args[0]
+        sampled = {"samples":torch.ones(1,16,2,2)}
+        with patch.object(image.nodes, "common_ksampler", return_value=(sampled,)) as sampler:
+            stored = image.ImageSample.execute(pipe, pipe_settings=False).args[0]
+            connected = image.ImageSample.execute(pipe, seed=99, pipe_settings=False).args[0]
+        self.assertEqual(sampler.call_args_list[0].args[1], 17)
+        self.assertEqual(sampler.call_args_list[1].args[1], 99)
+        self.assertEqual(stored["settings"]["sampling"]["seed"], 17)
+        self.assertEqual(connected["settings"]["sampling"]["seed"], 99)
+
     def test_disabled_lora_stack_never_opens_weights(self):
         shared = self.v2.shared
         model, clip = object(), object()

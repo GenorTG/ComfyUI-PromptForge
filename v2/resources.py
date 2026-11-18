@@ -41,15 +41,21 @@ if psutil is not None:
 def _cpu():
     if psutil is None:
         return None
-    return {"percent": psutil.cpu_percent(interval=None),
-            "cores": psutil.cpu_percent(interval=None, percpu=True)}
+    try:
+        return {"percent": psutil.cpu_percent(interval=None),
+                "cores": psutil.cpu_percent(interval=None, percpu=True)}
+    except (OSError, RuntimeError):
+        return None
 
 
 def _memory():
     if psutil is None:
         return None, None
-    ram = psutil.virtual_memory()
-    swap = psutil.swap_memory()
+    try:
+        ram = psutil.virtual_memory()
+        swap = psutil.swap_memory()
+    except (OSError, RuntimeError):
+        return None, None
     return {"used": ram.total - ram.available, "total": ram.total}, {"used": swap.used, "total": swap.total}
 
 

@@ -23,6 +23,7 @@ REQUIRED = {
     "PROMPTFORGE_V2_PRESETS", "PROMPTFORGE_V2_LORA_STACK", "PROMPTFORGE_V2_LOAD_IMAGE",
     "PROMPTFORGE_V2_LOAD_VIDEO", "PROMPTFORGE_V2_LOAD_AUDIO", "PROMPTFORGE_V2_IMAGE_MODEL",
     "PROMPTFORGE_V2_IMAGE_FORMAT", "PROMPTFORGE_V2_IMAGE_SAMPLING_SETTINGS",
+    "PROMPTFORGE_V2_IMAGE_LATENT_UPSCALE",
     "PROMPTFORGE_V2_RUN_INSPECT", "PROMPTFORGE_V2_PROMPT_LIBRARY",
     "PROMPTFORGE_V2_SAVE_METADATA", "PROMPTFORGE_V2_PREVIEW_SETTINGS",
     "PROMPTFORGE_V2_WRITER_MODEL", "PROMPTFORGE_V2_IMAGE_PROMPT_WRITER",
@@ -109,7 +110,8 @@ SETUP = r"""async () => {
   await app.loadGraphData({last_node_id:0,last_link_id:0,nodes:[],links:[],groups:[],config:{},extra:{},version:0.4});
   const specs = [
     ['model','IMAGE_MODEL'], ['image','LOAD_IMAGE'], ['loras','LORA_STACK'],
-    ['format','IMAGE_FORMAT'], ['sample','IMAGE_SAMPLING_SETTINGS'], ['presets','PRESETS'],
+    ['format','IMAGE_FORMAT'], ['sample','IMAGE_SAMPLING_SETTINGS'], ['upscale','IMAGE_LATENT_UPSCALE'],
+    ['presets','PRESETS'],
     ['library','PROMPT_LIBRARY'], ['preview','PREVIEW_SETTINGS'], ['inspect','RUN_INSPECT'],
     ['prompt','IMAGE_PROMPT'],
     ['writer','WRITER_MODEL'], ['promptWriter','IMAGE_PROMPT_WRITER'], ['promptInspect','PROMPT_INSPECT'],

@@ -26,6 +26,13 @@ function change(node, action) {
   try { action(); } finally { node.graph?.afterChange(); }
   node.setDirtyCanvas?.(true, true);
 }
+// Sampling Settings gained refine_denoise/refine_steps after denoise; arrays saved before that are one value short there.
+function migrateSampling(node) {
+  const values = node.widgets_values;
+  if (!Array.isArray(values) || values.length !== 11) return;
+  values.splice(7, 0, 0.25, 4);
+  node.widgets_values = values;
+}
 function download(value) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }));
   const link = element("a", { href: url, download: "promptforge-v2-presets.json" });
@@ -436,6 +443,7 @@ app.registerExtension({
     };
     const configure = nodeType.prototype.onConfigure;
     nodeType.prototype.onConfigure = function () {
+      if (nodeData.name === "PROMPTFORGE_V2_IMAGE_SAMPLING_SETTINGS") migrateSampling(this);
       const result = configure?.apply(this, arguments);
       // loaded nodes mount their DOM layer after configure; wait for it, then build the panel
       const node = this;

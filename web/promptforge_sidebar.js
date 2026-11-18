@@ -20,6 +20,7 @@ const post = async (path, body) => {
   return data;
 };
 const fileUrl = (root, path) => api.apiURL(`/promptforge/browser/file?root=${root}&path=${encodeURIComponent(path)}`);
+const thumbUrl = (root, path, size = 256) => api.apiURL(`/promptforge/browser/thumb?root=${root}&path=${encodeURIComponent(path)}&size=${size}`);
 const size = (bytes) => bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 const date = (time) => new Date(time * 1000).toLocaleString();
 
@@ -39,22 +40,68 @@ function blur(element, meta, state) {
   element.style.filter = meta?.nsfw && !state.nsfw ? "blur(18px) saturate(.7)" : "none";
 }
 
-function preview(root, file) {
-  const backdrop = el("div", { position: "fixed", inset: "0", zIndex: 10050, background: "rgba(0,0,0,.75)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" });
-  const frame = el("div", { maxWidth: "94vw", maxHeight: "94vh", display: "flex", flexDirection: "column", gap: "6px", alignItems: "center" });
-  const media = file.kind === "video"
-    ? el("video", { maxWidth: "94vw", maxHeight: "86vh" }, { src: fileUrl(root, file.path), controls: true, autoplay: true, loop: true })
-    : file.kind === "audio"
-      ? el("audio", { maxWidth: "94vw" }, { src: fileUrl(root, file.path), controls: true, autoplay: true })
-      : el("img", { maxWidth: "94vw", maxHeight: "86vh", objectFit: "contain" }, { src: fileUrl(root, file.path) });
-  const caption = el("div", { color: "#ddd", font: "12px sans-serif" }, { textContent: `${file.path} · ${size(file.size)} · ${date(file.mtime)}` });
-  const close = () => { backdrop.remove(); document.removeEventListener("keydown", onKey, true); };
-  const onKey = (event) => { if (event.key === "Escape") close(); };
+let viewerClose = null;
+
+function preview(root, files, start) {
+  viewerClose?.();
+  const backdrop = el("div", { position: "fixed", inset: "0", zIndex: 10050, background: "rgba(0,0,0,.82)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", padding: "16px", boxSizing: "border-box", overflow: "hidden" });
+  const stage = el("div", { flex: "1", minHeight: "0", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", overflow: "hidden" });
+  const holder = el("div", { flex: "1", minWidth: "0", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" });
+  const caption = el("div", { minHeight: "16px", maxWidth: "100%", color: "#ddd", font: "12px sans-serif", textAlign: "center", overflowWrap: "anywhere" });
+
+  let index = Math.max(0, Math.min(files.length - 1, start));
+  let media = null;
+
+  const step = (delta) => {
+    if (files.length < 2) return;
+    index = (index + delta + files.length) % files.length;
+    render();
+  };
+  const close = () => {
+    media?.pause?.();
+    backdrop.remove();
+    document.removeEventListener("keydown", onKey, true);
+    if (viewerClose === close) viewerClose = null;
+  };
+  const onKey = (event) => {
+    if (event.key === "Escape") close();
+    else if (event.key === "ArrowLeft") { event.preventDefault(); step(-1); }
+    else if (event.key === "ArrowRight") { event.preventDefault(); step(1); }
+  };
+
+  function render() {
+    const file = files[index];
+    media?.pause?.();
+    holder.replaceChildren();
+    if (file.kind === "video") {
+      media = el("video", { maxWidth: "100%", maxHeight: "100%", display: "block" }, { src: fileUrl(root, file.path), controls: true, autoplay: true, loop: true });
+    } else if (file.kind === "audio") {
+      media = el("audio", { width: "min(560px, 80vw)", maxWidth: "100%" }, { src: fileUrl(root, file.path), controls: true, autoplay: true });
+    } else if (file.kind === "image") {
+      media = el("img", { maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" }, { src: fileUrl(root, file.path), alt: file.name });
+    } else {
+      media = el("div", { fontSize: "64px" }, { textContent: "📄" });
+    }
+    holder.append(media);
+    caption.textContent = `${file.path} · ${size(file.size)} · ${date(file.mtime)}${file.meta?.nsfw ? " · NSFW" : ""} · ${index + 1} / ${files.length}`;
+  }
+
+  stage.append(holder);
+  if (files.length > 1) {
+    const previous = button("‹", () => step(-1));
+    const next = button("›", () => step(1));
+    for (const control of [previous, next]) Object.assign(control.style, { flex: "0 0 auto", fontSize: "20px", padding: "12px 10px" });
+    stage.prepend(previous);
+    stage.append(next);
+  }
+  const footer = el("div", { display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", maxWidth: "100%" });
+  footer.append(caption, button("Close", close));
+  backdrop.append(stage, footer);
+  backdrop.addEventListener("click", (event) => { if (event.target === backdrop || event.target === stage) close(); });
   document.addEventListener("keydown", onKey, true);
-  backdrop.addEventListener("click", (event) => { if (event.target === backdrop) close(); });
-  frame.append(media, caption);
-  backdrop.append(frame);
   document.body.append(backdrop);
+  viewerClose = close;
+  render();
 }
 
 async function tagEditor(root, file, state, refresh) {
@@ -111,6 +158,7 @@ export function createPanel() {
   const views = {};
 
   const show = (name) => {
+    viewerClose?.();
     state.tab = name;
     for (const [key, view] of Object.entries(views)) view.style.display = key === name ? "flex" : "none";
     for (const [key, control] of Object.entries(tabButtons)) control.dataset.active = key === name ? "1" : "";
@@ -187,23 +235,25 @@ export function createPanel() {
       return;
     }
     const grid = el("div", { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(128px, 1fr))", gap: "6px" });
-    for (const file of data.files) grid.append(tile(name, file, view, load));
+    data.files.forEach((file, index) => grid.append(tile(name, statePart.root, file, index, data.files, view, load)));
     view.append(grid);
   }
 
-  function tile(name, file, view, refresh) {
+  function tile(name, root, file, index, files, view, refresh) {
     const inputs = name === "inputs";
     const card = el("div", { display: "flex", flexDirection: "column", gap: "3px", minWidth: "0", border: "1px solid var(--border-color, #444)", borderRadius: "5px", padding: "4px", background: "var(--comfy-input-bg, #2a2a2a)" });
-    const thumbBox = el("div", { position: "relative", height: "96px", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderRadius: "3px", background: "#111" });
+    const thumbBox = el("div", { position: "relative", height: "96px", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderRadius: "3px", background: "#111", cursor: "pointer" });
     let thumb;
-    if (file.kind === "image") thumb = el("img", { maxWidth: "100%", maxHeight: "100%", objectFit: "cover", cursor: "pointer" }, { src: fileUrl(name, file.path), loading: "lazy", alt: file.name });
-    else if (file.kind === "video") thumb = el("video", { maxWidth: "100%", maxHeight: "100%", cursor: "pointer" }, { src: fileUrl(name, file.path), preload: "metadata", muted: true });
-    else thumb = el("div", { fontSize: "26px", cursor: "pointer" }, { textContent: file.kind === "audio" ? "🎵" : "📄" });
+    if (file.kind === "image") {
+      thumb = el("img", { width: "100%", height: "100%", objectFit: "cover", display: "block" }, { src: thumbUrl(root, file.path), loading: "lazy", decoding: "async", alt: file.name });
+      thumb.addEventListener("error", () => { if (!thumb.dataset.fallback) { thumb.dataset.fallback = "1"; thumb.src = fileUrl(root, file.path); } });
+    } else if (file.kind === "video") thumb = el("video", { width: "100%", height: "100%", objectFit: "cover", display: "block" }, { src: `${fileUrl(root, file.path)}#t=0.1`, preload: "metadata", muted: true, playsInline: true });
+    else thumb = el("div", { fontSize: "26px" }, { textContent: file.kind === "audio" ? "🎵" : "📄" });
     if (file.meta?.nsfw) thumb.dataset.nsfw = "1";
     blur(thumb, file.meta, state[name]);
-    thumb.addEventListener("click", () => preview(name, file));
     thumbBox.append(thumb);
-    if (file.kind === "video") thumbBox.append(el("span", { position: "absolute", right: "3px", bottom: "3px", fontSize: "14px", pointerEvents: "none" }, { textContent: "▶" }));
+    thumbBox.addEventListener("click", () => preview(root, files, index));
+    if (file.kind === "video") thumbBox.append(el("span", { position: "absolute", inset: "0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "26px", pointerEvents: "none", textShadow: "0 1px 4px #000" }, { textContent: "▶" }));
     if (file.meta?.nsfw) thumbBox.append(el("span", { position: "absolute", left: "3px", top: "3px", padding: "1px 4px", borderRadius: "3px", background: "#a33", color: "#fff", fontSize: "10px" }, { textContent: "NSFW" }));
     card.append(thumbBox, el("div", { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: "600" }, { textContent: file.name, title: file.path }));
     card.append(el("div", { opacity: ".6", fontSize: "10px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, { textContent: `${size(file.size)} · ${date(file.mtime)}` }));
@@ -218,11 +268,11 @@ export function createPanel() {
       tools.append(button("Rename", async () => {
         const nameValue = prompt("New file name", file.name);
         if (!nameValue) return;
-        try { await post("/promptforge/browser/rename", { root: name, path: file.path, name: nameValue }); refresh(name); }
+        try { await post("/promptforge/browser/rename", { root, path: file.path, name: nameValue }); refresh(name); }
         catch (error) { status.textContent = error.message; }
       }));
-      tools.append(button("Classify", () => tagEditor(name, file, state[name], () => refresh(name))));
-      if (file.kind === "image") tools.append(button("Analyse", () => analyse(name, file, status, () => refresh(name))));
+      tools.append(button("Classify", () => tagEditor(root, file, state[name], () => refresh(name))));
+      if (file.kind === "image") tools.append(button("Analyse", () => analyse(root, file, status, () => refresh(name))));
       card.append(tools, status);
     }
     return card;

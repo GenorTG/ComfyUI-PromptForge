@@ -13,6 +13,7 @@ from .. import unified_loader as loader
 from .contracts import schema as nodes_schema, PIPE, new_pipe, ensure_pipe, evolve, require, take
 from .krea import encode_grounded, patch_model
 from .shared import expand_date_tokens
+from .upscale import upscale_latent
 
 Pipe = io.Custom(PIPE)
 FAMILIES = {"krea2": "Krea 2", "moss_image": "MOSS Image", "anima": "Anima"}
@@ -173,6 +174,9 @@ class ImageSamplingSettings(io.ComfyNode):
             io.Combo.Input("sampler_name", options=comfy.samplers.KSampler.SAMPLERS, default="euler"),
             io.Combo.Input("scheduler", options=comfy.samplers.KSampler.SCHEDULERS, default="simple"),
             io.Float.Input("denoise", default=1.0, min=0.0, max=1.0),
+            io.Float.Input("refine_denoise", default=0.25, min=0.0, max=1.0,
+                           tooltip="Denoise of the second pass after Latent Upscale. 0.20 to 0.25 keeps the first pass; around 0.5 recovers a plain bicubic."),
+            io.Int.Input("refine_steps", default=4, min=1, max=1000),
             io.Boolean.Input("use_nag", default=False),
             io.Float.Input("nag_phi", default=4.0, min=0.0, max=20.0),
             io.Float.Input("nag_tau", default=2.5, min=0.01, max=20.0),
@@ -180,13 +184,37 @@ class ImageSamplingSettings(io.ComfyNode):
 
     @classmethod
     def execute(cls, pipe=None, seed=0, steps=10, cfg=1.0, sampler_name="euler", scheduler="simple", denoise=1.0,
-                use_nag=False, nag_phi=4.0, nag_tau=2.5, nag_alpha=0.25, model=None):
+                refine_denoise=0.25, refine_steps=4, use_nag=False, nag_phi=4.0, nag_tau=2.5, nag_alpha=0.25, model=None):
         pipe = image_pipe(ensure_pipe(pipe, model=model))
         if use_nag and (pipe["family"] != "krea2" or cfg != 1.0):
             raise ValueError("Krea NAG requires family krea2 and CFG 1.")
         settings = {"seed": seed, "steps": steps, "cfg": cfg, "sampler_name": sampler_name, "scheduler": scheduler,
-                        "denoise": denoise, "use_nag": use_nag, "nag_phi": nag_phi, "nag_tau": nag_tau, "nag_alpha": nag_alpha}
+                        "denoise": denoise, "refine_denoise": refine_denoise, "refine_steps": refine_steps,
+                        "use_nag": use_nag, "nag_phi": nag_phi, "nag_tau": nag_tau, "nag_alpha": nag_alpha}
         return io.NodeOutput(evolve(pipe, section="sampling", settings=settings, invalidate=("images",)))
+
+
+def refine(pipe, latent):
+    """Second pass: upscale the sampled latent, then denoise it at the refine strength."""
+    settings = pipe["settings"].get("upscale", {})
+    sampling = pipe["settings"].get("sampling")
+    if not sampling:
+        raise ValueError("The second pass needs the Sampling Settings stage before Latent Upscale.")
+    model, positive, negative = require(pipe, "model", "positive", "negative")
+    latent = upscale_latent(pipe, latent, settings.get("method", "bicubic"), settings.get("scale", 1.41))
+    if pipe["family"] == "krea2" and (pipe["artifacts"].get("krea_source_latents") or sampling.get("use_nag")):
+        model = patch_model(model, pipe["artifacts"]["negative"], pipe["artifacts"].get("krea_source_latents", []),
+                            {**pipe["settings"].get("krea_edit", {}), "mask": pipe["artifacts"].get("krea_mask")}, sampling)
+    latent = nodes.common_ksampler(model, (sampling.get("seed", 0) + 1) % 2**64, sampling.get("refine_steps", 4),
+                                   sampling.get("cfg", 1.0), sampling.get("sampler_name", "euler"),
+                                   sampling.get("scheduler", "simple"), positive, negative, latent,
+                                   denoise=sampling.get("refine_denoise", 0.25))[0]
+    fmt = pipe["settings"].get("format")
+    if fmt:
+        ratio = latent.get("downscale_ratio_spacial") or 8
+        height, width = latent["samples"].shape[-2] * ratio, latent["samples"].shape[-1] * ratio
+        pipe = evolve(pipe, "format", dict(fmt, width=width, height=height, megapixels=round(width * height / 1_000_000, 3)))
+    return evolve(pipe, artifacts={"latent": latent}, invalidate=("images",))
 
 
 class ImageEncode(io.ComfyNode):
@@ -272,7 +300,8 @@ class ImageSample(io.ComfyNode):
             pipe = evolve(pipe, section="sampling", settings={
                 "seed": seed if seed is not None else pipe["settings"].get("sampling", {}).get("seed", 0),
                 "steps": steps, "cfg": cfg, "sampler_name": sampler_name, "scheduler": scheduler,
-                "denoise": denoise, "use_nag": False, "nag_phi": 4.0, "nag_tau": 2.5, "nag_alpha": 0.25})
+                "denoise": denoise, "refine_denoise": 0.25, "refine_steps": 4,
+                "use_nag": False, "nag_phi": 4.0, "nag_tau": 2.5, "nag_alpha": 0.25})
         require(pipe, "model", "positive", "negative", "latent")
         a = pipe["artifacts"]
         s = pipe["settings"]["sampling"]

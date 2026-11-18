@@ -553,7 +553,7 @@ class ImagePromptWriter(io.ComfyNode):
     def define_schema(cls):
         return nodes_schema("H3" if cls.H3 else "IMAGE", "PROMPT_WRITER", "H3 Prompt Writer" if cls.H3 else "Image Prompt Writer",
             inputs=[Pipe.Input("pipe", optional=True), Writer.Input("writer_model", optional=True, lazy=True),
-                    io.Combo.Input("writer_preset", options=["auto", *service.PROMPTFORGE_PRESETS], default="auto",
+                    io.Combo.Input("writer_preset", options=["auto", *_services().PROMPTFORGE_PRESETS], default="auto",
                            tooltip="Template for this writer call. Auto follows the pipe family and its references; a pick is used for this call only and leaves the pipe settings alone."),
                     io.Int.Input("seed", default=1, min=0, max=2**32-1),
                     io.Int.Input("max_tokens", default=4096, min=128, max=32768),
@@ -611,8 +611,6 @@ class ImagePromptWriter(io.ComfyNode):
         encoder = service.PROMPTFORGE_PromptEnhancer()
         budget = {"krea2": 260, "moss_image": 320, "anima": 120, "minimax_h3": 2600}.get(pipe["family"], 300)
         template = _instructions(pipe, mode, context, budget, style_prefix)
-        if manual_template:
-            template = manual_template + "\n\n" + template
         # H3 writes the picture and the sound in separate calls: one long output tends to
         # run past every section and lose the audio, so each call gets its own stop.
         if cls.H3:
@@ -621,6 +619,8 @@ class ImagePromptWriter(io.ComfyNode):
             template = _instructions(pipe, mode, context, budget, style_prefix,
                                      [name for name in _services()._MINIMAX_SECTIONS[mode] if name not in audio_sections])
             sound_template = _instructions(pipe, mode, context, 220, style_prefix, audio_sections)
+        if manual_template:
+            template = manual_template + "\n\n" + template
         reference_rules = (
             "Reference mapping and target format: " + json.dumps(context) +
             "\nContact sheet cells are separate reference pictures, not the target composition. "

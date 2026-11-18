@@ -42,6 +42,38 @@ class PromptTests(unittest.TestCase):
         self.assertEqual(result["artifacts"]["writer"]["status"], "valid")
         self.assertNotIn("text", pipe["artifacts"])
 
+    def test_writer_preset_override_and_mismatch(self):
+        pipe = self.prompts.ImagePrompt.execute(self.contracts.new_pipe("krea2"), source="idea", text="a garden").args[0]
+        system = []
+        def generate(**kwargs):
+            system.append(kwargs["system_prompt"])
+            return "A person stands fully visible in a sunlit garden."
+        with patch.object(self.service.PROMPTFORGE_PromptEnhancer, "_generate", side_effect=generate):
+            result = self.prompts.ImagePromptWriter.execute(pipe, writer_model={}, writer_preset="Anima Tags").args[0]
+        self.assertIn(self.service.PROMPTFORGE_PRESETS["Anima Tags"]["text"], system[0])
+        report = result["artifacts"]["writer"]
+        self.assertEqual(report["preset"], "Anima Tags")
+        self.assertIn("anima template", report["preset_mismatch"])
+        self.assertEqual(result["settings"]["prompt"], pipe["settings"]["prompt"])
+
+    def test_writer_auto_preset_stays_silent(self):
+        pipe = self.prompts.ImagePrompt.execute(self.contracts.new_pipe("anima"), source="idea", text="garden").args[0]
+        with patch.object(self.service.PROMPTFORGE_PromptEnhancer, "_generate", return_value="sunlit garden, flowering plants"):
+            result = self.prompts.ImagePromptWriter.execute(pipe, writer_model={}).args[0]
+        report = result["artifacts"]["writer"]
+        self.assertEqual(report["preset"], "Anima Tags")
+        self.assertNotIn("preset_mismatch", report)
+
+    def test_h3_writer_preset_keeps_h3_layout(self):
+        pipe = self.prompts.H3Prompt.execute(self.contracts.new_pipe("minimax_h3"), source="idea", text="a garden").args[0]
+        replies = ["integrated_multimodal_description: [Shot 1] A tree sways in a breeze.\noverall_soundscape: Leaves rustle.\nnon_diegetic_music: N/A",
+                   "overall_soundscape: Leaves rustle.\nnon_diegetic_music: N/A"]
+        with patch.object(self.service.PROMPTFORGE_PromptEnhancer, "_generate", side_effect=replies) as generate:
+            self.prompts.H3PromptWriter.execute(pipe, writer_model={}, writer_preset="Creative Rewrite")
+        system = generate.call_args_list[0].kwargs["system_prompt"]
+        self.assertIn(self.service.PROMPTFORGE_PRESETS["Creative Rewrite"]["text"], system)
+        self.assertIn("integrated_multimodal_description", system)
+
     def test_exhausted_repairs_block_output(self):
         pipe = self.prompts.ImagePrompt.execute(self.contracts.new_pipe("moss_image"), source="idea", text="portrait").args[0]
         with patch.object(self.service.PROMPTFORGE_PromptEnhancer, "_generate", return_value="A face without distortion.") as generate:

@@ -123,7 +123,7 @@ class Graph:
     ROLE_SIZE = {"loras": (560, 620), "edit_lora": (400, 260), "prompt": (440, 300), "prompt_writer": (420, 250),
                  "prompt_review": (440, 260), "preview": (420, 320), "first_pass_preview": (420, 300),
                  "save_video": (440, 400), "save_image": (440, 360), "presets": (420, 380),
-                 "run_inspect": (440, 280), "reference_1": (440, 460), "reference_2": (440, 460),
+                 "latent_upscale": (360, 200), "run_inspect": (440, 280), "reference_1": (440, 460), "reference_2": (440, 460),
                  "reference_3": (440, 460), "reference_4": (440, 460), "reference_scale": (400, 200),
                  "first_frame": (440, 460), "last_frame": (440, 460), "reference_image": (440, 460),
                  "source_video": (420, 300), "bank_image": (440, 460), "bank_video": (420, 300),
@@ -337,8 +337,12 @@ def image_graph(catalogue, name, family, task="t2i"):
                                   "latent": (format_node, 1)})
     sample = graph.add("IMAGE_SAMPLE", "sample_first", GROUPS[4],
                        connections={"model": model_out, "positive": (encode, 1), "negative": (encode, 2), "latent": (encode, 3)})
+    upscaled = graph.add("IMAGE_LATENT_UPSCALE", "latent_upscale", GROUPS[5],
+                         {"method": "SesquiLSR Flux 2" if family == "moss_image" else "SesquiLSR Wan 2.1",
+                          "scale": 1.41, "enabled": False},
+                         connections={"latent": (sample, 1)})
     decoded = graph.add("IMAGE_DECODE", "decode", GROUPS[5],
-                        connections={"vae": (model, 3), "latent": (sample, 1)})
+                        connections={"vae": (model, 3), "latent": (upscaled, 1)})
     if task == "transfer":
         composite = graph.add("IMAGE_COMPOSITE", "transfer_composite", GROUPS[5], connections={
             "destination": (loaded[1], 1), "source": (decoded, 1), "mask": (mask, 0)}, chain=False)
