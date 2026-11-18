@@ -34,16 +34,22 @@ class H3Parts(io.ComfyNode):
         if not isinstance(parts, list) or not parts:
             raise ValueError("Parts needs a nonempty JSON list of {text, seconds, seed?} objects.")
         plan = []
+        prompt = pipe["settings"].get("prompt", {})
+        fallback_text = (prompt.get("text") or "").strip()
         for index, part in enumerate(parts):
-            if not isinstance(part, dict) or not isinstance(part.get("text"), str) or not part["text"].strip():
+            if not isinstance(part, dict):
+                raise ValueError(f"Part {index + 1} must be an object.")
+            text = (part.get("text") or "").strip() or fallback_text
+            if not text:
                 raise ValueError(f"Part {index + 1} needs explicit, prompt text or an idea/action brief.")
+            part = {**part, "text": text}
             seconds = float(part.get("seconds", pipe["settings"].get("format", {}).get("seconds", 5)))
             if not math.isfinite(seconds) or seconds <= 0:
                 raise ValueError(f"Part {index + 1} needs a positive finite duration.")
-            source = part.get("source", pipe["settings"].get("prompt", {}).get("source", "raw"))
+            source = part.get("source", prompt.get("source", "raw"))
             if source not in ("raw", "idea", "action"):
                 raise ValueError(f"Part {index + 1} source must be raw, idea or action.")
-            item = {"text": part["text"], "seconds": seconds, "source": source}
+            item = {"text": text, "seconds": seconds, "source": source}
             if "seed" in part:
                 item["seed"] = int(part["seed"]) % 2**64
             if seed_policy == "explicit" and "seed" not in item:

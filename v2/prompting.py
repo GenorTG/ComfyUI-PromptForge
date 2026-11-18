@@ -409,7 +409,7 @@ def _write(encoder, service, config, system, text, images, video, seed, max_toke
 
 def _h3_headings(text, mode):
     """One heading per line, colon attached, content underneath: repair what the writer returns."""
-    for section in _services()._MINIMAX_SECTIONS[mode]:
+    for section in _h3_section_names(mode):
         text = re.sub(rf"(?<=[^\n])({section}:)", r"\n\n\1", text)          # heading written mid-line
         text = re.sub(rf"(?m)^({section}):?[ \t]*:?[ \t]*(?=\S)", rf"\1:\n", text)  # content glued to it
         text = re.sub(rf"(?m)^({section}):?[ \t]*:?[ \t]*$", r"\1:", text)     # bare heading, double colon
@@ -417,9 +417,72 @@ def _h3_headings(text, mode):
     return re.sub(r"(?<!\[)\bShot (\d+)\b(?!\])", r"[Shot \1]", text)
 
 
+def _h3_section_names(mode):
+    table = _services()._MINIMAX_SECTIONS
+    if mode in table:
+        return table[mode]
+    short = {"t2v": "t2va", "i2v": "i2va", "l2v": "l2va", "fl2v": "fl2va", "ref2v": "ref2va", "continue": "ref2va"}
+    return table[short.get(mode, "t2va")]
+
+
+def _h3_repair_sections(text, pipe, mode):
+    """Drop duplicate shot labels, renumber them, and rebuild missing sections in order."""
+    seen, counter = [], 0
+    for number in re.findall(r"\[Shot \d+\]", text):
+        counter += 1
+        if number not in seen:
+            seen.append(number)
+    labels = iter(range(1, len(seen) + 1))
+    state = {"done": set()}
+
+    def renumber(match):
+        token = match.group(0)
+        if token in state["done"]:
+            return ""
+        state["done"].add(token)
+        return f"[Shot {next(labels)}]"
+
+    text = re.sub(r"\[Shot \d+\]", renumber, text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+
+    sections = _h3_section_names(mode)
+    blocks, order = {}, []
+    for match in re.finditer(r"(?m)^([a-z_]+):[ \t]*$", text):
+        name = match.group(1)
+        # a t2v style body written while the mode wants ref2v keeps its text, only the heading changes
+        if name not in sections and name == "integrated_multimodal_description" and "detailed_description" in sections:
+            name = "detailed_description"
+        if name not in sections or name in blocks:
+            continue
+        blocks[name] = ""
+        order.append((name, match.end()))
+    for position, (name, start) in enumerate(order):
+        end = order[position + 1][1] if position + 1 < len(order) else len(text)
+        blocks[name] = text[start:end].strip()
+    fallback = (pipe["settings"].get("prompt", {}).get("text") or "").strip()
+    rebuilt = []
+    for name in sections:
+        if name in blocks and blocks[name]:
+            body = blocks[name]
+        elif name in ("overall_soundscape", "non_diegetic_music"):
+            continue  # the audio repair adds those
+        elif name in ("detailed_description", "integrated_multimodal_description"):
+            body = "[Shot 1] " + (fallback or "the requested action plays out.")
+        elif name == "summary":
+            body = "The clip shows the requested action."
+        elif name == "subject_definitions":
+            body = _ref_subjects(pipe)
+        elif name == "retention_analysis":
+            body = _ref_retention(pipe)
+        else:
+            continue
+        rebuilt.append(f"{name}:\n{body}")
+    return "\n\n".join(rebuilt)
+
+
 def _h3_repair_audio(text, pipe, mode):
     """Append the sound sections when the writer spends its budget on the description."""
-    sections = _services()._MINIMAX_SECTIONS[mode]
+    sections = _h3_section_names(mode)
     prompt = _prompt(pipe)
     if "overall_soundscape" in sections and not re.search(r"(?m)^overall_soundscape:", text):
         text += "\n\noverall_soundscape:\n" + (prompt.get("soundscape") or "").strip().replace("\n", " ")
@@ -662,7 +725,7 @@ class ImagePromptWriter(io.ComfyNode):
                 audio_text = _h3_headings(_strip_context_echo(audio_text), mode)
                 if "overall_soundscape" in audio_text:
                     text = text.rstrip() + "\n\n" + audio_text.strip()
-                text = _h3_repair_audio(text, pipe, mode)
+                text = _h3_repair_audio(_h3_repair_sections(text, pipe, mode), pipe, mode)
             request = json.dumps({"system": system, "user": user_text, "context": context}, ensure_ascii=False)
             issues = [] if checks == "off" else validation_issues(text, pipe["family"])
             if cls.H3 and checks != "off":

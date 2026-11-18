@@ -272,6 +272,8 @@ def encode(pipe):
     fmt = pipe["settings"]["format"]
     refs = pipe["settings"].get("references", {})
     mode = refs.get("mode", "t2v")
+    from .prompting import _h3_repair_sections
+    text = _h3_repair_sections(text, pipe, mode)
     check_syntax(text, mode)
     a = pipe["artifacts"]
     args = {"clip": clip, "vae": vae, "prompt": text, "width": fmt["width"], "height": fmt["height"], "length": fmt["frames"]}
