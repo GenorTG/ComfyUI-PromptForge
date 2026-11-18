@@ -49,7 +49,7 @@ class ReferenceManager(io.ComfyNode):
                       outputs=[Pipe.Output()])
 
     @classmethod
-    def fingerprint_inputs(cls, items="[]"):
+    def fingerprint_inputs(cls, items="[]", **kwargs):
         stamps = []
         for item in parse(items):
             try:

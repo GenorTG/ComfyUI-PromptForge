@@ -6,6 +6,8 @@ import re
 from collections import Counter
 from pathlib import Path
 
+import gc
+
 import folder_paths
 
 import comfy.model_management
@@ -340,10 +342,10 @@ def _writer_context(pipe, h3):
 def _write(encoder, service, config, system, text, images, video, seed, max_tokens, temperature):
     source = config.get("source", "safetensors")
     model_name = config.get("gguf_model", "auto") if source == "GGUF" else config.get("safetensors_model", "auto")
-    # a resident image model starves the writer; it would stream from RAM instead of loading (legacy did the same)
-    if comfy.model_management.get_free_memory() < 9 << 30:
-        comfy.model_management.unload_all_models()
-        comfy.model_management.soft_empty_cache()
+    # a resident video model starves the writer: the 9 GB encoder then streams from RAM at single-digit tok/s
+    comfy.model_management.unload_all_models()
+    gc.collect()
+    comfy.model_management.soft_empty_cache()
     result = encoder._generate(
         full_prompt=system + "\n\n" + text, system_prompt=system, user_prompt=text,
         mode="inputs" if images or video is not None else "text_only", engine="gguf" if source == "GGUF" else "text_encoder",
