@@ -66,7 +66,8 @@ Every item is required. Keep the status current; do not drop one silently.
 - [x] Show Text node added; every `triggers`/`report` output is wired to one.
 
 ## Quality tuning
-- [x] Per-mode sampling: reference and multipart modes get 0.8 MP first pass, 10 steps, 4 refine steps; single-shot modes stay 0.5 MP, 8 steps, 3 refine steps.
+- [x] Per-mode sampling: single reference 0.8 → 1.0 MP at 10/4; multipart 0.6 → 0.9 MP at 10/4 with RIFE off (452 frames exceed RAM otherwise); plain modes stay 0.5 → 1.0 MP at 8/3.
+- [x] Verified at 1:1: ref2v manager and multipart both sharp with the shaft attached at the labia, no mush.
 - [x] Writer asks for 650-900 words of body facts instead of 1200-1600 of prose.
 
 ## Optional / research
