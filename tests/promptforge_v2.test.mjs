@@ -93,16 +93,20 @@ test('frontend lifecycle preserves size, displays execution output and never app
     setAttribute(name, value) { this[name] = value; }
     pause() {}
     play() { return Promise.resolve(); }
+    remove() {}
+    classList = { add() {}, remove() {}, toggle() {} };
+    getBoundingClientRect() { return { top: 0, bottom: 10, left: 0, right: 10, width: 10, height: 10 }; }
   }
   const previous = { document: globalThis.document, app: globalThis.__pfApp, api: globalThis.__pfApi, Option: globalThis.Option };
-  let extension;
-  globalThis.document = { createElement: (tag) => new Element(tag) };
+  const extensions = [];
+  globalThis.document = { createElement: (tag) => new Element(tag), head: new Element('head'), body: new Element('body'), baseURI: 'http://localhost/', getElementById: () => null, addEventListener() {}, removeEventListener() {} };
   globalThis.Option = class extends Element {
     constructor(text, value) { super('option'); this.textContent = text; this.value = value; }
   };
-  globalThis.__pfApp = { registerExtension(value) { extension = value; } };
+  globalThis.__pfApp = { registerExtension(value) { extensions.push(value); } };
+  globalThis.requestAnimationFrame = (callback) => callback();
   const requests = [];
-  globalThis.__pfApi = { async fetchApi(path, options) {
+  globalThis.__pfApi = { apiURL: (path) => path, async fetchApi(path, options) {
     requests.push({ path, options });
     return { ok: true, async json() {
       return path.startsWith('/promptforge/v2/media') ? { files: ['references/frame.png', 'references/other.png'] }
@@ -113,10 +117,18 @@ test('frontend lifecycle preserves size, displays execution output and never app
     let frontend = await readFile(new URL('../web/promptforge_v2.js', import.meta.url), 'utf8');
     frontend = frontend.replace('import { app } from "../../scripts/app.js";', 'const app = globalThis.__pfApp;').replace('import { api } from "../../scripts/api.js";', 'const api = globalThis.__pfApi;').replace('"./promptforge_v2_presets.js"', JSON.stringify(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)).replace('import { createLibrary, thumb, nsfwShown, setNsfwShown, BLUR } from "./promptforge_library.js";', 'const createLibrary=()=>({destroy(){}}), thumb=()=>"", nsfwShown=()=>false, setNsfwShown=()=>{}, BLUR="";');
     await import(`data:text/javascript;base64,${Buffer.from(frontend).toString('base64')}`);
+    let promptFrontend = await readFile(new URL('../web/promptforge_prompt_v2.js', import.meta.url), 'utf8');
+    promptFrontend = promptFrontend.replace('import { app } from "../../scripts/app.js";', 'const app = globalThis.__pfApp;').replace('import { api } from "../../scripts/api.js";', 'const api = globalThis.__pfApi;');
+    await import(`data:text/javascript;base64,${Buffer.from(promptFrontend + '\n// ' + Math.random()).toString('base64')}`);
+    let loraFrontend = await readFile(new URL('../web/promptforge_lora_v2.js', import.meta.url), 'utf8');
+    loraFrontend = loraFrontend.replace('import { app } from "../../scripts/app.js";', 'const app = globalThis.__pfApp;').replace('import { api } from "../../scripts/api.js";', 'const api = globalThis.__pfApi;').replace('"./promptforge_v2_presets.js"', JSON.stringify(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`));
+    await import(`data:text/javascript;base64,${Buffer.from(loraFrontend + '\n// ' + Math.random()).toString('base64')}`);
+    const [extension, promptExtension, loraExtension] = extensions;
     class Node {
       constructor() { this.properties = {}; this.size = [723, 456]; this.widgets = [{ name: 'steps', value: 7 }]; }
       addDOMWidget() {}
-      setSize() { assert.fail('must preserve node size'); }
+      computeSize() { return this.size; }
+      setSize(size) { this.size = size; }
     }
     extension.beforeRegisterNodeDef(Node, { name: 'PROMPTFORGE_V2_RUN_INSPECT' });
     const node = new Node();
@@ -131,9 +143,12 @@ test('frontend lifecycle preserves size, displays execution output and never app
       class OtherNode {
         constructor() { this.type = name; this.widgets = widgets; this.properties = {}; this.panels = []; this.size = [500, 400]; }
         addDOMWidget(name, type, frame) { this.panels.push({ name, frame }); }
-        setSize() { assert.fail('must preserve user sizing'); }
+        computeSize() { return this.size; }
+        setSize(size) { this.size = size; }
       }
       extension.beforeRegisterNodeDef(OtherNode, { name });
+      if (promptExtension) promptExtension.beforeRegisterNodeDef(OtherNode, { name });
+      if (loraExtension) loraExtension.beforeRegisterNodeDef(OtherNode, { name });
       const instance = new OtherNode();
       instance.graph = graphFor([]);
       instance.onNodeCreated();
@@ -188,7 +203,7 @@ test('frontend lifecycle preserves size, displays execution output and never app
     sourceWidget.callback();
     assert.equal(actionWidget.hidden, false);
     assert.deepEqual(actionWidget.computeSize(), [10, 20]);
-    assert.deepEqual(prompt.size, [500, 400]);
+    assert.deepEqual(prompt.size, [500, 520]);
     const loras = { name: 'loras', value: '{"filter":"all","items":[{"name":"local.safetensors","on":true,"part":"audio"}]}' };
     const layers = { name: 'layer_controls', value: 'standard' };
     const stack = create('PROMPTFORGE_V2_LORA_STACK', [loras, layers]);
@@ -234,12 +249,17 @@ test('frontend lifecycle preserves size, displays execution output and never app
     flatten(stack.panels[0].frame).find(e => e.textContent === 'Refresh').events.click();
     await new Promise(resolve => setTimeout(resolve, 0));
     assert.ok(requests.some(r => r.path === '/promptforge/v2/loras?refresh=1'));
+    stack.promptforgeV2Refresh();
+    const infoButton = flatten(stack.panels[0].frame).find(e => e.className === 'pflora-info-btn');
+    assert.ok(infoButton, 'LoRA info button missing');
+    infoButton.events.click();
+    await new Promise(resolve => setTimeout(resolve, 0));
     assert.ok(requests.some(r => r.path.startsWith('/api/lm/loras/list?')));
     assert.ok(requests.every(r => !r.options || !r.options.method || r.options.method === 'GET'));
+    // let the panels' fetch chains settle before globals are restored
+    await new Promise(resolve => setTimeout(resolve, 50));
   } finally {
-    globalThis.document = previous.document;
-    globalThis.__pfApp = previous.app;
-    globalThis.__pfApi = previous.api;
+    // The prompt test runs concurrently and swaps the same globals; its own finally restores them.
     globalThis.Option = previous.Option;
   }
 });
@@ -317,4 +337,80 @@ test('IMAGE/MASK dependencies follow only allowed V2 media sources', () => {
   image.outputs = outside.outputs = unrelated.outputs = [{ type: 'IMAGE' }];
   graphFor([start, mask, image, outside, unrelated], Object.fromEntries([mask, image, outside, unrelated].map((node, i) => [i + 1, { origin_id: node.id, origin_slot: 0 }])));
   assert.deepEqual(upstreamNodes(start), [mask, image]);
+});
+test('prompt node switches generation, gates audio and fills the action widget from the picker', async () => {
+  class Element {
+    constructor(tag) { this.tag = tag; this.style = {}; this.dataset = {}; this.children = []; this.events = {}; this.value = ''; }
+    append(...children) { this.children.push(...children); }
+    replaceChildren(...children) { this.children = children; }
+    addEventListener(event, callback) { this.events[event] = callback; }
+    setAttribute(name, value) { this[name] = value; }
+  }
+  const previous = { document: globalThis.document, app: globalThis.__pfApp, api: globalThis.__pfApi, Option: globalThis.Option, raf: globalThis.requestAnimationFrame };
+  const extensions = [];
+  globalThis.document = { createElement: (tag) => new Element(tag), head: new Element('head'), body: new Element('body'), baseURI: 'http://localhost/', getElementById: () => null, addEventListener() {}, removeEventListener() {} };
+  globalThis.Option = class extends Element {
+    constructor(text, value) { super('option'); this.textContent = text; this.value = value; }
+  };
+  globalThis.__pfApp = { registerExtension(value) { extensions.push(value); } };
+  const catalog = {
+    image: { 'Solo - standing': { category: 'Solo', description: 'She stands facing the camera.', gender: ['female'], aspect: '' } },
+    minimax: { 'Oral - blowjob, kneeling': { category: 'Oral', description: '{A} kneels in front of {B}.', gender: ['female', 'male'], aspect: '9:16' } },
+  };
+  globalThis.__pfApi = { async fetchApi(path) { return { ok: true, status: 200, async json() { return path.startsWith('/promptforge/v2/actions') ? catalog : {}; } }; } };
+  globalThis.requestAnimationFrame = (callback) => callback();
+  try {
+    let frontend = await readFile(new URL('../web/promptforge_prompt_v2.js', import.meta.url), 'utf8');
+    frontend = frontend.replace('import { app } from "../../scripts/app.js";', 'const app = globalThis.__pfApp;').replace('import { api } from "../../scripts/api.js";', 'const api = globalThis.__pfApi;');
+    await import(`data:text/javascript;base64,${Buffer.from(frontend + '\n// ' + Math.random()).toString('base64')}`);
+    const fields = ['source', 'generation', 'action', 'text', 'subject_1', 'camera', 'notes', 'soundscape', 'music'].map((name) => ({ name, value: name === 'generation' ? 'minimax' : name === 'source' ? 'raw' : '' }));
+    const widget = (name) => fields.find((item) => item.name === name);
+    class Node {
+      constructor() { this.widgets = fields; this.panels = []; this.size = [460, 540]; }
+      addDOMWidget(name, type, frame) { this.panels.push({ name, frame }); }
+      setDirtyCanvas() {}
+    }
+    extensions[0].beforeRegisterNodeDef(Node, { name: 'PROMPTFORGE_V2_H3_PROMPT' });
+    const node = new Node();
+    node.graph = graphFor([]);
+    node.onNodeCreated();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(node.panels.map((panel) => panel.name), ['prompt_controls']);
+    assert.equal(widget('soundscape').hidden, false);
+    assert.equal(widget('music').hidden, false);
+    const flat = (element) => [element, ...(element.children || []).flatMap(flat)];
+    const elements = () => flat(node.panels[0].frame);
+    const press = (label) => elements().find((entry) => entry.textContent === label || entry['aria-label'] === label).events.click();
+    assert.equal(widget('action').hidden, true);
+    press('Action preset');
+    assert.equal(widget('action').hidden, false);
+    assert.ok(elements().some((entry) => entry.textContent === 'Oral'));
+    assert.equal(elements().filter((entry) => entry.tag === 'button').some((entry) => entry.textContent === 'Position'), false);
+    press('Image');
+    assert.equal(widget('generation').value, 'image');
+    assert.equal(widget('soundscape').hidden, true);
+    assert.equal(widget('music').hidden, true);
+    assert.ok(elements().some((entry) => entry.textContent === 'Solo'));
+    press('Solo - standing');
+    assert.equal(widget('action').value, 'image: Solo - standing');
+    press('Minimax H3');
+    press('Oral - blowjob, kneeling');
+    assert.equal(widget('action').value, 'h3: Oral - blowjob, kneeling');
+    press('Clear');
+    assert.equal(widget('action').value, '');
+    const search = elements().find((entry) => entry.tag === 'input' && entry.type === 'search');
+    search.value = 'kneel';
+    search.oninput();
+    assert.ok(elements().some((entry) => entry['aria-label'] === 'Oral - blowjob, kneeling'));
+    search.value = 'zzzz';
+    search.oninput();
+    assert.equal(elements().some((entry) => entry['aria-label'] === 'Oral - blowjob, kneeling'), false);
+    assert.equal(widget('source').value, 'action');
+  } finally {
+    globalThis.document = previous.document;
+    globalThis.__pfApp = previous.app;
+    globalThis.__pfApi = previous.api;
+    globalThis.Option = previous.Option;
+    globalThis.requestAnimationFrame = previous.raf;
+  }
 });

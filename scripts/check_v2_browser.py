@@ -213,11 +213,11 @@ CONTROLS = r"""async () => {
   pf.assert(!Object.hasOwn(JSON.parse(pf.widget('library','entries').value),'Browser saved prompt'), 'Library Delete failed');
   pf.set('prompt','source','idea');
   pf.set('prompt','text','A test idea saved from the V2 prompt node.');
-  const ideaRoot = pf.root('prompt','prompt_source_and_saves');
+  const ideaRoot = pf.root('prompt','prompt_controls');
   const ideaName = ideaRoot.querySelector('input[placeholder="Idea name"]');
   pf.assert(ideaName, 'Prompt idea name input missing');
   ideaName.value = 'PromptForge V2 browser check';
-  pf.button('prompt','prompt_source_and_saves','Save as');
+  pf.button('prompt','prompt_controls','Save as');
   await new Promise(resolve => setTimeout(resolve, 200));
   const ideaSelect = ideaRoot.querySelector('select');
   pf.assert([...ideaSelect.options].some(option => option.value === 'PromptForge V2 browser check'), 'Prompt idea did not save');
@@ -225,7 +225,7 @@ CONTROLS = r"""async () => {
   ideaSelect.value = 'PromptForge V2 browser check';
   ideaSelect.dispatchEvent(new Event('change',{bubbles:true}));
   pf.assert(pf.widget('prompt','text').value === 'A test idea saved from the V2 prompt node.', 'Saved idea did not load');
-  pf.button('prompt','prompt_source_and_saves','Delete');
+  pf.button('prompt','prompt_controls','Delete');
   await new Promise(resolve => setTimeout(resolve, 200));
   pf.assert(![...ideaSelect.options].some(option => option.value === 'PromptForge V2 browser check'), 'Prompt idea did not delete');
   pf.set('prompt','source','raw');

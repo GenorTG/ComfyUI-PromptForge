@@ -21,6 +21,7 @@ from comfy_extras import nodes_minimax_h3 as core
 from comfy_extras import nodes_hunyuan, nodes_custom_sampler, nodes_audio
 from .. import minimax_decode, video_save, unified_loader as loader
 from .contracts import schema as nodes_schema, PIPE, new_pipe, ensure_pipe, evolve, require, take
+from .shared import expand_date_tokens
 # the sequence nodes use these same encode/sample/upscale/refine/decode/join services
 from .h3_sequence import H3Parts, H3Continuity, H3Sequence
 
@@ -427,7 +428,8 @@ class H3Sample(io.ComfyNode):
             io.Conditioning.Input("positive", optional=True), io.Conditioning.Input("negative", optional=True),
             io.Latent.Input("latent", optional=True),
             io.Boolean.Input("pipe_settings", default=True, tooltip="On: use the Sampling Settings node when one is chained. Off: use the widgets here."),
-            io.Int.Input("seed", default=0, min=0, max=0xffffffffffffffff, control_after_generate=True),
+            io.Int.Input("seed", optional=True, force_input=True,
+                         tooltip="Connected seed for this call. Unconnected takes the seed from Sampling Settings."),
             io.Int.Input("steps", default=8, min=1, max=10000),
             io.Float.Input("cfg", default=1.0, min=0.0, max=100.0),
             io.Combo.Input("sampler_name", options=comfy.samplers.KSampler.SAMPLERS, default="euler"),
@@ -438,9 +440,10 @@ class H3Sample(io.ComfyNode):
 
     @classmethod
     def execute(cls, pipe=None, model=None, positive=None, negative=None, latent=None, pipe_settings=True,
-                seed=0, steps=8, cfg=1.0, sampler_name="euler", scheduler="beta57", shift_video=0.0, shift_audio=0.0):
+                seed=None, steps=8, cfg=1.0, sampler_name="euler", scheduler="beta57", shift_video=0.0, shift_audio=0.0):
         pipe = take(checked(ensure_pipe(pipe, model=model)), model=model, positive=positive, negative=negative, latent=latent)
         if not pipe_settings or not pipe["settings"].get("sampling"):
+            seed = seed if seed is not None else pipe["settings"].get("sampling", {}).get("first", {}).get("seed", 0)
             pipe = H3SamplingSettings.execute(pipe, seed, steps, cfg, sampler_name, scheduler, shift_video, shift_audio).args[0]
         result = sample(pipe, **pipe["settings"]["sampling"]["first"])
         return io.NodeOutput(result, require(result, "latent"))
@@ -678,14 +681,17 @@ class H3PreviewSave(io.ComfyNode):
     def define_schema(cls):
         return schema("PREVIEW_SAVE", "Preview / Save", [Pipe.Input("pipe", optional=True), io.Image.Input("images", optional=True),
             io.Audio.Input("audio", optional=True), io.Boolean.Input("save", default=False),
-            io.String.Input("filename_prefix", default="video/PromptForge_H3"),
-            io.Combo.Input("codec", options=list(video_save.CODECS), default="h264 (cpu x264)"),
+            io.String.Input("filename_prefix", default="video/PromptForge_H3",
+                            tooltip="Prefix for the saved file. Tokens expand per run: %date:yyyy-MM-dd%, %date:yyyy-MM-dd_HH-mm-ss%, %date:yyyy%, %date:MM%, %date:dd%."),
+            io.Combo.Input("encoder_preset", options=["high quality", "balanced", "small file", "lossless-ish"], default="high quality",
+                           tooltip="Writes a coherent encoder set into the widgets below when picked. The widgets stay editable and are what actually gets used."),
+            io.Combo.Input("codec", options=list(video_save.CODECS), default="h265 (cpu x265)"),
             io.Combo.Input("speed", options=list(video_save.SPEEDS), default="slow"),
             io.Combo.Input("rate_control", options=["quality", "bitrate"], default="quality"),
-            io.Int.Input("quality", default=19, min=0, max=63),
-            io.Int.Input("bitrate_mbit", default=15, min=1, max=999),
-            io.Combo.Input("bit_depth", options=["8", "10"], default="8"),
-            io.Int.Input("audio_bitrate_kbps", default=192, min=32, max=512),
+            io.Int.Input("quality", default=17, min=0, max=63),
+            io.Int.Input("bitrate_mbit", default=40, min=1, max=999),
+            io.Combo.Input("bit_depth", options=["8", "10"], default="10"),
+            io.Int.Input("audio_bitrate_kbps", default=320, min=32, max=512),
             io.Float.Input("film_grain", default=0.0, min=0.0, max=0.1),
             # keep pingpong/save_metadata after film_grain: the frontend serializes them there,
             # so a saved workflow lines up with the declaration order
@@ -697,16 +703,17 @@ class H3PreviewSave(io.ComfyNode):
             [Pipe.Output("pipe"), io.Video.Output("video")], output=True)
 
     @classmethod
-    def execute(cls, pipe=None, images=None, audio=None, save=False, filename_prefix="video/PromptForge_H3", codec="h264 (cpu x264)",
-                speed="slow", rate_control="quality", quality=19, bitrate_mbit=15, bit_depth="8",
-                pingpong=False, save_metadata=True, audio_bitrate_kbps=192, film_grain=0.0,
-                show_preview=True, loop_preview=True, autoplay_preview=True):
+    def execute(cls, pipe=None, images=None, audio=None, save=False, filename_prefix="video/PromptForge_H3",
+                encoder_preset="high quality", codec="h265 (cpu x265)", speed="slow", rate_control="quality",
+                quality=17, bitrate_mbit=40, bit_depth="10", pingpong=False, save_metadata=True,
+                audio_bitrate_kbps=320, film_grain=0.0, show_preview=True, loop_preview=True, autoplay_preview=True):
         pipe = take(checked(ensure_pipe(pipe, family="minimax_h3")), images=images, audio=audio)
         if codec not in video_save.CODECS or speed not in video_save.SPEEDS or rate_control not in ("quality", "bitrate") or bit_depth not in ("8", "10"):
             raise ValueError("Unsupported video encoder settings.")
         images, audio = require(pipe, "images", "audio")
         fps = pipe["settings"].get("timing", {}).get("fps", pipe["settings"]["format"]["fps"])
         root = folder_paths.get_output_directory() if save else folder_paths.get_temp_directory()
+        filename_prefix = expand_date_tokens(filename_prefix)
         full, _, _, _, _ = folder_paths.get_save_image_path(filename_prefix, root, images.shape[2], images.shape[1])
         if os.path.commonpath((os.path.realpath(full), os.path.realpath(root))) != os.path.realpath(root):
             raise ValueError("Video filename prefix must stay within the output directory.")
@@ -721,7 +728,8 @@ class H3PreviewSave(io.ComfyNode):
             "rate_control": rate_control, "quality": quality, "bitrate_mbit": bitrate_mbit, "bit_depth": bit_depth,
             "pingpong": pingpong, "save_metadata": save_metadata, "audio_bitrate_kbps": audio_bitrate_kbps,
             "film_grain": film_grain, "show_preview": show_preview, "loop_preview": loop_preview,
-            "autoplay_preview": autoplay_preview, "filename_prefix": filename_prefix}, artifacts={"video": video})
+            "autoplay_preview": autoplay_preview, "filename_prefix": filename_prefix,
+            "encoder_preset": encoder_preset}, artifacts={"video": video})
         preview = ui.PreviewVideo([ui.SavedResult(item["filename"], item["subfolder"],
             io.FolderType.output if save else io.FolderType.temp)]) if show_preview else None
         return io.NodeOutput(result, video, ui=preview)

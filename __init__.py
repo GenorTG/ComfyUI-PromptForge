@@ -365,6 +365,11 @@ _MINIMAX_SECTIONS = {
 }
 
 
+def _CAMERAS(h3=False):
+    """Camera choices offered by the prompt node: the family's own list, never free text."""
+    return h3_actions.CAMERAS if h3 else image_actions.CAMERAS
+
+
 _MINIMAX_FALLBACK = {
     "subject_definitions": "<Subject 1> is the referenced person.",
     "summary": "The clip shows the requested action.",

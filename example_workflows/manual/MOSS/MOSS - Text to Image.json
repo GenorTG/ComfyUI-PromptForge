@@ -1,0 +1,3578 @@
+{
+  "id": "a5f7e174-dec9-4096-81f4-0cee31185911",
+  "revision": 0,
+  "last_node_id": 15,
+  "last_link_id": 34,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "PROMPTFORGE_V2_IMAGE_MODEL",
+      "pos": [
+        82,
+        86
+      ],
+      "size": [
+        340,
+        230
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "family",
+          "locked": null,
+          "name": "family",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "family"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "model",
+          "locked": null,
+          "name": "model",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "model"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "clip",
+          "locked": null,
+          "name": "clip",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "clip"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "vae",
+          "locked": null,
+          "name": "vae",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "vae"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "weight_dtype",
+          "locked": null,
+          "name": "weight_dtype",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "weight_dtype"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "optimize_for",
+          "locked": null,
+          "name": "optimize_for",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "optimize_for"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "clip_device",
+          "locked": null,
+          "name": "clip_device",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "clip_device"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "slot_index": 0,
+          "links": [
+            1
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "model",
+          "locked": null,
+          "name": "model",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "MODEL",
+          "pos": null,
+          "slot_index": 1,
+          "links": [
+            2
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "clip",
+          "locked": null,
+          "name": "clip",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "CLIP",
+          "pos": null,
+          "slot_index": 2,
+          "links": [
+            3
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "vae",
+          "locked": null,
+          "name": "vae",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "VAE",
+          "pos": null,
+          "slot_index": 3,
+          "links": [
+            17,
+            25
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "info",
+          "locked": null,
+          "name": "info",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "pos": null,
+          "slot_index": 4,
+          "links": []
+        }
+      ],
+      "title": "Model",
+      "properties": {
+        "cnr_id": "ComfyUI-PromptForge",
+        "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
+        "Node name for S&R": "PROMPTFORGE_V2_IMAGE_MODEL",
+        "promptforge_role": "model",
+        "promptforge_v2_widget_values": {
+          "family": "moss_image",
+          "model": "",
+          "clip": "",
+          "vae": "",
+          "weight_dtype": "auto",
+          "optimize_for": "balanced",
+          "clip_device": "default"
+        },
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "8.0.1",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "moss_image",
+        "",
+        "",
+        "",
+        "auto",
+        "balanced",
+        "default"
+      ],
+      "widgets_values_named": {
+        "family": "moss_image",
+        "model": "",
+        "clip": "",
+        "vae": "",
+        "weight_dtype": "auto",
+        "optimize_for": "balanced",
+        "clip_device": "default"
+      },
+      "color": "#4a3a2a",
+      "bgcolor": "#6c5c4c"
+    },
+    {
+      "id": 2,
+      "type": "PROMPTFORGE_V2_LORA_STACK",
+      "pos": [
+        488,
+        86
+      ],
+      "size": [
+        470,
+        640
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "link": 1
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "model",
+          "locked": null,
+          "name": "model",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "MODEL",
+          "pos": null,
+          "link": 2
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "clip",
+          "locked": null,
+          "name": "clip",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "CLIP",
+          "pos": null,
+          "link": 3
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "loras",
+          "locked": null,
+          "name": "loras",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "loras"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "layer_controls",
+          "locked": null,
+          "name": "layer_controls",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "layer_controls"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "seed",
+          "locked": null,
+          "name": "seed",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "skip_mismatched",
+          "locked": null,
+          "name": "skip_mismatched",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "skip_mismatched"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "balance",
+          "locked": null,
+          "name": "balance",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "balance"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "balance_floor",
+          "locked": null,
+          "name": "balance_floor",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "balance_floor"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "PROMPTFORGE_V2_PIPE",
+          "locked": null,
+          "name": "PROMPTFORGE_V2_PIPE",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "slot_index": 0,
+          "links": [
+            31
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "model",
+          "locked": null,
+          "name": "model",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "MODEL",
+          "pos": null,
+          "slot_index": 1,
+          "links": [
+            5,
+            23,
+            32
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "clip",
+          "locked": null,
+          "name": "clip",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "CLIP",
+          "pos": null,
+          "slot_index": 2,
+          "links": [
+            16
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "triggers",
+          "locked": null,
+          "name": "triggers",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "pos": null,
+          "slot_index": 3,
+          "links": []
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "report",
+          "locked": null,
+          "name": "report",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "pos": null,
+          "slot_index": 4,
+          "links": []
+        }
+      ],
+      "title": "Loras",
+      "properties": {
+        "cnr_id": "ComfyUI-PromptForge",
+        "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
+        "Node name for S&R": "PROMPTFORGE_V2_LORA_STACK",
+        "promptforge_role": "loras",
+        "promptforge_v2_widget_values": {
+          "loras": "{\"filter\":\"all\",\"items\":[]}",
+          "layer_controls": "auto",
+          "seed": 0,
+          "skip_mismatched": true,
+          "balance": false,
+          "balance_floor": 0
+        },
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "8.0.1",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "{\"filter\":\"all\",\"items\":[]}",
+        "auto",
+        0,
+        false,
+        true,
+        false,
+        -0.0,
+        ""
+      ],
+      "widgets_values_named": {
+        "loras": "{\"filter\":\"all\",\"items\":[]}",
+        "layer_controls": "auto",
+        "seed": 0,
+        "control_after_generate": false,
+        "skip_mismatched": true,
+        "balance": false,
+        "balance_floor": -0.0,
+        "lora_stack_editor": ""
+      },
+      "color": "#4a3a2a",
+      "bgcolor": "#6c5c4c"
+    },
+    {
+      "id": 3,
+      "type": "PROMPTFORGE_V2_IMAGE_FORMAT",
+      "pos": [
+        1968,
+        86
+      ],
+      "size": [
+        340,
+        230
+      ],
+      "flags": {},
+      "order": 303,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "link": 33
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "model",
+          "locked": null,
+          "name": "model",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "MODEL",
+          "pos": null,
+          "link": 5
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "aspect",
+          "locked": null,
+          "name": "aspect",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "aspect"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "megapixels",
+          "locked": null,
+          "name": "megapixels",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "megapixels"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "orientation",
+          "locked": null,
+          "name": "orientation",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "orientation"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "width",
+          "locked": null,
+          "name": "width",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "height",
+          "locked": null,
+          "name": "height",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "batch_size",
+          "locked": null,
+          "name": "batch_size",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "batch_size"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "slot_index": 0,
+          "links": [
+            6
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "latent",
+          "locked": null,
+          "name": "latent",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "LATENT",
+          "pos": null,
+          "slot_index": 1,
+          "links": [
+            18
+          ]
+        }
+      ],
+      "title": "Format",
+      "properties": {
+        "cnr_id": "ComfyUI-PromptForge",
+        "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
+        "Node name for S&R": "PROMPTFORGE_V2_IMAGE_FORMAT",
+        "promptforge_role": "format",
+        "promptforge_v2_widget_values": {
+          "aspect": "4:3",
+          "megapixels": 1.5,
+          "orientation": "portrait",
+          "width": 1024,
+          "height": 1024,
+          "batch_size": 1
+        },
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "8.0.1",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "4:3",
+        1.5,
+        "portrait",
+        1024,
+        1024,
+        1
+      ],
+      "widgets_values_named": {
+        "aspect": "4:3",
+        "megapixels": 1.5,
+        "orientation": "portrait",
+        "width": 1024,
+        "height": 1024,
+        "batch_size": 1
+      },
+      "color": "#54502a",
+      "bgcolor": "#76724c"
+    },
+    {
+      "id": 4,
+      "type": "PROMPTFORGE_V2_IMAGE_SAMPLING_SETTINGS",
+      "pos": [
+        1968,
+        356
+      ],
+      "size": [
+        340,
+        230
+      ],
+      "flags": {},
+      "order": 304,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "link": 6
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "model",
+          "locked": null,
+          "name": "model",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "MODEL",
+          "pos": null,
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "seed",
+          "locked": null,
+          "name": "seed",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "steps",
+          "locked": null,
+          "name": "steps",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "steps"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "cfg",
+          "locked": null,
+          "name": "cfg",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "cfg"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "sampler_name",
+          "locked": null,
+          "name": "sampler_name",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "sampler_name"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "scheduler",
+          "locked": null,
+          "name": "scheduler",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "scheduler"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "denoise",
+          "locked": null,
+          "name": "denoise",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "denoise"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "use_nag",
+          "locked": null,
+          "name": "use_nag",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "use_nag"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "nag_phi",
+          "locked": null,
+          "name": "nag_phi",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "nag_phi"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "nag_tau",
+          "locked": null,
+          "name": "nag_tau",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "nag_tau"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "nag_alpha",
+          "locked": null,
+          "name": "nag_alpha",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "nag_alpha"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "PROMPTFORGE_V2_PIPE",
+          "locked": null,
+          "name": "PROMPTFORGE_V2_PIPE",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "slot_index": 0,
+          "links": [
+            7
+          ]
+        }
+      ],
+      "title": "Sampling First",
+      "properties": {
+        "cnr_id": "ComfyUI-PromptForge",
+        "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
+        "Node name for S&R": "PROMPTFORGE_V2_IMAGE_SAMPLING_SETTINGS",
+        "promptforge_role": "sampling_first",
+        "promptforge_v2_widget_values": {
+          "seed": 0,
+          "steps": 8,
+          "cfg": 1,
+          "sampler_name": "er_sde",
+          "scheduler": "bong_tangent",
+          "denoise": 1,
+          "use_nag": false,
+          "nag_phi": 4,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25
+        },
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "8.0.1",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        0,
+        "fixed",
+        8,
+        1,
+        "er_sde",
+        "bong_tangent",
+        1,
+        false,
+        4,
+        2.5,
+        0.25
+      ],
+      "widgets_values_named": {
+        "seed": 0,
+        "control_after_generate": "fixed",
+        "steps": 8,
+        "cfg": 1,
+        "sampler_name": "er_sde",
+        "scheduler": "bong_tangent",
+        "denoise": 1,
+        "use_nag": false,
+        "nag_phi": 4,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25
+      },
+      "color": "#54502a",
+      "bgcolor": "#76724c"
+    },
+    {
+      "id": 5,
+      "type": "PROMPTFORGE_V2_WRITER_MODEL",
+      "pos": [
+        1090,
+        86
+      ],
+      "size": [
+        340,
+        300
+      ],
+      "flags": {},
+      "order": 205,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "clip",
+          "locked": null,
+          "name": "clip",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "CLIP",
+          "pos": null,
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "model",
+          "locked": null,
+          "name": "model",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "model"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "quantization",
+          "locked": null,
+          "name": "quantization",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "quantization"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "context_size",
+          "locked": null,
+          "name": "context_size",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "context_size"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "local_model_path",
+          "locked": null,
+          "name": "local_model_path",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "local_model_path"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "mmproj_path",
+          "locked": null,
+          "name": "mmproj_path",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "mmproj_path"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "writer_model",
+          "locked": null,
+          "name": "writer_model",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "PROMPTFORGE_V2_WRITER_MODEL",
+          "pos": null,
+          "slot_index": 0,
+          "links": [
+            9
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "report",
+          "locked": null,
+          "name": "report",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "pos": null,
+          "slot_index": 1,
+          "links": []
+        }
+      ],
+      "title": "Writer Model",
+      "properties": {
+        "cnr_id": "ComfyUI-PromptForge",
+        "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
+        "Node name for S&R": "PROMPTFORGE_V2_WRITER_MODEL",
+        "promptforge_role": "writer_model",
+        "promptforge_v2_widget_values": {
+          "model": "",
+          "quantization": "auto",
+          "context_size": 0,
+          "local_model_path": "",
+          "mmproj_path": ""
+        },
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "8.0.1",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "",
+        "auto",
+        0,
+        "",
+        ""
+      ],
+      "widgets_values_named": {
+        "model": "",
+        "quantization": "auto",
+        "context_size": 0,
+        "local_model_path": "",
+        "mmproj_path": ""
+      },
+      "color": "#2c5237",
+      "bgcolor": "#4e7459"
+    },
+    {
+      "id": 6,
+      "type": "PROMPTFORGE_V2_IMAGE_PROMPT",
+      "pos": [
+        1090,
+        426
+      ],
+      "size": [
+        340,
+        480
+      ],
+      "flags": {},
+      "order": 206,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "link": 7
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "text_in",
+          "locked": null,
+          "name": "text_in",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "STRING",
+          "pos": null,
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "source",
+          "locked": null,
+          "name": "source",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "source"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "text",
+          "locked": null,
+          "name": "text",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "negative",
+          "locked": null,
+          "name": "negative",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "negative"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "action",
+          "locked": null,
+          "name": "action",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "action"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "subject_1",
+          "locked": null,
+          "name": "subject_1",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "subject_1"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "subject_2",
+          "locked": null,
+          "name": "subject_2",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "subject_2"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "subject_3",
+          "locked": null,
+          "name": "subject_3",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "subject_3"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "camera",
+          "locked": null,
+          "name": "camera",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "camera"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "notes",
+          "locked": null,
+          "name": "notes",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "notes"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "slot_index": 0,
+          "links": [
+            8
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "text",
+          "locked": null,
+          "name": "text",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "pos": null,
+          "slot_index": 1,
+          "links": [
+            10,
+            15
+          ]
+        }
+      ],
+      "title": "Prompt",
+      "properties": {
+        "cnr_id": "ComfyUI-PromptForge",
+        "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
+        "Node name for S&R": "PROMPTFORGE_V2_IMAGE_PROMPT",
+        "promptforge_role": "prompt",
+        "promptforge_v2_widget_values": {
+          "source": "raw",
+          "text": "",
+          "negative": "",
+          "action": "image: Portrait - neutral, facing camera",
+          "subject_1": "",
+          "subject_2": "",
+          "subject_3": "",
+          "camera": "auto",
+          "notes": ""
+        },
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "8.0.1",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "raw",
+        "",
+        "",
+        "image: Portrait - neutral, facing camera",
+        "",
+        "",
+        "",
+        "auto",
+        "",
+        ""
+      ],
+      "widgets_values_named": {
+        "source": "raw",
+        "text": "",
+        "negative": "",
+        "action": "image: Portrait - neutral, facing camera",
+        "subject_1": "",
+        "subject_2": "",
+        "subject_3": "",
+        "camera": "auto",
+        "notes": "",
+        "prompt_source_and_saves": ""
+      },
+      "color": "#2c5237",
+      "bgcolor": "#4e7459"
+    },
+    {
+      "id": 7,
+      "type": "PROMPTFORGE_V2_IMAGE_PROMPT_WRITER",
+      "pos": [
+        1496,
+        86
+      ],
+      "size": [
+        340,
+        460
+      ],
+      "flags": {},
+      "order": 207,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "link": 8
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "writer_model",
+          "locked": null,
+          "name": "writer_model",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "PROMPTFORGE_V2_WRITER_MODEL",
+          "pos": null,
+          "link": 9
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "text",
+          "locked": null,
+          "name": "text",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "STRING",
+          "pos": null,
+          "link": 10
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "seed",
+          "locked": null,
+          "name": "seed",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "max_tokens",
+          "locked": null,
+          "name": "max_tokens",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "max_tokens"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "max_words",
+          "locked": null,
+          "name": "max_words",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "max_words"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "style_prefix",
+          "locked": null,
+          "name": "style_prefix",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "style_prefix"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "temperature",
+          "locked": null,
+          "name": "temperature",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "temperature"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "attempts",
+          "locked": null,
+          "name": "attempts",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "attempts"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "slot_index": 0,
+          "links": [
+            11
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "text",
+          "locked": null,
+          "name": "text",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "pos": null,
+          "slot_index": 1,
+          "links": [
+            12
+          ]
+        }
+      ],
+      "title": "Prompt Writer",
+      "properties": {
+        "cnr_id": "ComfyUI-PromptForge",
+        "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
+        "Node name for S&R": "PROMPTFORGE_V2_IMAGE_PROMPT_WRITER",
+        "promptforge_role": "prompt_writer",
+        "promptforge_v2_widget_values": {
+          "seed": 1,
+          "max_tokens": 3072,
+          "max_words": 0,
+          "style_prefix": "",
+          "temperature": 0.7,
+          "attempts": 3
+        },
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "8.0.1",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        1,
+        false,
+        3072,
+        0,
+        "",
+        0.7,
+        3,
+        ""
+      ],
+      "widgets_values_named": {
+        "seed": 1,
+        "control_after_generate": false,
+        "max_tokens": 3072,
+        "max_words": 0,
+        "style_prefix": "",
+        "temperature": 0.7,
+        "attempts": 3,
+        "output_inspector": ""
+      },
+      "color": "#2c5237",
+      "bgcolor": "#4e7459"
+    },
+    {
+      "id": 8,
+      "type": "PROMPTFORGE_V2_PROMPT_INSPECT",
+      "pos": [
+        1496,
+        586
+      ],
+      "size": [
+        340,
+        430
+      ],
+      "flags": {},
+      "order": 208,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "link": 11
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "text",
+          "locked": null,
+          "name": "text",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "STRING",
+          "pos": null,
+          "link": 12
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "slot_index": 0,
+          "links": [
+            13
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "report",
+          "locked": null,
+          "name": "report",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "pos": null,
+          "slot_index": 1,
+          "links": []
+        }
+      ],
+      "title": "Prompt Review",
+      "properties": {
+        "cnr_id": "ComfyUI-PromptForge",
+        "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
+        "Node name for S&R": "PROMPTFORGE_V2_PROMPT_INSPECT",
+        "promptforge_role": "prompt_review",
+        "promptforge_v2_widget_values": {},
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "8.0.1",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "output_inspector": ""
+      },
+      "color": "#2c5237",
+      "bgcolor": "#4e7459"
+    },
+    {
+      "id": 9,
+      "type": "PROMPTFORGE_V2_IMAGE_ENCODE",
+      "pos": [
+        2912,
+        86
+      ],
+      "size": [
+        340,
+        230
+      ],
+      "flags": {},
+      "order": 509,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "link": 13
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "model",
+          "locked": null,
+          "name": "model",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "MODEL",
+          "pos": null,
+          "link": 34
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "text",
+          "locked": null,
+          "name": "text",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "STRING",
+          "pos": null,
+          "link": 15
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "clip",
+          "locked": null,
+          "name": "clip",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "CLIP",
+          "pos": null,
+          "link": 16
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "vae",
+          "locked": null,
+          "name": "vae",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "VAE",
+          "pos": null,
+          "link": 17
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "latent",
+          "locked": null,
+          "name": "latent",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "LATENT",
+          "pos": null,
+          "link": 18
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "task",
+          "locked": null,
+          "name": "task",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "task"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe_format",
+          "locked": null,
+          "name": "pipe_format",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "pipe_format"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "width",
+          "locked": null,
+          "name": "width",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "height",
+          "locked": null,
+          "name": "height",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "batch_size",
+          "locked": null,
+          "name": "batch_size",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "batch_size"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "slot_index": 0,
+          "links": [
+            19
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "positive",
+          "locked": null,
+          "name": "positive",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "CONDITIONING",
+          "pos": null,
+          "slot_index": 1,
+          "links": [
+            20
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "negative",
+          "locked": null,
+          "name": "negative",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "CONDITIONING",
+          "pos": null,
+          "slot_index": 2,
+          "links": [
+            21
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "latent",
+          "locked": null,
+          "name": "latent",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "LATENT",
+          "pos": null,
+          "slot_index": 3,
+          "links": [
+            22
+          ]
+        }
+      ],
+      "title": "Encode",
+      "properties": {
+        "cnr_id": "ComfyUI-PromptForge",
+        "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
+        "Node name for S&R": "PROMPTFORGE_V2_IMAGE_ENCODE",
+        "promptforge_role": "encode",
+        "promptforge_v2_widget_values": {
+          "task": "t2i"
+        },
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "8.0.1",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "t2i",
+        true,
+        1024,
+        1024,
+        1
+      ],
+      "widgets_values_named": {
+        "task": "t2i",
+        "pipe_format": true,
+        "width": 1024,
+        "height": 1024,
+        "batch_size": 1
+      },
+      "color": "#6b3030",
+      "bgcolor": "#8d5252"
+    },
+    {
+      "id": 10,
+      "type": "PROMPTFORGE_V2_IMAGE_SAMPLE",
+      "pos": [
+        3318,
+        86
+      ],
+      "size": [
+        520,
+        640
+      ],
+      "flags": {},
+      "order": 510,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "link": 19
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "positive",
+          "locked": null,
+          "name": "positive",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "CONDITIONING",
+          "pos": null,
+          "link": 20
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "negative",
+          "locked": null,
+          "name": "negative",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "CONDITIONING",
+          "pos": null,
+          "link": 21
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "latent",
+          "locked": null,
+          "name": "latent",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "LATENT",
+          "pos": null,
+          "link": 22
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "model",
+          "locked": null,
+          "name": "model",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "MODEL",
+          "pos": null,
+          "link": 23
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe_settings",
+          "locked": null,
+          "name": "pipe_settings",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "pipe_settings"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "seed",
+          "locked": null,
+          "name": "seed",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "steps",
+          "locked": null,
+          "name": "steps",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "steps"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "cfg",
+          "locked": null,
+          "name": "cfg",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "cfg"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "sampler_name",
+          "locked": null,
+          "name": "sampler_name",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "sampler_name"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "scheduler",
+          "locked": null,
+          "name": "scheduler",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "scheduler"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "denoise",
+          "locked": null,
+          "name": "denoise",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "denoise"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "slot_index": 0,
+          "links": [
+            24
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "latent",
+          "locked": null,
+          "name": "latent",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "LATENT",
+          "pos": null,
+          "slot_index": 1,
+          "links": [
+            26
+          ]
+        }
+      ],
+      "title": "Sample First",
+      "properties": {
+        "cnr_id": "ComfyUI-PromptForge",
+        "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
+        "Node name for S&R": "PROMPTFORGE_V2_IMAGE_SAMPLE",
+        "promptforge_role": "sample_first",
+        "promptforge_v2_widget_values": {},
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "8.0.1",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        true,
+        0,
+        "randomize",
+        10,
+        1,
+        "euler",
+        "simple",
+        1
+      ],
+      "widgets_values_named": {
+        "pipe_settings": true,
+        "seed": 0,
+        "control_after_generate": "randomize",
+        "steps": 10,
+        "cfg": 1,
+        "sampler_name": "euler",
+        "scheduler": "simple",
+        "denoise": 1
+      },
+      "color": "#6b3030",
+      "bgcolor": "#8d5252"
+    },
+    {
+      "id": 11,
+      "type": "PROMPTFORGE_V2_IMAGE_DECODE",
+      "pos": [
+        3970,
+        86
+      ],
+      "size": [
+        340,
+        230
+      ],
+      "flags": {},
+      "order": 611,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "link": 24
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "vae",
+          "locked": null,
+          "name": "vae",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "VAE",
+          "pos": null,
+          "link": 25
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "latent",
+          "locked": null,
+          "name": "latent",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "LATENT",
+          "pos": null,
+          "link": 26
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "slot_index": 0,
+          "links": [
+            27
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "images",
+          "locked": null,
+          "name": "images",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "IMAGE",
+          "pos": null,
+          "slot_index": 1,
+          "links": [
+            28
+          ]
+        }
+      ],
+      "title": "Decode",
+      "properties": {
+        "cnr_id": "ComfyUI-PromptForge",
+        "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
+        "Node name for S&R": "PROMPTFORGE_V2_IMAGE_DECODE",
+        "promptforge_role": "decode",
+        "promptforge_v2_widget_values": {},
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "8.0.1",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "color": "#7a2735",
+      "bgcolor": "#9c4957"
+    },
+    {
+      "id": 12,
+      "type": "PROMPTFORGE_V2_IMAGE_SAVE",
+      "pos": [
+        4848,
+        86
+      ],
+      "size": [
+        520,
+        700
+      ],
+      "flags": {},
+      "order": 812,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "link": 27
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "images",
+          "locked": null,
+          "name": "images",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "IMAGE",
+          "pos": null,
+          "link": 28
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "filename_prefix",
+          "locked": null,
+          "name": "filename_prefix",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "slot_index": 0,
+          "links": [
+            29
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "images",
+          "locked": null,
+          "name": "images",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "IMAGE",
+          "pos": null,
+          "slot_index": 1,
+          "links": []
+        }
+      ],
+      "title": "Save Image",
+      "properties": {
+        "cnr_id": "ComfyUI-PromptForge",
+        "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
+        "Node name for S&R": "PROMPTFORGE_V2_IMAGE_SAVE",
+        "promptforge_role": "save_image",
+        "promptforge_v2_widget_values": {
+          "filename_prefix": "PromptForge/moss_t2i"
+        },
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "8.0.1",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "PromptForge/template"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "PromptForge/moss_t2i"
+      },
+      "color": "#245a52",
+      "bgcolor": "#467c74"
+    },
+    {
+      "id": 13,
+      "type": "PROMPTFORGE_V2_PRESETS",
+      "pos": [
+        4442,
+        86
+      ],
+      "size": [
+        340,
+        430
+      ],
+      "flags": {},
+      "order": 813,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "link": 29
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "preset_name",
+          "locked": null,
+          "name": "preset_name",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "preset_name"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "presets",
+          "locked": null,
+          "name": "presets",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "presets"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "include_text",
+          "locked": null,
+          "name": "include_text",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "include_text"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "PROMPTFORGE_V2_PIPE",
+          "locked": null,
+          "name": "PROMPTFORGE_V2_PIPE",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "slot_index": 0,
+          "links": [
+            30
+          ]
+        }
+      ],
+      "title": "Presets",
+      "properties": {
+        "cnr_id": "ComfyUI-PromptForge",
+        "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
+        "Node name for S&R": "PROMPTFORGE_V2_PRESETS",
+        "promptforge_role": "presets",
+        "promptforge_v2_widget_values": {
+          "preset_name": "",
+          "presets": "{\"schema_version\":2,\"presets\":{}}",
+          "include_text": false
+        },
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "8.0.1",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "",
+        "{\"schema_version\":2,\"presets\":{}}",
+        false,
+        ""
+      ],
+      "widgets_values_named": {
+        "preset_name": "",
+        "presets": "{\"schema_version\":2,\"presets\":{}}",
+        "include_text": false,
+        "preset_controls": ""
+      },
+      "color": "#245a52",
+      "bgcolor": "#467c74"
+    },
+    {
+      "id": 14,
+      "type": "PROMPTFORGE_V2_RUN_INSPECT",
+      "pos": [
+        4442,
+        556
+      ],
+      "size": [
+        340,
+        230
+      ],
+      "flags": {},
+      "order": 814,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "link": 30
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "PROMPTFORGE_V2_PIPE",
+          "locked": null,
+          "name": "PROMPTFORGE_V2_PIPE",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "slot_index": 0,
+          "links": []
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "report",
+          "locked": null,
+          "name": "report",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "pos": null,
+          "slot_index": 1,
+          "links": []
+        }
+      ],
+      "title": "Run Inspect",
+      "properties": {
+        "cnr_id": "ComfyUI-PromptForge",
+        "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
+        "Node name for S&R": "PROMPTFORGE_V2_RUN_INSPECT",
+        "promptforge_role": "run_inspect",
+        "promptforge_v2_widget_values": {},
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "8.0.1",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "output_inspector": ""
+      },
+      "color": "#245a52",
+      "bgcolor": "#467c74"
+    },
+    {
+      "id": 15,
+      "type": "PROMPTFORGE_V2_PERFORMANCE",
+      "pos": [
+        2440,
+        86
+      ],
+      "size": [
+        340,
+        230
+      ],
+      "flags": {},
+      "order": 415,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pipe",
+          "locked": null,
+          "name": "pipe",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "link": 31
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "model",
+          "locked": null,
+          "name": "model",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "MODEL",
+          "pos": null,
+          "link": 32
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "attention",
+          "locked": null,
+          "name": "attention",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "attention"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "ffn_chunks",
+          "locked": null,
+          "name": "ffn_chunks",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "ffn_chunks"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "sparse_attention",
+          "locked": null,
+          "name": "sparse_attention",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "sparse_attention"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "keep_percent",
+          "locked": null,
+          "name": "keep_percent",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "keep_percent"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "use_slg",
+          "locked": null,
+          "name": "use_slg",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "use_slg"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "slg_layers",
+          "locked": null,
+          "name": "slg_layers",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "slg_layers"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "slg_start",
+          "locked": null,
+          "name": "slg_start",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "slg_start"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "slg_end",
+          "locked": null,
+          "name": "slg_end",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "slg_end"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "PROMPTFORGE_V2_PIPE",
+          "locked": null,
+          "name": "PROMPTFORGE_V2_PIPE",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "PROMPTFORGE_V2_PIPE",
+          "pos": null,
+          "slot_index": null,
+          "links": [
+            33
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "model",
+          "locked": null,
+          "name": "model",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "MODEL",
+          "pos": null,
+          "slot_index": null,
+          "links": [
+            34
+          ]
+        }
+      ],
+      "title": "Performance",
+      "properties": {
+        "cnr_id": "ComfyUI-PromptForge",
+        "ver": "e5331038f0ba74d3c31d9883e75405f16db9a034",
+        "Node name for S&R": "PROMPTFORGE_V2_PERFORMANCE",
+        "promptforge_role": "47ac06ef-12e1-4057-af84-618ea615dc67",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "8.0.1",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "as loaded",
+        2,
+        false,
+        10,
+        true,
+        "22",
+        -0.0,
+        0.5
+      ],
+      "widgets_values_named": {
+        "attention": "as loaded",
+        "ffn_chunks": 2,
+        "sparse_attention": false,
+        "keep_percent": 10,
+        "use_slg": true,
+        "slg_layers": "22",
+        "slg_start": -0.0,
+        "slg_end": 0.5
+      },
+      "color": "#3f3f46",
+      "bgcolor": "#616168"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      2,
+      1,
+      1,
+      2,
+      1,
+      "MODEL"
+    ],
+    [
+      3,
+      1,
+      2,
+      2,
+      2,
+      "CLIP"
+    ],
+    [
+      5,
+      2,
+      1,
+      3,
+      1,
+      "MODEL"
+    ],
+    [
+      6,
+      3,
+      0,
+      4,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      7,
+      4,
+      0,
+      6,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      8,
+      6,
+      0,
+      7,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      9,
+      5,
+      0,
+      7,
+      1,
+      "PROMPTFORGE_V2_WRITER_MODEL"
+    ],
+    [
+      10,
+      6,
+      1,
+      7,
+      2,
+      "STRING"
+    ],
+    [
+      11,
+      7,
+      0,
+      8,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      12,
+      7,
+      1,
+      8,
+      1,
+      "STRING"
+    ],
+    [
+      13,
+      8,
+      0,
+      9,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      15,
+      6,
+      1,
+      9,
+      2,
+      "STRING"
+    ],
+    [
+      16,
+      2,
+      2,
+      9,
+      3,
+      "CLIP"
+    ],
+    [
+      17,
+      1,
+      3,
+      9,
+      4,
+      "VAE"
+    ],
+    [
+      18,
+      3,
+      1,
+      9,
+      5,
+      "LATENT"
+    ],
+    [
+      19,
+      9,
+      0,
+      10,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      20,
+      9,
+      1,
+      10,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      21,
+      9,
+      2,
+      10,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      22,
+      9,
+      3,
+      10,
+      3,
+      "LATENT"
+    ],
+    [
+      23,
+      2,
+      1,
+      10,
+      4,
+      "MODEL"
+    ],
+    [
+      24,
+      10,
+      0,
+      11,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      25,
+      1,
+      3,
+      11,
+      1,
+      "VAE"
+    ],
+    [
+      26,
+      10,
+      1,
+      11,
+      2,
+      "LATENT"
+    ],
+    [
+      27,
+      11,
+      0,
+      12,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      28,
+      11,
+      1,
+      12,
+      1,
+      "IMAGE"
+    ],
+    [
+      29,
+      12,
+      0,
+      13,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      30,
+      13,
+      0,
+      14,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      31,
+      2,
+      0,
+      15,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      32,
+      2,
+      1,
+      15,
+      1,
+      "MODEL"
+    ],
+    [
+      33,
+      15,
+      0,
+      3,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      34,
+      15,
+      1,
+      9,
+      1,
+      "MODEL"
+    ]
+  ],
+  "floatingLinks": null,
+  "groups": [
+    {
+      "title": "01 Models & LoRAs",
+      "bounding": [
+        34,
+        14,
+        928,
+        754
+      ],
+      "color": "#3f789e",
+      "font_size": 26
+    },
+    {
+      "title": "02 Prompt & Review",
+      "bounding": [
+        1042,
+        14,
+        798,
+        1044
+      ],
+      "color": "#3f789e",
+      "font_size": 26
+    },
+    {
+      "title": "03 Format & Sampling",
+      "bounding": [
+        1920,
+        14,
+        392,
+        614
+      ],
+      "color": "#3f789e",
+      "font_size": 26
+    },
+    {
+      "title": "04 Performance & Preview",
+      "bounding": [
+        2392,
+        14,
+        392,
+        344
+      ],
+      "color": "#3f789e",
+      "font_size": 26
+    },
+    {
+      "title": "05 Encode & Sample",
+      "bounding": [
+        2864,
+        14,
+        978,
+        754
+      ],
+      "color": "#3f789e",
+      "font_size": 26
+    },
+    {
+      "title": "06 Refine & Decode",
+      "bounding": [
+        3922,
+        14,
+        392,
+        344
+      ],
+      "color": "#3f789e",
+      "font_size": 26
+    },
+    {
+      "title": "07 Inspect & Save",
+      "bounding": [
+        4394,
+        14,
+        978,
+        814
+      ],
+      "color": "#3f789e",
+      "font_size": 26
+    }
+  ],
+  "definitions": null,
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.7,
+      "offset": [
+        -995.7142857142857,
+        -926.5714285714286
+      ]
+    },
+    "promptforge_v2": {
+      "template": "moss_t2i",
+      "blank": true,
+      "family": "moss_image",
+      "mode": "t2i"
+    },
+    "ue_links": [],
+    "reroutes": null
+  },
+  "version": 0.4
+}

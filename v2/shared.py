@@ -1,4 +1,6 @@
 import json
+import re
+import time
 from pathlib import Path
 
 import folder_paths
@@ -11,6 +13,23 @@ from .contracts import schema as nodes_schema, PIPE, ensure_pipe, evolve, metada
 
 Pipe = io.Custom(PIPE)
 CATEGORY = "PromptForge V2/Shared"
+DATE_TOKEN = re.compile(r"%date:([^%]+)%")
+DATE_FORMATS = {"yyyy": "%Y", "MM": "%m", "dd": "%d", "HH": "%H", "mm": "%M", "ss": "%S"}
+
+
+def expand_date_tokens(prefix, moment=None):
+    """Expand %date:yyyy-MM-dd_HH-mm-ss% from one timestamp; core handles the plain %year% style tokens."""
+    if "%date:" not in prefix:
+        return prefix
+    stamp = moment or time.localtime()
+
+    def fill(match):
+        pattern = match.group(1)
+        for token, directive in DATE_FORMATS.items():
+            pattern = pattern.replace(token, directive)
+        return time.strftime(pattern, stamp)
+
+    return DATE_TOKEN.sub(fill, prefix)
 
 
 @PromptServer.instance.routes.get("/promptforge/v2/loras")
@@ -55,9 +74,17 @@ class LoraStack(io.ComfyNode):
         state = json.loads(loras)
         if not isinstance(state, dict) or not isinstance(state.get("items", []), list):
             raise ValueError("LoRA stack must contain an items list.")
+        items = []
+        for item in state["items"]:
+            item = dict(item)
+            item["on"] = item.pop("enabled", item.get("on", True))
+            item["model"] = item.pop("model_strength", item.get("model", 1.0))
+            item["clip"] = item.pop("clip_strength", item.get("clip"))
+            items.append(item)
+        state = {**state, "items": items}
         resolved_controls = ("minimax audiovisual" if pipe.get("family") == "minimax_h3" else "standard") if layer_controls == "auto" else layer_controls
         if resolved_controls == "standard":
-            state = {**state, "items": [{**item, "part": "all"} for item in state.get("items", [])]}
+            state = {**state, "items": [{**item, "part": "all"} for item in state["items"]]}
         model, clip, triggers, report = lora_loader.PROMPTFORGE_LoraLoader().load(
             model, json.dumps(state), seed, skip_mismatched, clip=pipe["artifacts"].get("clip"),
             balance=balance, balance_floor=balance_floor)
@@ -96,6 +123,20 @@ class SingleLora(io.ComfyNode):
         result = evolve(pipe, "single_loras", {"items": items}, artifacts,
                         invalidate=("positive", "negative", "latent", "images", "audio"))
         return io.NodeOutput(result, result["artifacts"].get("model"), result["artifacts"].get("clip"))
+
+
+class ShowText(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return nodes_schema("SHOW", "TEXT", "Show Text", output=True,
+                            inputs=[Pipe.Input("pipe", optional=True), io.String.Input("text", optional=True, force_input=True)],
+                            outputs=[Pipe.Output()])
+
+    @classmethod
+    def execute(cls, pipe=None, text=None):
+        pipe = ensure_pipe(pipe)
+        value = text or pipe["artifacts"].get("text") or ""
+        return io.NodeOutput(pipe, ui={"text": [value]})
 
 
 class RunInspect(io.ComfyNode):
@@ -155,6 +196,6 @@ class SaveRunMetadata(io.ComfyNode):
         return io.NodeOutput(pipe, str(target), ui={"text": [str(target)]})
 
 
-NODES = [WorkflowPresets, LoraStack, SingleLora, RunInspect, PromptLibrary, SaveRunMetadata]
+NODES = [ShowText, WorkflowPresets, LoraStack, SingleLora, RunInspect, PromptLibrary, SaveRunMetadata]
 NODE_CLASS_MAPPINGS = {node.define_schema().node_id: node for node in NODES}
 NODE_DISPLAY_NAME_MAPPINGS = {node.define_schema().node_id: node.define_schema().display_name for node in NODES}

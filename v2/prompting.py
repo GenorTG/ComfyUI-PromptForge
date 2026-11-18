@@ -9,6 +9,8 @@ from pathlib import Path
 import gc
 
 import folder_paths
+from aiohttp import web
+from server import PromptServer
 
 import comfy.model_management
 import numpy as np
@@ -109,12 +111,36 @@ def _store_prompt(pipe, source, text, negative, **extra):
     return evolve(pipe, section="prompt", settings=settings, artifacts=artifacts, invalidate=INVALIDATE)
 
 
-def _action_options(h3=False):
+def _action_options():
     images = _library("image_actions")
-    options = [f"image: {key}" for key in images.ACTIONS if not h3 or images.ACTIONS[key][1].startswith("SFW")]
+    return [f"image: {key}" for key in images.ACTIONS] + [f"h3: {key}" for key in _library("h3_actions").ACTIONS]
+
+
+def _action_genders(label, count, h3):
     if h3:
-        options.extend(f"h3: {key}" for key in _library("h3_actions").ACTIONS)
-    return options
+        return [role["gender"] for role in _library("h3_actions").role_info(label)]
+    # image briefs always call subject 1 the woman and subject 2 the man
+    return ["female", "male"] if count == 2 else ["female"]
+
+
+def _action_catalog():
+    """The picker's data: label, one-line description and metadata, split by generation."""
+    catalog = {"image": {}, "minimax": {}}
+    for family, library, h3 in (("image", "image_actions", False), ("minimax", "h3_actions", True)):
+        for label, entry in _library(library).ACTIONS.items():
+            count, arrangement = (len(entry[0]), entry[1]) if h3 else (entry[0], entry[2])
+            description = re.split(r"(?<=[.!?])\s", " ".join(arrangement.split()))[0]
+            catalog[family][label] = {
+                "category": label.split(" - ")[0],
+                "description": description if len(description) <= 180 else description[:177].rsplit(" ", 1)[0] + "…",
+                "gender": _action_genders(label, count, h3),
+                "aspect": _library(library).aspect(label) if h3 else ""}
+    return catalog
+
+
+@PromptServer.instance.routes.get("/promptforge/v2/actions")
+async def _actions(request):
+    return web.json_response(_action_catalog())
 
 
 def _ref_subjects(pipe):
@@ -211,48 +237,64 @@ class WriterModel(io.ComfyNode):
 
 class ImagePrompt(io.ComfyNode):
     H3 = False
+    GENERATION = "image"
 
     @classmethod
     def define_schema(cls):
         return nodes_schema("H3" if cls.H3 else "IMAGE", "PROMPT", "H3 Prompt" if cls.H3 else "Image Prompt", inputs=[Pipe.Input("pipe", optional=True), io.Combo.Input("source", options=["raw", "idea", "action"], default="raw"),
                     io.String.Input("text", default="", multiline=True), io.String.Input("text_in", optional=True, force_input=True),
                     io.String.Input("negative", default="", multiline=True),
-                    io.Combo.Input("action", options=_action_options(cls.H3)),
+                    io.Combo.Input("action", options=_action_options()),
                     io.String.Input("subject_1", default="", multiline=True),
                     io.String.Input("subject_2", default="", multiline=True),
                     io.String.Input("subject_3", default="", multiline=True),
-                    io.String.Input("camera", default="auto"), io.String.Input("notes", default="", multiline=True),
-                    io.String.Input("soundscape", default="", multiline=True, tooltip="H3 only, raw mode: overall_soundscape line (room tone, dialogue, effects)."),
-                    io.String.Input("music", default="N/A", tooltip="H3 only, raw mode: non_diegetic_music. N/A when there is no score.")],
+                    io.Combo.Input("camera", options=["auto"] + sorted(_services()._CAMERAS(cls.H3)), default="auto"),
+                    io.String.Input("notes", default="", multiline=True),
+                    io.String.Input("soundscape", default="", multiline=True, tooltip="Minimax generation only, raw mode: overall_soundscape line (room tone, dialogue, effects)."),
+                    io.String.Input("music", default="N/A", tooltip="Minimax generation only, raw mode: non_diegetic_music. N/A when there is no score."),
+                    # last, so workflows saved before it existed keep their value positions; "" is the old empty slot
+                    io.Combo.Input("generation", options=["image", "minimax", ""], default=cls.GENERATION)],
             outputs=[Pipe.Output("pipe"), io.String.Output("text")])
 
     @classmethod
     def execute(cls, pipe=None, source="raw", text="", negative="", action="", subject_1="", subject_2="", subject_3="",
-                camera="auto", notes="", text_in=None, soundscape="", music="N/A"):
+                camera="auto", notes="", text_in=None, soundscape="", music="N/A", generation=None):
         pipe = ensure_pipe(pipe, family="minimax_h3" if cls.H3 else "image")
+        audio = (generation or cls.GENERATION) == "minimax"
         if text_in:
             text = text_in
         if cls.H3 and pipe["family"] != "minimax_h3":
             raise ValueError("H3 Prompt requires a minimax_h3 pipe.")
         if source == "action":
             text = _action_text(action, (subject_1, subject_2, subject_3), notes, camera) + (f"\nAdditional intent: {text}" if text else "")
-            if cls.H3 and soundscape.strip():
+            if audio and soundscape.strip():
                 text += f"\nSound direction: {soundscape.strip()}"
-            if cls.H3 and music.strip() and music.strip() != "N/A":
+            if audio and music.strip() and music.strip() != "N/A":
                 text += f"\nMusic direction: {music.strip()}"
         elif cls.H3 and source == "raw":
-            text = _h3_sections(pipe, text, soundscape, music)
+            text = _h3_sections(pipe, text, soundscape if audio else "", music if audio else "")
         result = _store_prompt(pipe, source, text, negative, action=action if source == "action" else "",
-                               soundscape=soundscape, music=music)
+                               **({"soundscape": soundscape, "music": music} if audio else {}))
         return io.NodeOutput(result, text)
 
 
 class H3Prompt(ImagePrompt):
     H3 = True
+    GENERATION = "minimax"
 
 
 H3_PRESETS = {"t2va": "MiniMax H3 T2VA", "i2va": "MiniMax H3 I2VA",
               "l2va": "MiniMax H3 L2VA", "fl2va": "MiniMax H3 FL2VA", "ref2va": "MiniMax H3 Ref2VA"}
+
+
+def _preset_family(preset):
+    """Family a named template belongs to; the shared style presets belong to none."""
+    if preset in H3_PRESETS.values():
+        return "minimax_h3"
+    for family, names in _services().FAMILY_PRESETS.items():
+        if preset in names:
+            return family
+    return None
 
 
 def _contact_sheet(images, mapping):
@@ -339,7 +381,8 @@ def _writer_context(pipe, h3):
     return writer_images, video, mode_key, context
 
 
-def _write(encoder, service, config, system, text, images, video, seed, max_tokens, temperature):
+def _write(encoder, service, config, system, text, images, video, seed, max_tokens, temperature, thinking=False,
+           top_p=.9, top_k=40, repetition_penalty=1.05, presence_penalty=.4):
     source = config.get("source", "safetensors")
     model_name = config.get("gguf_model", "auto") if source == "GGUF" else config.get("safetensors_model", "auto")
     # a resident video model starves the writer: the 9 GB encoder then streams from RAM at single-digit tok/s
@@ -354,12 +397,12 @@ def _write(encoder, service, config, system, text, images, video, seed, max_toke
         batch_size=config.get("batch_size", 2048), ubatch_size=config.get("ubatch_size", 512),
         kv_cache_type=config.get("kv_cache_type", "f16"), offload_kqv=config.get("offload_kqv", True),
         swa_full=config.get("swa_full", False), flash_attn=config.get("flash_attn", "auto"),
-        max_tokens=max_tokens, temperature=temperature, top_p=.9, top_k=40, num_beams=1,
-        repetition_penalty=1.05, presence_penalty=.4,
+        max_tokens=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k, num_beams=1,
+        repetition_penalty=repetition_penalty, presence_penalty=presence_penalty,
         image=images[0] if images else None, image2=images[1] if len(images) > 1 else None,
         image3=images[2] if len(images) > 2 else None, video=video, frame_count=16, seed=seed,
         clip=config.get("clip"), local_model_path=config.get("local_model_path", ""),
-        mmproj_path=config.get("mmproj_path", ""), disable_thinking=True, auto_retry=False)
+        mmproj_path=config.get("mmproj_path", ""), disable_thinking=not thinking, auto_retry=False)
     answer, thinking = service._split_thinking(result)
     return service._clean_prompt_output(answer), thinking
 
@@ -467,7 +510,10 @@ def _instructions(pipe, mode, context, max_words, style_prefix="", sections=None
             "Then, in this tag order: shot distance and angle, who is where relative to the other, count tag "
             "(1girl for a solo woman, 2girls, 1girl 1boy), act, anatomy, pose, hands, place, light. "
             "Use Gelbooru spelling and the shortest clear tag; weight a stressed feature as (tag:1.2) at most. "
-            f"At most {max_words} tags. ")
+            "Every item stays a tag, at most four words, never a clause: write `penis in pussy`, not `the shaft is buried "
+            "deep inside her`. For penetration always include `sex`, the position tag and `penis in pussy` (or `anal`), "
+            "then `nude`, then the bodies. One body fact per tag so limbs stay countable. "
+            f"At most {min(max_words, 70)} tags, so the framing tags are not drowned. ")
     elif pipe["artifacts"].get("krea_references"):
         identity = "identical face, hair and body of the photo"
         extra = ""
@@ -507,13 +553,23 @@ class ImagePromptWriter(io.ComfyNode):
     def define_schema(cls):
         return nodes_schema("H3" if cls.H3 else "IMAGE", "PROMPT_WRITER", "H3 Prompt Writer" if cls.H3 else "Image Prompt Writer",
             inputs=[Pipe.Input("pipe", optional=True), Writer.Input("writer_model", optional=True, lazy=True),
+                    io.Combo.Input("writer_preset", options=["auto", *service.PROMPTFORGE_PRESETS], default="auto",
+                           tooltip="Template for this writer call. Auto follows the pipe family and its references; a pick is used for this call only and leaves the pipe settings alone."),
                     io.Int.Input("seed", default=1, min=0, max=2**32-1),
                     io.Int.Input("max_tokens", default=4096, min=128, max=32768),
-                    io.Int.Input("max_words", default=0, min=0, max=4000, tooltip="0 uses the family budget; enhanced output is repaired rather than truncated."),
-                    io.String.Input("text", optional=True, force_input=True, tooltip="Prompt text from a Prompt or Prompt Library node when no pipe is used."),
+                                        io.String.Input("text", optional=True, force_input=True, tooltip="Prompt text from a Prompt or Prompt Library node when no pipe is used."),
                     io.String.Input("style_prefix", default="", tooltip="Tags or words put in front of every written prompt. Empty uses the family default (Anima gets its anime quality tags)."),
-                    io.Float.Input("temperature", default=.7, min=0, max=2),
-                    io.Int.Input("attempts", default=3, min=1, max=3)],
+                    io.Float.Input("temperature", default=.55, min=0, max=2),
+                    io.Float.Input("top_p", default=.9, min=0, max=1, step=.01),
+                    io.Int.Input("top_k", default=40, min=0, max=200),
+                    io.Float.Input("repetition_penalty", default=1.05, min=1, max=2, step=.01),
+                    io.Float.Input("presence_penalty", default=.4, min=0, max=2, step=.05),
+                    io.Combo.Input("thinking", options=["off", "on"], default="off",
+                           tooltip="On lets the enhancer think before writing. Slower, sometimes better on dense scenes."),
+                    io.Combo.Input("checks", options=["strict", "off"], default="strict",
+                           tooltip="Strict runs the prompt lint and the H3 section syntax. Off keeps whatever came back."),
+                    io.Combo.Input("retries", options=["off", "1", "2", "3"], default="1",
+                           tooltip="Extra tries when the written prompt fails the checks. The first try that passes is kept, no further copy is written.")],
             outputs=[Pipe.Output("pipe"), io.String.Output("text")])
 
     @classmethod
@@ -521,7 +577,7 @@ class ImagePromptWriter(io.ComfyNode):
         return ["writer_model"] if _prompt(pipe).get("source") != "raw" and writer_model is None else []
 
     @classmethod
-    def execute(cls, pipe=None, writer_model=None, seed=1, max_tokens=4096, max_words=0, temperature=.55, attempts=3,
+    def execute(cls, pipe=None, writer_model=None, writer_preset="auto", seed=1, max_tokens=4096, temperature=.55, top_p=.9, top_k=40, repetition_penalty=1.05, presence_penalty=.4, retries="1", checks="strict", thinking="off",
                 style_prefix="", text=None):
         pipe = ensure_pipe(pipe, family="minimax_h3" if cls.H3 else "image")
         if text and not _prompt(pipe).get("text"):
@@ -539,17 +595,24 @@ class ImagePromptWriter(io.ComfyNode):
             raise ValueError("Connect Writer Model to write an idea or action, or select raw.")
         if cls.H3 and pipe["family"] != "minimax_h3":
             raise ValueError("H3 Prompt Writer requires a minimax_h3 pipe.")
-        if not 1 <= attempts <= 3:
-            raise ValueError("Writer attempts must be between 1 and 3.")
+        attempts = (int(retries) if retries not in (None, "", "off") else 0) + 1
         images, video, mode, context = _writer_context(pipe, cls.H3)
         service = _services()
-        preset = (H3_PRESETS[mode] if cls.H3 else
+        override = bool(writer_preset) and writer_preset != "auto"
+        preset = writer_preset if override else (H3_PRESETS[mode] if cls.H3 else
                   service._family_preset(pipe["family"], bool(images), video is not None))
         if preset not in service.PROMPTFORGE_PRESETS:
             raise ValueError(f"Writer template is unavailable: {preset}")
+        # a picked template from another family still writes; the report says why it may read wrong
+        preset_family = _preset_family(preset) if override else None
+        mismatch = (f"{preset} is a {preset_family} template, the pipe is {pipe['family']}"
+                    if preset_family and preset_family != pipe["family"] else "")
+        manual_template = service.PROMPTFORGE_PRESETS[preset]["text"] if override else ""
         encoder = service.PROMPTFORGE_PromptEnhancer()
-        budget = max_words or {"krea2": 260, "moss_image": 320, "anima": 120, "minimax_h3": 2600}.get(pipe["family"], 300)
+        budget = {"krea2": 260, "moss_image": 320, "anima": 120, "minimax_h3": 2600}.get(pipe["family"], 300)
         template = _instructions(pipe, mode, context, budget, style_prefix)
+        if manual_template:
+            template = manual_template + "\n\n" + template
         # H3 writes the picture and the sound in separate calls: one long output tends to
         # run past every section and lose the audio, so each call gets its own stop.
         if cls.H3:
@@ -585,7 +648,8 @@ class ImagePromptWriter(io.ComfyNode):
                 "Return only the target model prompt. Writer constraints describe desired outcomes: " +
                 json.dumps({"excluded_from_scene": prompt.get("negative", "")}) + "\n" + feedback)
             text, thinking = _write(encoder, service, writer_model, system, user_text, images, video,
-                                    attempt_seed, min(max_tokens, 4096), temperature)
+                                    attempt_seed, min(max_tokens, 4096), temperature, thinking == "on",
+                                    top_p, top_k, repetition_penalty, presence_penalty)
             text = _strip_context_echo(text)
             audio_text = ""
             if cls.H3:
@@ -600,17 +664,15 @@ class ImagePromptWriter(io.ComfyNode):
                     text = text.rstrip() + "\n\n" + audio_text.strip()
                 text = _h3_repair_audio(text, pipe, mode)
             request = json.dumps({"system": system, "user": user_text, "context": context}, ensure_ascii=False)
-            issues = validation_issues(text, pipe["family"])
-            if cls.H3:
+            issues = [] if checks == "off" else validation_issues(text, pipe["family"])
+            if cls.H3 and checks != "off":
                 issues.extend(_h3_issues(text, mode, context))
-            words = len(re.findall(r"\w+", text))
-            if words > budget:
-                issues.append(f"output exceeds {budget}-word budget ({words} words)")
             records.append({"seed": attempt_seed, "text": text, "validation": issues, "request": request, "thinking": thinking})
             if not issues:
                 result = evolve(pipe, artifacts={"text": text, "writer": {
                     "status": "valid", "validation": [], "attempts": records, "max_tokens": max_tokens,
-                    "context": context, "preset": preset}}, invalidate=("positive", "negative"))
+                    "context": context, "preset": preset, **({"preset_mismatch": mismatch} if mismatch else {})}},
+                    invalidate=("positive", "negative"))
                 return io.NodeOutput(result, text)
             feedback = ("Rewrite affirmatively: drop these words and replace each with what is visible in the scene: "
                         "no, not, never, without, avoid. Failures: " + "; ".join(issues))

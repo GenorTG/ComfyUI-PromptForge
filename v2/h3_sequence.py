@@ -131,7 +131,10 @@ class H3Sequence(io.ComfyNode):
             prompt = dict(pipe["settings"].get("prompt", {}), text=part["text"], source=part.get("source", "raw"))
             working = evolve(working, section="prompt", settings=prompt, invalidate=("writer",))
             if prompt["source"] == "raw":
-                working = evolve(working, artifacts={"writer": {"status": "raw", "attempts": [], "validation": []}})
+                from .prompting import _h3_sections
+                working = evolve(working, artifacts={"text": _h3_sections(
+                    working, part["text"], prompt.get("soundscape", ""), prompt.get("music", "N/A")),
+                    "writer": {"status": "raw", "attempts": [], "validation": []}})
             else:
                 # Writer vision uses the last frame; the full AV tail remains on the generation pipe.
                 writer_pipe = working

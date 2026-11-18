@@ -1,7 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { createLibrary, thumb, nsfwShown, setNsfwShown, BLUR } from "./promptforge_library.js";
-import { PREFIX, ensureRole, upstreamNodes, parsePresets, capturePreset, applyPreset, parseLoras, serializeLoras } from "./promptforge_v2_presets.js";
+import { PREFIX, ensureRole, upstreamNodes, parsePresets, capturePreset, applyPreset } from "./promptforge_v2_presets.js";
 
 const widget = (node, name) => node.widgets?.find((entry) => entry.name === name);
 function element(tag, props = {}) { return Object.assign(document.createElement(tag), props); }
@@ -129,235 +129,6 @@ function promptLibraryUI(node) {
   root.append(select, bar, status);
   refresh();
   return refresh;
-}
-
-function promptVisibility(node) {
-  const source = widget(node, "source");
-  source.hidden = true;
-  source.computeSize = () => [0, -4];
-  if (source.inputEl) source.inputEl.style.display = "none";
-  const actionWidgets = ["action", "subject_1", "subject_2", "subject_3", "camera", "notes"].map((name) => widget(node, name)).filter(Boolean);
-  const layouts = actionWidgets.map((item) => ({ item, computeSize: item.computeSize }));
-  const refresh = () => {
-    for (const { item, computeSize } of layouts) {
-      item.hidden = source.value !== "action";
-      item.computeSize = item.hidden ? () => [0, -4] : computeSize;
-      if (item.inputEl) item.inputEl.style.display = item.hidden ? "none" : "";
-    }
-    paintChoices();
-    node.setDirtyCanvas?.(true, true);
-  };
-  const callback = source.callback;
-  source.callback = function () { const result = callback?.apply(this, arguments); refresh(); return result; };
-  const controls = panel(node, "prompt_source_and_saves", 76);
-  controls.style.gap = "6px";
-  const choices = element("div");
-  choices.style.cssText = "display:flex;gap:4px;flex-wrap:wrap";
-  const sourceButtons = [["raw", "Raw prompt"], ["idea", "Idea for writer"], ["action", "Action preset"]].map(([value, title]) => {
-    const control = button(title, () => { source.value = value; source.callback?.(value); change(node, () => {}); paintChoices(); });
-    control.dataset.source = value;
-    choices.append(control);
-    return control;
-  });
-  function paintChoices() {
-    for (const control of sourceButtons) {
-      const selected = control.dataset.source === source.value;
-      control.style.cssText = `border:1px solid ${selected ? "#78c9ff" : "#65717c"};border-radius:5px;padding:4px 8px;background:${selected ? "#24445a" : "#252b31"};color:#eef5fa`;
-      control.setAttribute("aria-pressed", String(selected));
-    }
-  }
-  const saved = element("select", { ariaLabel: "Saved PromptForge ideas" });
-  saved.style.cssText = "flex:1;min-width:100px";
-  const saveName = element("input", { type: "text", placeholder: "Idea name" });
-  saveName.style.cssText = "flex:1;min-width:80px";
-  const status = element("span");
-  const dataFields = ["text", "negative", "action", "subject_1", "subject_2", "subject_3", "camera", "notes"];
-  let ideas = {};
-  const saveBar = element("div");
-  saveBar.style.cssText = "display:flex;gap:4px;align-items:center;flex-wrap:wrap";
-  const refreshIdeas = (selected = "") => {
-    saved.replaceChildren(new Option("Saved prompts and ideas", ""), ...Object.keys(ideas).sort((a,b) => a.localeCompare(b)).map((key) => new Option(key, key)));
-    saved.value = selected && ideas[selected] ? selected : "";
-    saveName.value = saved.value || saveName.value;
-  };
-  const readFields = () => Object.fromEntries(dataFields.map((key) => [key === "text" ? "general_prompt" : key === "negative" ? "negative_prompt" : key, widget(node, key)?.value ?? ""]));
-  const applyFields = (data) => {
-    change(node, () => {
-      for (const key of dataFields) {
-        const field = key === "text" ? "general_prompt" : key === "negative" ? "negative_prompt" : key;
-        const item = widget(node, key);
-        if (item && typeof data?.[field] === "string") { item.value = data[field]; item.callback?.(item.value); }
-      }
-      if (data?.source && ["raw", "idea", "action"].includes(data.source)) { source.value = data.source; source.callback?.(source.value); }
-    });
-    paintChoices();
-  };
-  const reloadIdeas = async (selected = "") => {
-    try { const response = await api.fetchApi("/promptforge/ideas"); if (!response.ok) throw new Error(`Saved prompt list unavailable (${response.status})`); ideas = await response.json(); refreshIdeas(selected); status.textContent = `${Object.keys(ideas).length} saved`; }
-    catch (error) { status.textContent = error.message; }
-  };
-  const storeIdea = async (overwrite) => {
-    const name = (overwrite ? (saved.value || saveName.value) : saveName.value).trim();
-    if (!name) { status.textContent = "Enter a name to save."; return; }
-    const current = { ...readFields(), source: source.value };
-    const response = await api.fetchApi("/promptforge/ideas", { method: "POST", body: JSON.stringify({ name, data: current }) });
-    if (!response.ok) throw new Error(`Could not save prompt (${response.status})`);
-    ideas = await response.json(); refreshIdeas(name); status.textContent = `Saved “${name}”.`;
-  };
-  saved.onchange = () => { if (saved.value) { applyFields(ideas[saved.value]); saveName.value = saved.value; status.textContent = `Loaded “${saved.value}”.`; } };
-  saveBar.append(saved, saveName,
-    button("Save", async () => { try { await storeIdea(true); } catch (error) { status.textContent = error.message; } }),
-    button("Save as", async () => { try { await storeIdea(false); } catch (error) { status.textContent = error.message; } }),
-    button("Delete", async () => { try { if (!saved.value) throw new Error("Choose a saved prompt first."); const name = saved.value; const response = await api.fetchApi(`/promptforge/ideas?name=${encodeURIComponent(name)}`, { method: "DELETE" }); if (!response.ok) throw new Error(`Could not delete (${response.status})`); ideas = await response.json(); refreshIdeas(); status.textContent = `Deleted “${name}”.`; } catch (error) { status.textContent = error.message; } }),
-  );
-  controls.append(choices, saveBar, status);
-  paintChoices();
-  reloadIdeas();
-  refresh();
-  return refresh;
-}
-
-function loraUI(node) {
-  const root = panel(node, "lora_stack_editor", 340);
-  const state = widget(node, "loras");
-  state.hidden = true;
-  state.computeSize = () => [0, -4];
-  if (state.inputEl) state.inputEl.style.display = "none";
-  const search = element("input", { type: "search", placeholder: "Search library or stack (name, tags, trigger words)" });
-  const results = element("div");
-  const rows = element("div");
-  const status = element("div");
-  const familyLabel = element("div");
-  familyLabel.style.cssText = "padding:4px 7px;border-radius:4px;background:#222b33;color:#b8d8ed";
-  const sectionTitle = (title) => { const header = element("div", { textContent: title }); header.style.cssText = "font-weight:600;margin-top:3px;color:#dce8ef"; return header; };
-  let entries = [];
-  let metadata = [];
-  const query = () => search.value.toLowerCase().split(/\s+/).filter(Boolean);
-  const matches = (value) => query().every((word) => value.toLowerCase().includes(word));
-  const edit = (action) => {
-    try {
-      const values = parseLoras(state.value);
-      change(node, () => { action(values); state.value = serializeLoras(state.value, values); });
-      render();
-    } catch (error) { status.textContent = error.message; }
-  };
-  function render() {
-    let values;
-    try { values = parseLoras(state.value); } catch (error) { status.textContent = error.message; return; }
-    rows.replaceChildren(sectionTitle(`Active stack · ${values.length}`));
-    values.forEach((row, index) => {
-      if (!matches(row.name)) return;
-      const line = element("div");
-      line.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:4px 0;padding:5px;border:1px solid #3d4851;border-radius:5px;background:#20262b";
-      const on = element("input", { type: "checkbox", checked: row.on !== false, title: "Enabled" });
-      on.onchange = () => edit((items) => { items[index].on = on.checked; });
-      const label = element("span", { textContent: row.name, title: row.name });
-      label.style.cssText = "flex:1;min-width:110px;overflow-wrap:anywhere;font-weight:600";
-      line.append(on, label);
-      for (const key of ["model", "clip"]) {
-        const input = element("input", { type: "number", step: "0.05", value: row[key] ?? (key === "model" ? 1 : ""), title: `${key} strength`, placeholder: key === "clip" ? "= model" : key });
-        input.style.width = "65px";
-        input.onchange = () => { if (input.value && !Number.isFinite(input.valueAsNumber)) return; edit((items) => { items[index][key] = input.value === "" ? null : input.valueAsNumber; }); };
-        line.append(input);
-      }
-      if (resolvedLayerMode() === "minimax audiovisual") {
-        const part = element("select", { title: "Target layers (audiovisual models)" });
-        part.append(...["all", "video", "audio"].map((value) => new Option(value, value)));
-        part.value = row.part || "all";
-        part.onchange = () => edit((items) => { items[index].part = part.value; });
-        line.append(part);
-      }
-      line.append(button("↑", () => edit((items) => { if (index > 0) [items[index - 1], items[index]] = [items[index], items[index - 1]]; })), button("↓", () => edit((items) => { if (index < items.length - 1) [items[index + 1], items[index]] = [items[index], items[index + 1]]; })), button("Remove", () => edit((items) => items.splice(index, 1))));
-      rows.append(line);
-    });
-    const filtered = entries.filter((entry) => {
-      const extra = metadata.find((item) => `${item.folder ? item.folder + "/" : ""}${item.file_name}` === entry.name);
-      return matches([entry.name, ...(entry.words || []), ...(extra?.tags || []), ...(extra?.trigger_words || [])].join(" "));
-    }).slice(0, 30);
-    results.replaceChildren(sectionTitle(`Library · ${filtered.length}${entries.length > filtered.length ? ` of ${entries.length}` : ""}`));
-    for (const entry of filtered) {
-      const extra = metadata.find((item) => `${item.folder ? item.folder + "/" : ""}${item.file_name}` === entry.name);
-      const row = element("div");
-      row.style.cssText = "display:flex;gap:6px;align-items:center;padding:5px;border-bottom:1px solid #343d44";
-      const text = element("div"); text.style.cssText = "flex:1;min-width:0;overflow-wrap:anywhere";
-      const title = element("div", { textContent: entry.name }); title.style.fontWeight = "600"; text.append(title);
-      const words = entry.words || extra?.trigger_words || [];
-      if (words.length) { const detail = element("div", { textContent: `Trigger: ${words.join(", ")}` }); detail.style.cssText = "font-size:10px;color:#9eabb4"; text.append(detail); }
-      const badge = element("span", { textContent: extra?.family || "LoRA" }); badge.style.cssText = "font-size:10px;color:#b7cad6";
-      const added = values.some((item) => item.name === entry.name);
-      const add = button(added ? "Added" : "+ Add", () => { if (!added) edit((items) => items.push({ name: entry.name, on: true, model: 1, clip: null, part: "all" })); });
-      add.disabled = added; row.append(text, badge, add); results.append(row);
-    }
-  }
-  function resolvedLayerMode() {
-    const mode = widget(node, "layer_controls")?.value;
-    if (mode !== "auto") return mode;
-    let current = node;
-    const seen = new Set();
-    while (current && !seen.has(current.id)) {
-      seen.add(current.id);
-      const family = current.widgets?.find((item) => item.name === "family")?.value;
-      if (family) return family === "minimax_h3" ? "minimax audiovisual" : "standard";
-      const parent = upstreamNodes(current);
-      current = parent.find((item) => item !== current && item.outputs?.some((output) => output.type === "PROMPTFORGE_V2_PIPE")) || null;
-    }
-    return "standard";
-  }
-  function refreshFamily() {
-    let current = node, family = "unknown";
-    const seen = new Set();
-    while (current && !seen.has(current.id)) {
-      seen.add(current.id);
-      const found = current.widgets?.find((item) => item.name === "family")?.value;
-      if (found) { family = found === "minimax_h3" ? "MiniMax H3" : found; break; }
-      current = upstreamNodes(current).find((item) => item !== current && item.outputs?.some((output) => output.type === "PROMPTFORGE_V2_PIPE")) || null;
-    }
-    const manual = widget(node, "layer_controls")?.value;
-    familyLabel.textContent = `Family: ${family}${manual === "auto" ? " · automatic from pipe" : ` · ${manual}`}`;
-  }
-  async function reload(refresh = false) {
-    try {
-      const response = await api.fetchApi(refresh ? "/promptforge/v2/loras?refresh=1" : "/promptforge/v2/loras");
-      if (!response.ok) throw new Error(`Library request failed (${response.status}).`);
-      entries = (await response.json()).loras || [];
-      status.textContent = `${entries.length} library entries`;
-      render();
-    } catch (error) { status.textContent = error.message; }
-    // LoRA Manager's local listing route is optional; it never supplies stack state.
-    try {
-      const response = await api.fetchApi("/api/lm/loras/list?page=1&page_size=100");
-      if (response.ok) { const data = await response.json(); metadata = data.items || []; render(); }
-    } catch { /* The library and editor work without LoRA Manager. */ }
-  }
-  const bar = element("div");
-  bar.style.cssText = "display:flex;gap:4px;align-items:center";
-  const mode = widget(node, "layer_controls");
-  if (mode) {
-    mode.hidden = true; mode.computeSize = () => [0, -4];
-    if (mode.inputEl) mode.inputEl.style.display = "none";
-  }
-  const modeSelect = element("select", { ariaLabel: "LoRA target layer controls" });
-  modeSelect.append(...["auto", "standard", "minimax audiovisual"].map((value) => new Option(value === "auto" ? "Auto from model" : value === "standard" ? "Standard model" : "MiniMax video + audio", value)));
-  modeSelect.value = mode?.value || "auto";
-  modeSelect.onchange = () => { change(node, () => { mode.value = modeSelect.value; mode.callback?.(mode.value); }); refreshFamily(); render(); };
-  bar.append(modeSelect, button("Refresh", () => reload(true)));
-  search.oninput = render;
-  root.append(familyLabel, bar, search, results, status, rows);
-  const controls = widget(node, "layer_controls");
-  if (controls) {
-    const callback = controls.callback;
-    controls.callback = function () {
-      const result = callback?.apply(this, arguments);
-      modeSelect.value = controls.value;
-      refreshFamily();
-      render();
-      return result;
-    };
-  }
-  render();
-  refreshFamily();
-  reload();
-  return render;
 }
 
 function imagePickerUI(node) {
@@ -544,6 +315,26 @@ function mediaUI(node, kind) {
   return refresh;
 }
 
+function encoderPresetUI(node) {
+  const preset = widget(node, "encoder_preset");
+  if (!preset) return;
+  const callback = preset.callback;
+  preset.callback = function (value) {
+    const values = ENCODER_PRESETS[value];
+    if (values) {
+      change(node, () => {
+        for (const [name, entry] of Object.entries(values)) {
+          const target = widget(node, name);
+          if (!target) continue;
+          target.value = entry;
+          target.callback?.(entry);
+        }
+      });
+    }
+    return callback?.apply(this, arguments);
+  };
+}
+
 function savedPreviewUI(node) {
   const root = panel(node, "saved_preview", 240);
   const image = element("img", { alt: "Last saved image" });
@@ -595,15 +386,15 @@ const SIZES = {
   PROMPTFORGE_V2_LOAD_IMAGE: [440, 460],
   PROMPTFORGE_V2_LOAD_VIDEO: [420, 300],
   PROMPTFORGE_V2_LOAD_AUDIO: [420, 240],
-  PROMPTFORGE_V2_IMAGE_PROMPT: [440, 300],
-  PROMPTFORGE_V2_H3_PROMPT: [440, 320],
+  PROMPTFORGE_V2_IMAGE_PROMPT: [460, 520],
+  PROMPTFORGE_V2_H3_PROMPT: [460, 540],
   PROMPTFORGE_V2_IMAGE_PROMPT_WRITER: [420, 240],
   PROMPTFORGE_V2_H3_PROMPT_WRITER: [420, 260],
   PROMPTFORGE_V2_PROMPT_INSPECT: [440, 260],
   PROMPTFORGE_V2_RUN_INSPECT: [440, 280],
   PROMPTFORGE_V2_PREVIEW_SETTINGS: [420, 320],
   PROMPTFORGE_V2_SAVE: [440, 360],
-  PROMPTFORGE_V2_H3_PREVIEW_SAVE: [440, 400],
+  PROMPTFORGE_V2_H3_PREVIEW_SAVE: [440, 430],
 };
 
 function sizeTo(node, name) {
@@ -624,11 +415,10 @@ app.registerExtension({
       if (nodeData.name === "PROMPTFORGE_V2_PRESETS") node.promptforgeV2Refresh = presetsUI(node);
       if (nodeData.name === "PROMPTFORGE_V2_PREVIEW_SETTINGS") livePreviewUI(node);
       if (nodeData.name === "PROMPTFORGE_V2_PROMPT_LIBRARY") node.promptforgeV2Refresh = promptLibraryUI(node);
-      if (/^PROMPTFORGE_V2_(IMAGE|H3)_PROMPT$/.test(nodeData.name)) node.promptforgeV2Refresh = promptVisibility(node);
-      if (nodeData.name === "PROMPTFORGE_V2_LORA_STACK") node.promptforgeV2Refresh = loraUI(node);
       const media = /^PROMPTFORGE_V2_LOAD_(IMAGE|VIDEO|AUDIO)$/.exec(nodeData.name);
       if (media) node.promptforgeV2Refresh = mediaUI(node, media[1].toLowerCase());
       if (nodeData.name === "PROMPTFORGE_V2_SAVE") savedPreviewUI(node);
+      if (nodeData.name === "PROMPTFORGE_V2_H3_PREVIEW_SAVE") encoderPresetUI(node);
       if (/_(PROMPT_INSPECT|RUN_INSPECT|PROMPT_WRITER|SAVE_METADATA)$/.test(nodeData.name)) {
         const output = panel(node, "output_inspector");
         const text = element("pre");

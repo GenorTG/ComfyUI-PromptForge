@@ -12,6 +12,7 @@ from comfy import supported_models
 from .. import unified_loader as loader
 from .contracts import schema as nodes_schema, PIPE, new_pipe, ensure_pipe, evolve, require, take
 from .krea import encode_grounded, patch_model
+from .shared import expand_date_tokens
 
 Pipe = io.Custom(PIPE)
 FAMILIES = {"krea2": "Krea 2", "moss_image": "MOSS Image", "anima": "Anima"}
@@ -68,12 +69,58 @@ class ImageModel(io.ComfyNode):
 
 ASPECTS = {"1:1": 1.0, "4:3": 4/3, "3:2": 3/2, "16:9": 16/9, "21:9": 21/9}
 
+# named sizes: (width, height, aspect, orientation). Presets only use the aspect keys above so switching to
+# megapixels with the same choice lands on the same frame.
+PRESETS = {
+    "krea square 1024x1024": (1024, 1024, "1:1", "landscape"),
+    "krea landscape 4:3 1152x864": (1152, 864, "4:3", "landscape"),
+    "krea portrait 4:3 864x1152": (864, 1152, "4:3", "portrait"),
+    "krea landscape 3:2 1200x800": (1200, 800, "3:2", "landscape"),
+    "krea portrait 3:2 800x1200": (800, 1200, "3:2", "portrait"),
+    "krea landscape 16:9 1344x768": (1344, 768, "16:9", "landscape"),
+    "krea portrait 16:9 768x1344": (768, 1344, "16:9", "portrait"),
+    "krea landscape 21:9 1456x624": (1456, 624, "21:9", "landscape"),
+    "anima square 1024x1024": (1024, 1024, "1:1", "landscape"),
+    "anima portrait 4:3 864x1152": (864, 1152, "4:3", "portrait"),
+    "anima landscape 4:3 1152x864": (1152, 864, "4:3", "landscape"),
+    "anima portrait 3:2 832x1248": (832, 1248, "3:2", "portrait"),
+    "anima landscape 3:2 1248x832": (1248, 832, "3:2", "landscape"),
+    "anima portrait 16:9 768x1344": (768, 1344, "16:9", "portrait"),
+    "anima landscape 16:9 1344x768": (1344, 768, "16:9", "landscape"),
+    "moss cover 1024x1536": (1024, 1536, "3:2", "portrait"),
+    "moss cover 4:3 960x1280": (960, 1280, "4:3", "portrait"),
+    "moss square 1024x1024": (1024, 1024, "1:1", "landscape"),
+    "moss spread 1536x1024": (1536, 1024, "3:2", "landscape"),
+    "moss spread 4:3 1280x960": (1280, 960, "4:3", "landscape"),
+    "moss cinema 16:9 1344x768": (1344, 768, "16:9", "landscape"),
+    "moss banner 21:9 1680x720": (1680, 720, "21:9", "landscape"),
+}
+GENERIC = {
+    "generic square 512x512": (512, 512, "1:1", "landscape"),
+    "generic square 768x768": (768, 768, "1:1", "landscape"),
+    "generic square 1024x1024": (1024, 1024, "1:1", "landscape"),
+    "generic hd 1280x720": (1280, 720, "16:9", "landscape"),
+    "generic portrait hd 720x1280": (720, 1280, "16:9", "portrait"),
+    "generic large 1536x864": (1536, 864, "16:9", "landscape"),
+    "generic portrait large 864x1536": (864, 1536, "16:9", "portrait"),
+}
+SIZING = ("megapixels", "presets", "generic", "custom")
+
+
+def snap16(value):
+    return max(16, round(value / 16) * 16)
+
 
 class ImageFormat(io.ComfyNode):
     @classmethod
     def define_schema(cls):
         return schema("FORMAT", "Format", [Pipe.Input("pipe", optional=True),
-            io.Model.Input("model", optional=True), io.Combo.Input("aspect", options=[*ASPECTS, "custom"], default="1:1"),
+            io.Model.Input("model", optional=True),
+            io.Combo.Input("sizing", options=list(SIZING), default="megapixels",
+                           tooltip="How the size is chosen: a family or generic resolution list, aspect ratio + megapixels, or exact width and height."),
+            io.Combo.Input("preset", options=[*PRESETS, *GENERIC], default="krea square 1024x1024",
+                           tooltip="Named size for the presets and generic modes. Family presets follow each model's own training sizes."),
+            io.Combo.Input("aspect", options=[*ASPECTS, "custom"], default="1:1"),
             io.Float.Input("megapixels", default=1.0, min=0.01, max=64.0, step=0.1),
             io.Combo.Input("orientation", options=["landscape", "portrait"]),
             io.Int.Input("width", default=1024, min=16, max=nodes.MAX_RESOLUTION, step=16),
@@ -82,10 +129,18 @@ class ImageFormat(io.ComfyNode):
             [Pipe.Output("pipe"), io.Latent.Output("latent")])
 
     @classmethod
-    def execute(cls, pipe=None, aspect="1:1", megapixels=1.0, orientation="landscape", width=1024, height=1024,
-                batch_size=1, model=None):
+    def execute(cls, pipe=None, sizing="megapixels", preset="krea square 1024x1024", aspect="1:1", megapixels=1.0,
+                orientation="landscape", width=1024, height=1024, batch_size=1, model=None):
         pipe = image_pipe(take(ensure_pipe(pipe, model=model), model=model))
-        if aspect != "custom":
+        entry = (GENERIC if sizing == "generic" else PRESETS).get(preset)
+        if sizing == "custom":
+            width, height = snap16(width), snap16(height)
+            orientation = "portrait" if height > width else "landscape"
+            megapixels = round(width * height / 1_000_000, 3)
+        elif entry is not None and sizing in ("presets", "generic"):
+            width, height, aspect, orientation = entry
+            megapixels = round(width * height / 1_000_000, 3)
+        elif aspect != "custom":
             ratio = ASPECTS[aspect]
             if orientation == "portrait":
                 ratio = 1 / ratio
@@ -199,7 +254,8 @@ class ImageSample(io.ComfyNode):
             io.Conditioning.Input("positive", optional=True), io.Conditioning.Input("negative", optional=True),
             io.Latent.Input("latent", optional=True), io.Model.Input("model", optional=True),
             io.Boolean.Input("pipe_settings", default=True, tooltip="On: use the Sampling Settings node when one is chained. Off: use the widgets here."),
-            io.Int.Input("seed", default=0, min=0, max=0xffffffffffffffff, control_after_generate=True),
+            io.Int.Input("seed", optional=True, force_input=True,
+                         tooltip="Connected seed for this call. Unconnected takes the seed from Sampling Settings."),
             io.Int.Input("steps", default=10, min=1, max=10000),
             io.Float.Input("cfg", default=1.0, min=0.0, max=100.0),
             io.Combo.Input("sampler_name", options=comfy.samplers.KSampler.SAMPLERS, default="euler"),
@@ -209,12 +265,13 @@ class ImageSample(io.ComfyNode):
 
     @classmethod
     def execute(cls, pipe=None, positive=None, negative=None, latent=None, model=None, pipe_settings=True,
-                seed=0, steps=10, cfg=1.0, sampler_name="euler", scheduler="simple", denoise=1.0):
+                seed=None, steps=10, cfg=1.0, sampler_name="euler", scheduler="simple", denoise=1.0):
         pipe = image_pipe(ensure_pipe(pipe, model=model))
         pipe = take(pipe, model=model, positive=positive, negative=negative, latent=latent)
         if not pipe_settings or not pipe["settings"].get("sampling"):
             pipe = evolve(pipe, section="sampling", settings={
-                "seed": seed, "steps": steps, "cfg": cfg, "sampler_name": sampler_name, "scheduler": scheduler,
+                "seed": seed if seed is not None else pipe["settings"].get("sampling", {}).get("seed", 0),
+                "steps": steps, "cfg": cfg, "sampler_name": sampler_name, "scheduler": scheduler,
                 "denoise": denoise, "use_nag": False, "nag_phi": 4.0, "nag_tau": 2.5, "nag_alpha": 0.25})
         require(pipe, "model", "positive", "negative", "latent")
         a = pipe["artifacts"]
@@ -246,7 +303,8 @@ class ImageSave(io.ComfyNode):
     @classmethod
     def define_schema(cls):
         return schema("SAVE", "Save", [Pipe.Input("pipe", optional=True), io.Image.Input("images", optional=True),
-                      io.String.Input("filename_prefix", default="PromptForgeV2")],
+                      io.String.Input("filename_prefix", default="PromptForgeV2",
+                                      tooltip="Prefix for the saved file. Tokens expand per run: %date:yyyy-MM-dd%, %date:yyyy-MM-dd_HH-mm-ss%, %date:yyyy%, %date:MM%, %date:dd%.")],
                       outputs=[Pipe.Output("pipe"), io.Image.Output("images")],
                       output=True, hidden=[io.Hidden.prompt, io.Hidden.extra_pnginfo])
 
@@ -255,7 +313,7 @@ class ImageSave(io.ComfyNode):
         pipe = take(image_pipe(ensure_pipe(pipe)), images=images)
         require(pipe, "images")
         hidden = getattr(cls, "hidden", None)
-        saved = nodes.SaveImage().save_images(pipe["artifacts"]["images"], filename_prefix,
+        saved = nodes.SaveImage().save_images(pipe["artifacts"]["images"], expand_date_tokens(filename_prefix),
                                              prompt=getattr(hidden, "prompt", None),
                                              extra_pnginfo=getattr(hidden, "extra_pnginfo", None))
         return io.NodeOutput(pipe, pipe["artifacts"]["images"], ui=saved["ui"])
