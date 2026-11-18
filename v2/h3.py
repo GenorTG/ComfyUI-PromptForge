@@ -16,6 +16,7 @@ import comfy.audio
 import comfy.utils
 import comfy.samplers
 import comfy.model_management
+import comfy_aimdo.model_vbar as comfy_aimdo_model_vbar
 from comfy_api.latest import io, ui, InputImpl
 from comfy_extras import nodes_minimax_h3 as core
 from comfy_extras import nodes_hunyuan, nodes_custom_sampler, nodes_audio
@@ -528,9 +529,15 @@ class H3LatentUpscale(io.ComfyNode):
 
 
 def free_vram():
+    """Hard release: unload every model, then empty the CUDA allocator."""
     comfy.model_management.unload_all_models()
+    comfy.model_management.free_memory(1e30, comfy.model_management.get_torch_device(), for_dynamic=True)
     gc.collect()
-    comfy.model_management.soft_empty_cache()
+    comfy.model_management.soft_empty_cache(force=True)
+    try:
+        comfy_aimdo_model_vbar.vbars_reset_watermark_limits()
+    except Exception:
+        pass
 
 
 def decode(pipe, tile_size=256, frames_per_pass=0, output_device="auto", audio_normalize=False, audio_gain_db=0.0):

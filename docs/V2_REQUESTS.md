@@ -49,7 +49,13 @@ Every item is required. Keep the status current; do not drop one silently.
 - [x] Settings toggle to hide it entirely and to choose which meters show, in which order.
 
 ## Per-model generation presets
-- [ ] Model loader offers "apply saved generation settings for this model": writes sampler, scheduler, steps, cfg and clip skip from the preset store for that checkpoint so switching models is one click. The preset store STAYS in its own node (history lives there); the loader only applies. Reason: merging would duplicate storage and bloat the loader, while keeping it separate also serves workflows that never touch the loader.
+- [x] Model loader offers "apply saved generation settings for this model": writes sampler, scheduler, steps, cfg and clip skip from the preset store for that checkpoint so switching models is one click. The preset store STAYS in its own node (history lives there); the loader only applies. Reason: merging would duplicate storage and bloat the loader, while keeping it separate also serves workflows that never touch the loader.
+
+## Resource bar polish
+- [x] Centre the bar, widen the gaps, and give each meter a pill/border so it separates from the background.
+
+## First pass visibility
+- [x] The first pass is encoded and saved before the second pass so it survives a crash and can be judged while the refine runs; the final save stays the workflow result asset.
 
 ## Seeds
 - [x] Writer sampling: top_p, top_k, repetition and presence penalty exposed (temperature alone caused gibberish tails).

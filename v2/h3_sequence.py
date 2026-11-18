@@ -157,6 +157,10 @@ class H3Sequence(io.ComfyNode):
                 comfy.model_management.soft_empty_cache()
             report.append(f"Part {index + 1}: writer {prompt['source']}")
             working = h3.encode(working)
+            # the text encoder is the biggest resident model; drop it before sampling/decode
+            working = evolve(working, invalidate=("clip",))
+            comfy.model_management.unload_all_models()
+            comfy.model_management.soft_empty_cache(force=True)
             working = h3.sample(working, **dict(sampling["first"], seed=seed))
             upscale = pipe["settings"].get("upscale")
             if upscale and upscale.get("enabled", True):
@@ -167,7 +171,15 @@ class H3Sequence(io.ComfyNode):
             overlap = working["artifacts"].get("continuation_overlap", continuity.get("overlap_frames", 0))
             assembled = h3.join(assembled, working, overlap, continuity.get("transition", "cut")) if assembled is not None else working
             # Only decoded clips are retained for resume and continuity, not per-part model/latent copies.
-            clips.append({**working, "artifacts": {key: working["artifacts"][key] for key in ("images", "audio", "text", "writer")}})
+            # a retained clip keeps no model patchers: their refcount would pin staged weights in VRAM
+            working = evolve(working, invalidate=("model", "clip", "vae", "audio_vae", "decode_vae",
+                                                  "latent", "positive", "negative"))
+            # decoded clips live on the CPU: two of them on the card OOM a 16 GB GPU
+            clips.append({**working, "artifacts": {
+                "images": working["artifacts"]["images"].to("cpu"), "audio": working["artifacts"]["audio"],
+                "text": working["artifacts"]["text"], "writer": working["artifacts"]["writer"]}})
+            comfy.model_management.unload_all_models()
+            comfy.model_management.soft_empty_cache()
             report.append(f"Part {index + 1}/{len(plan)}: seed {seed}, {frames} frames, decoded")
         if assembled is None:
             raise ValueError("Sequence has no completed parts.")

@@ -17,8 +17,9 @@ const CSS = `
  user-select:none;overflow:hidden;white-space:nowrap}
 #promptforge-resources[hidden]{display:none}
 #promptforge-resources.pf-fixed{position:fixed;top:0;left:0;right:0;z-index:1003}
-.pf-content{display:flex;align-items:center;gap:12px;height:100%;min-width:0;overflow:hidden;white-space:nowrap}
-.pf-meter{display:flex;flex:0 0 auto;align-items:center;gap:6px;height:100%}
+.pf-content{display:flex;flex:1 1 auto;align-items:center;justify-content:center;gap:18px;height:100%;min-width:0;overflow:hidden;white-space:nowrap}
+.pf-meter{display:flex;flex:0 0 auto;align-items:center;gap:6px;height:100%;padding:0 7px;border:1px solid #ffffff1a;
+ border-radius:6px;background:#ffffff0f}
 .pf-label{flex:0 0 auto;font-size:9px;opacity:.55;letter-spacing:.05em;text-transform:uppercase}
 .pf-value{flex:0 0 auto;min-width:5.4em;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
 .pf-track{position:relative;display:block;flex:0 0 32px;width:32px;height:4px;border-radius:2px;background:#0006;overflow:hidden}
