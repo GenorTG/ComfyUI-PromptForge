@@ -524,8 +524,8 @@ def _instructions(pipe, mode, context, max_words, style_prefix="", sections=None
         labels = [f"<{name} 1>" + (f" to <{name} {count}>" if count > 1 else "")
                   for name, count in (("Picture", context["picture_count"]), ("Video", context["video_count"]),
                                       ("Audio", len(context["audio"]))) if count]
-        guide = {"integrated_multimodal_description": "the shot description, 950-1250 words",
-                 "detailed_description": "the shot description, 950-1250 words",
+        guide = {"integrated_multimodal_description": "the shot description, 650-900 words",
+                 "detailed_description": "the shot description, 650-900 words",
                  "subject_definitions": "one line per subject, 40-80 words in total",
                  "summary": "two or three sentences",
                  "retention_analysis": "one line per subject",
@@ -563,7 +563,7 @@ def _instructions(pipe, mode, context, max_words, style_prefix="", sections=None
             + ("retention_analysis states which appearance features are kept. " if "retention_analysis" in sections else "")
             + "overall_soundscape: room tone, body impact, wet penetration, hands and bedding, breath and voice, speech as "
             "<d>[English] spoken words</d>. non_diegetic_music: N/A unless asked. "
-            "Plain present tense, one visible fact per clause, no rating words, no (weight:1.2) syntax, no quoted speech: "
+            "Plain present tense, one visible fact per clause, no rating words, no filler such as mood or quality, no (weight:1.2) syntax, no quoted speech: "
             "dialogue lives in <d>[English] words</d> and the speaker carries (S1) or (S2) at the first vocal event. "
             "Never copy the brief or the notes into the output, never explain a choice, never summarise at the end. ")
     elif family == "anima":
