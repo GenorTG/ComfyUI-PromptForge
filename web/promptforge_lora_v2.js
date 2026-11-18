@@ -9,13 +9,15 @@ const MAX_ROWS = 200;
 const FAMILIES = { krea2: "Krea 2", moss_image: "MOSS Image", anima: "Anima", minimax_h3: "MiniMax H3" };
 
 const CSS = `
-.pflora-panel{display:flex;flex-direction:column;gap:5px;height:100%;color:var(--input-text,#e7eef5);font:12px system-ui,sans-serif}
+.pflora-panel{display:flex;flex-direction:column;gap:5px;color:var(--input-text,#e7eef5);font:12px system-ui,sans-serif}
 .pflora-bar{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
 .pflora-chip{align-self:flex-start;padding:4px 9px;border-radius:5px;background:#22303c;border:1px solid #35506a;color:#cfe6fa;font-weight:600}
 .pflora-btn{cursor:pointer;padding:3px 8px;border-radius:4px;border:1px solid #46545f;background:#28323a;color:#e7eef5}
 .pflora-btn:hover{background:#33414c}
 .pflora-btn:disabled{opacity:.45;cursor:default}
-.pflora-list{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;border:1px solid #33414c;border-radius:5px;background:#13191e}
+.pflora-list{flex:1 1 auto;min-height:40px;max-height:360px;overflow-y:auto;overflow-x:hidden;border:1px solid #33414c;border-radius:5px;background:#13191e}
+.pflora-searchbox{flex:0 0 auto;width:100%;box-sizing:border-box;background:#0b1014;color:#e7eef5;border:1px solid #46545f;border-radius:4px;padding:3px 6px}
+.pflora-scope[aria-pressed="true"]{border-color:#4a86b8;background:#2e5f86;color:#fff}
 .pflora-row{display:flex;gap:5px;align-items:center;padding:4px 5px;border-bottom:1px solid #26323b;background:#1b232a}
 .pflora-row.pflora-off .pflora-name{opacity:.5}
 .pflora-row.pflora-dragging{opacity:.55}
@@ -338,7 +340,15 @@ function openPicker(node, anchor, entriesOf, reload) {
   const bar = el("div", {}, {});
   bar.className = "pflora-bar";
   const count = el("span", {}, { flex: "1", opacity: ".7" });
-  bar.append(count, button("Rescan", () => reload(true)));
+  let scope = upstreamFamily(node) ? "family" : "all";
+  const scopeButton = (label, value, title) => {
+    const control = button(label, () => { scope = value; render(); }, title);
+    control.className = "pflora-btn pflora-scope";
+    return control;
+  };
+  const allView = scopeButton("View all", "all", "Show every LoRA on disk");
+  const familyView = scopeButton("View this family", "family", "Show only LoRAs for the connected model family");
+  bar.append(allView, familyView, count, button("Rescan", () => reload(true)));
   popup.append(search, bar, list);
   document.body.append(popup);
   activePicker = popup;
@@ -381,8 +391,14 @@ function openPicker(node, anchor, entriesOf, reload) {
     const rows = readState(node);
     const known = new Set(rows.map((row) => row.name));
     const family = upstreamFamily(node);
+    if (!family) scope = "all";
+    for (const [control, value] of [[allView, "all"], [familyView, "family"]]) {
+      control.setAttribute("aria-pressed", String(scope === value));
+      control.disabled = value === "family" && !family;
+    }
     const entries = entriesOf();
     const matches = entries.filter((entry) => {
+      if (scope === "family" && entry.family !== family) return false;
       const haystack = `${entry.name} ${(entry.words || []).join(" ")}`.toLowerCase();
       return query.every((word) => haystack.includes(word));
     }).sort((a, b) => Number(b.family === family) - Number(a.family === family));
@@ -423,7 +439,7 @@ function openPicker(node, anchor, entriesOf, reload) {
       });
       list.append(row);
     }
-    count.textContent = `${matches.length} show · ${known.size} in stack`;
+    count.textContent = `${matches.length} show · ${known.size} in stack${scope === "family" && family ? ` · ${FAMILIES[family] || family} only` : ""}`;
   };
   search.addEventListener("input", render);
   popup.addEventListener("pflora-refresh", render);
@@ -443,8 +459,8 @@ function buildUI(node) {
   if (state.inputEl) state.inputEl.style.display = "none";
 
   const frame = el("div", {}, {});
-  frame.style.cssText = "position:relative;width:100%;height:100%;min-width:0;overflow:hidden;contain:layout paint";
-  const panel = el("div", {}, { position: "absolute", inset: "0", padding: "4px", boxSizing: "border-box" });
+  frame.style.cssText = "position:relative;width:100%;height:100%;min-width:0;overflow:auto;contain:layout paint";
+  const panel = el("div", {}, { padding: "4px", boxSizing: "border-box" });
   panel.className = "pflora-panel";
   frame.append(panel);
   frame.addEventListener("pointerdown", (event) => event.stopPropagation());
@@ -480,12 +496,34 @@ function buildUI(node) {
   const add = button("Add LoRA…", () => openPicker(node, add, () => entries, reload), "Open the LoRA picker");
   const refresh = button("Refresh", () => reload(true), "Rescan the loras folders");
   bar.append(modeSelect, add, refresh);
+  const search = el("input", { type: "search", placeholder: "Search the stack…" }, {});
+  search.className = "pflora-searchbox";
+  let query = "";
+  search.addEventListener("input", () => { query = search.value; render(); });
   const list = el("div", {}, {});
   list.className = "pflora-list";
   const status = el("div", {}, {});
   status.className = "pflora-status";
-  panel.append(family, bar, list, status);
-  const frameWidget = node.addDOMWidget("lora_stack_editor", "promptforge_v2", frame, { serialize: false, getMinHeight: () => 340 });
+  panel.append(family, bar, search, list, status);
+  const MAX_HEIGHT = 640;
+  const MIN_HEIGHT = 320;
+  const WIDTH = 470;
+  let panelHeight = 300;
+  let targetHeight = MIN_HEIGHT;
+  const frameWidget = node.addDOMWidget("lora_stack_editor", "promptforge_v2", frame, {
+    serialize: false, getMinHeight: () => panelHeight, getMaxHeight: () => MAX_HEIGHT });
+  const fit = () => {
+    const measured = panel.scrollHeight;
+    const natural = Number.isFinite(measured) && measured > 0 ? measured + 8 : 300;
+    panelHeight = Math.max(120, Math.min(natural, MAX_HEIGHT - 160));
+    const full = node.computeSize?.()[1] || panelHeight + 240;
+    const overflow = Math.max(0, full - MAX_HEIGHT);
+    if (overflow) panelHeight = Math.max(100, panelHeight - overflow);
+    targetHeight = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, full - overflow));
+    const width = Math.max(node.size?.[0] || 0, WIDTH);
+    if (node.size && Math.abs(node.size[0] - width) < 1 && Math.abs(node.size[1] - targetHeight) < 1) return;
+    node.setSize?.([width, targetHeight]);
+  };
 
   let entries = [];
 
@@ -572,18 +610,27 @@ function buildUI(node) {
 
   function render() {
     const scroll = list.scrollTop;
-    const rows = readState(node);
+    const all = readState(node);
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const rows = all
+      .map((item, index) => [item, index])
+      .filter(([item]) => words.every((word) => item.name.toLowerCase().includes(word)));
     list.replaceChildren();
-    if (!rows.length) {
+    if (!all.length) {
       const empty = el("div", { textContent: "No LoRAs in the stack. Use Add LoRA… to pick one." });
       empty.className = "pflora-empty";
       list.append(empty);
+    } else if (!rows.length) {
+      const empty = el("div", { textContent: `No stack entry matches “${query}”.` });
+      empty.className = "pflora-empty";
+      list.append(empty);
     }
-    rows.forEach((item, index) => list.append(row(item, index)));
+    for (const [item, index] of rows) list.append(row(item, index));
     list.scrollTop = scroll;
-    const on = rows.filter((item) => item.enabled !== false).length;
-    status.textContent = `${on} enabled · ${rows.length} in stack · layer: ${resolvedMode()}`;
+    const on = all.filter((item) => item.enabled !== false).length;
+    status.textContent = `${on} enabled · ${all.length} in stack${query ? ` · ${rows.length} shown` : ""} · layer: ${resolvedMode()}`;
     refreshFamily();
+    fit();
   }
 
   async function reload(rescan = false) {
@@ -638,12 +685,18 @@ function buildUI(node) {
 
   const previousResize = node.onResize;
   node.onResize = function (size) {
-    size[0] = Math.max(size[0], 500);
-    size[1] = Math.max(size[1], 460);
+    size[0] = Math.max(size[0], WIDTH);
+    size[1] = targetHeight;
     return previousResize?.apply(this, arguments);
   };
-  node.setSize([Math.max(node.size[0], 620), Math.max(node.size[1], 620)]);
   render();
+  requestAnimationFrame(fit);
+  if (globalThis.ResizeObserver) {
+    const observer = new ResizeObserver(() => fit());
+    observer.observe(panel);
+    const stop = node.onRemoved;
+    node.onRemoved = function () { observer.disconnect(); return stop?.apply(this, arguments); };
+  }
   reload();
   // While promptforge_v2.js still carries the old editor, drop its duplicate panel.
   requestAnimationFrame(() => {

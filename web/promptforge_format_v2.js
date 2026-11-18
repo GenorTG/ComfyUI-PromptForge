@@ -63,24 +63,29 @@ function panel(node, name, minHeight = 100) {
   node.addDOMWidget(name, "promptforge_v2", frame, { serialize: false, getMinHeight: () => minHeight });
   return content;
 }
+
+let changing = 0;
 function change(node, action) {
-  node.graph?.beforeChange();
-  try { action(); } finally { node.graph?.afterChange(); }
+  // nested changes (mode pick -> preset apply) keep a single undo transaction
+  if (!changing++) node.graph?.beforeChange();
+  try { action(); } finally { if (!--changing) node.graph?.afterChange(); }
   node.setDirtyCanvas?.(true, true);
 }
 function modeRow(values, current, pick) {
   const row = element("div");
-  row.style.cssText = "display:flex;gap:4px;flex-wrap:wrap";
+  // the row stays on one line so no mode button can wrap out of the short panel
+  row.style.cssText = "display:flex;gap:4px;flex-wrap:nowrap";
   const controls = values.map(([value, title]) => {
     const control = button(title, () => pick(value));
     control.dataset.mode = value;
+    control.style.cssText = "flex:0 0 auto;white-space:nowrap;cursor:pointer;font:11px/1.4 sans-serif;padding:3px 7px";
     row.append(control);
     return control;
   });
   return { row, paint: () => {
     for (const control of controls) {
       const selected = control.dataset.mode === current();
-      control.style.cssText = `border:1px solid ${selected ? "#78c9ff" : "#65717c"};border-radius:5px;padding:4px 8px;background:${selected ? "#24445a" : "#252b31"};color:#eef5fa`;
+      control.style.cssText = `flex:0 0 auto;white-space:nowrap;cursor:pointer;font:11px/1.4 sans-serif;padding:3px 7px;border:1px solid ${selected ? "#78c9ff" : "#65717c"};border-radius:5px;background:${selected ? "#24445a" : "#252b31"};color:#eef5fa`;
       control.setAttribute("aria-pressed", String(selected));
     }
   } };
@@ -128,15 +133,21 @@ function formatUI(node) {
     });
   };
 
-  const root = panel(node, "format_controls", 30);
+  const root = panel(node, "format_controls", 34);
   const modes = modeRow(MODES, mode, (value) => {
-    if (!sizing || mode() === value) return;
-    change(node, () => { sizing.value = value; sizing.callback?.(value); });
-    refresh();
-    if (value === "presets" || value === "generic") apply(preset?.value);
+    if (!sizing) return;
+    // always write: a hidden combo can hold a stale or invalid value
+    change(node, () => {
+      sizing.value = value;
+      sizing.callback?.(value);
+      refresh();
+      if (value === "presets" || value === "generic") apply(preset?.value);
+    });
   });
 
   function refresh() {
+    // heal a missing or stale sizing value so the row and the backend never disagree
+    if (sizing && !MODES.some(([value]) => value === sizing.value)) sizing.value = "megapixels";
     const active = mode();
     hide(sizing, true);
     hide(preset, active !== "presets" && active !== "generic");

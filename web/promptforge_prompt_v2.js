@@ -4,6 +4,10 @@ import { api } from "../../scripts/api.js";
 const NODES = /^PROMPTFORGE_V2_(IMAGE|H3)_PROMPT$/;
 const SOURCES = [["raw", "Raw prompt"], ["idea", "Idea for writer"], ["action", "Action preset"]];
 const GENERATIONS = [["image", "Image"], ["minimax", "Minimax H3"]];
+const WIDTH = 520;
+const MAX_HEIGHT = 620;
+const MIN_HEIGHT = 300;
+const CHROME = 82;
 let catalog;
 
 const widget = (node, name) => node.widgets?.find((entry) => entry.name === name);
@@ -13,16 +17,16 @@ function button(label, action) {
   control.addEventListener("click", action);
   return control;
 }
-function panel(node, name, minHeight = 100) {
+function panel(node, name, minHeight, maxHeight) {
   const frame = element("div");
-  frame.style.cssText = "position:relative;width:100%;height:100%;min-width:0;overflow:hidden;contain:layout paint";
+  frame.style.cssText = "position:relative;width:100%;height:100%;min-width:0;overflow:auto;contain:layout paint";
   const content = element("div");
-  content.style.cssText = "position:absolute;inset:0;overflow:auto;display:flex;flex-direction:column;gap:5px;color:var(--input-text);font:12px sans-serif";
+  content.style.cssText = "display:flex;flex-direction:column;gap:5px;padding:3px 14px 3px 3px;box-sizing:border-box;color:var(--input-text);font:12px sans-serif";
   frame.append(content);
   frame.addEventListener("pointerdown", (event) => event.stopPropagation());
   frame.addEventListener("wheel", (event) => event.stopPropagation());
-  node.addDOMWidget(name, "promptforge_v2", frame, { serialize: false, getMinHeight: () => minHeight });
-  return content;
+  node.addDOMWidget(name, "promptforge_v2", frame, { serialize: false, getMinHeight: minHeight, getMaxHeight: () => maxHeight });
+  return { frame, content };
 }
 function change(node, action) {
   node.graph?.beforeChange();
@@ -46,6 +50,7 @@ function modeRow(values, current, pick) {
     }
   } };
 }
+const FIELD = "width:100%;box-sizing:border-box;background:var(--comfy-input-bg,#0f1419);color:var(--input-text,#e7eef5);border:1px solid #3b4a56;border-radius:4px;padding:4px 6px;font:12px sans-serif";
 
 function promptUI(node, fallback) {
   const source = widget(node, "source");
@@ -61,11 +66,12 @@ function promptUI(node, fallback) {
   };
   const generationOf = () => generation?.value || fallback;
   const familyOf = () => generationOf() === "minimax" ? "minimax" : "image";
-  const hidden = ["action", "subject_1", "subject_2", "subject_3", "camera", "notes"].map((name) => widget(node, name)).filter(Boolean);
-  const audio = ["soundscape", "music"].map((name) => widget(node, name)).filter(Boolean);
+  const owned = ["source", "generation", "action", "text", "text_in", "negative", "notes",
+    "subject_1", "subject_2", "subject_3", "camera", "soundscape", "music"]
+    .map((name) => widget(node, name)).filter(Boolean);
 
-  const root = panel(node, "prompt_controls", 210);
-  root.style.gap = "6px";
+  let panelHeight = MIN_HEIGHT;
+  const { content: root } = panel(node, "prompt_controls", () => panelHeight, MAX_HEIGHT);
   const status = element("div");
   status.style.cssText = "color:#f0b6a0;overflow-wrap:anywhere";
   const saved = element("select", { ariaLabel: "Saved PromptForge ideas" });
@@ -77,12 +83,52 @@ function promptUI(node, fallback) {
   const chosen = element("div");
   chosen.style.cssText = "display:flex;gap:5px;align-items:center;overflow-wrap:anywhere";
   const search = element("input", { type: "search", placeholder: "Search presets: name, description, gender" });
+  search.style.cssText = FIELD;
   const tabs = element("div");
   tabs.style.cssText = "display:flex;gap:3px;flex-wrap:wrap";
   const rows = element("div");
-  rows.style.cssText = "display:flex;flex-direction:column;gap:3px;max-height:250px;overflow:auto;padding-right:2px";
+  rows.style.cssText = "display:flex;flex-direction:column;gap:3px;max-height:200px;overflow:auto;padding-right:2px";
   let tab = "All";
   let ideas = {};
+
+  const section = (title) => {
+    const label = element("div", { textContent: title });
+    label.style.cssText = "font-size:11px;font-weight:600;letter-spacing:.03em;opacity:.7";
+    return label;
+  };
+  const areas = new Map();
+  function field(name, minHeight, placeholder) {
+    const item = widget(node, name);
+    const area = element("textarea", { placeholder, spellcheck: false });
+    area.style.cssText = `${FIELD};min-height:${minHeight}px;resize:vertical;line-height:1.35`;
+    area.value = item?.value || "";
+    area.addEventListener("input", () => {
+      if (!item) return;
+      item.value = area.value;
+      item.callback?.(area.value);
+    });
+    areas.set(name, area);
+    return area;
+  }
+  function line(name, placeholder) {
+    const item = widget(node, name);
+    const input = element("input", { type: "text", placeholder });
+    input.style.cssText = FIELD;
+    input.value = item?.value ?? "";
+    input.addEventListener("input", () => {
+      if (!item) return;
+      item.value = input.value;
+      item.callback?.(input.value);
+    });
+    areas.set(name, input);
+    return input;
+  }
+  function syncAreas() {
+    for (const [name, area] of areas) {
+      const value = widget(node, name)?.value ?? "";
+      if (area.value !== value) area.value = value;
+    }
+  }
 
   const pick = (label) => {
     if (!action) return;
@@ -118,7 +164,7 @@ function promptUI(node, fallback) {
     const categories = [...new Set(Object.values(familyEntries()).map((entry) => entry.category))].sort((a, b) => a.localeCompare(b));
     if (tab !== "All" && !categories.includes(tab)) tab = "All";
     const controls = ["All", ...categories].map((name) => {
-      const control = button(name, () => { tab = name; paint(); });
+      const control = button(name, () => { tab = name; paintTabs(); paintRows(); });
       control.style.cssText = `border:1px solid ${name === tab ? "#78c9ff" : "#48525b"};border-radius:9px;padding:2px 8px;background:${name === tab ? "#24445a" : "#20262c"};color:#dfeaf2`;
       control.setAttribute("aria-pressed", String(name === tab));
       return control;
@@ -150,29 +196,48 @@ function promptUI(node, fallback) {
   function rowsStyle(selected) {
     return `display:flex;flex-direction:column;gap:2px;text-align:left;border:1px solid ${selected ? "#78c9ff" : "#333c44"};border-radius:5px;padding:4px 7px;background:${selected ? "#24445a" : "#1c2227"};color:#dce8ef`;
   }
-  function paint() {
-    generationModes.paint();
-    sourceModes.paint();
-    paintChosen();
-    paintTabs();
-    paintRows();
+
+  const promptHeading = section("Prompt");
+  const promptArea = field("text", 60, "Describe the scene");
+  const negativeArea = field("negative", 40, "What to keep out");
+
+  const actionBlock = element("div");
+  actionBlock.style.cssText = "display:flex;flex-direction:column;gap:5px";
+  actionBlock.append(search, tabs, rows, chosen);
+
+  const subjectBlock = element("div");
+  subjectBlock.style.cssText = "display:flex;flex-direction:column;gap:4px";
+  const subjectRow = element("div");
+  subjectRow.style.cssText = "display:flex;gap:4px";
+  const camera = widget(node, "camera");
+  const cameraSelect = element("select", { ariaLabel: "Camera" });
+  cameraSelect.style.cssText = FIELD;
+  for (const value of camera?.options?.values || ["auto"]) cameraSelect.append(new Option(value, value));
+  cameraSelect.value = camera?.value || "auto";
+  cameraSelect.addEventListener("change", () => {
+    if (!camera) return;
+    camera.value = cameraSelect.value;
+    camera.callback?.(camera.value);
+  });
+  for (const [index, name] of ["subject_1", "subject_2", "subject_3"].entries()) {
+    const input = line(name, `Subject ${index + 1}`);
+    input.style.flex = "1";
+    input.style.minWidth = "0";
+    subjectRow.append(input);
   }
-  function refresh() {
-    for (const item of hidden) hide(item, source?.value !== "action");
-    for (const item of audio) hide(item, generationOf() !== "minimax");
-    paint();
-    node.setDirtyCanvas?.(true, true);
-  }
-  async function load() {
-    if (catalog) return;
-    try {
-      const response = await api.fetchApi("/promptforge/v2/actions");
-      if (!response.ok) throw new Error(`Preset list unavailable (${response.status})`);
-      catalog = await response.json();
-      status.textContent = "";
-    } catch (error) { status.textContent = error.message; }
-    paint();
-  }
+  subjectBlock.append(section("Subjects & camera"), subjectRow, cameraSelect);
+
+  const notesBlock = element("div");
+  notesBlock.style.cssText = "display:flex;flex-direction:column;gap:4px";
+  notesBlock.append(section("Notes"), field("notes", 40, "Extra direction folded into the action brief"));
+
+  const soundBlock = element("div");
+  soundBlock.style.cssText = "display:flex;flex-direction:column;gap:4px";
+  soundBlock.append(section("Soundscape"), field("soundscape", 40, "Room tone, dialogue, effects"), line("music", "Music direction, N/A for none"));
+
+  const savedBlock = element("div");
+  savedBlock.style.cssText = "display:flex;flex-direction:column;gap:4px";
+  savedBlock.append(section("Saved ideas"), saveBar);
 
   // saved ideas keep every field of the node, generation included
   const dataFields = ["text", "negative", "action", "generation", "subject_1", "subject_2", "subject_3", "camera", "notes"];
@@ -212,15 +277,88 @@ function promptUI(node, fallback) {
   );
 
   search.oninput = paintRows;
-  root.append(generationModes.row, sourceModes.row, saveBar, chosen, search, tabs, rows, status);
+
+  function paint() {
+    generationModes.paint();
+    sourceModes.paint();
+    paintChosen();
+    paintTabs();
+    paintRows();
+  }
+
+  const visible = (block, show) => { block.style.display = show ? "" : "none"; };
+  const measurable = () => {
+    const height = root.scrollHeight || root.offsetHeight || 0;
+    return Number.isFinite(height) && height > 0 ? height + 8 : 0;
+  };
+  const estimate = () => {
+    const audio = generationOf() === "minimax";
+    const actionMode = source?.value === "action";
+    return 340
+      + (actionMode ? 330 : 0)
+      + (audio ? 100 : 0);
+  };
+  let targetHeight = MIN_HEIGHT;
+  const fit = () => {
+    const measured = measurable() || Math.max(120, estimate() - CHROME);
+    panelHeight = Math.max(120, Math.min(measured, MAX_HEIGHT - CHROME, 540));
+    const full = node.computeSize?.()[1] || panelHeight + CHROME;
+    const overflow = Math.max(0, full - MAX_HEIGHT);
+    if (overflow) panelHeight = Math.max(120, panelHeight - overflow);
+    targetHeight = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, full - overflow));
+    const width = Math.max(node.size?.[0] || 0, WIDTH);
+    if (node.size && Math.abs(node.size[0] - width) < 1 && Math.abs(node.size[1] - targetHeight) < 1) return;
+    node.setSize?.([width, targetHeight]);
+  };
+  function refresh() {
+    const actionMode = source?.value === "action";
+    for (const item of owned) hide(item, true);
+    visible(actionBlock, actionMode);
+    visible(subjectBlock, actionMode);
+    visible(notesBlock, actionMode);
+    visible(soundBlock, generationOf() === "minimax");
+    promptHeading.textContent = actionMode ? "Additional intent" : "Prompt";
+    promptArea.placeholder = actionMode ? "Extra intent appended to the action brief" : "Describe the scene";
+    negativeArea.placeholder = actionMode ? "Constraints kept out of the brief" : "What to keep out";
+    syncAreas();
+    paint();
+    fit();
+    node.setDirtyCanvas?.(true, true);
+  }
+  async function load() {
+    if (catalog) return;
+    try {
+      const response = await api.fetchApi("/promptforge/v2/actions");
+      if (!response.ok) throw new Error(`Preset list unavailable (${response.status})`);
+      catalog = await response.json();
+      status.textContent = "";
+    } catch (error) { status.textContent = error.message; }
+    paint();
+  }
+
+  const previousResize = node.onResize;
+  node.onResize = function (size) {
+    size[0] = Math.max(size[0], WIDTH);
+    size[1] = targetHeight;
+    return previousResize?.apply(this, arguments);
+  };
+
+  root.append(generationModes.row, sourceModes.row, promptHeading, promptArea,
+    section("Negative"), negativeArea, savedBlock, actionBlock, subjectBlock, notesBlock, soundBlock, status);
   for (const [item, callback] of [[source, refresh], [generation, refresh], [action, paint]]) {
     if (!item) continue;
     const original = item.callback;
     item.callback = function () { const result = original?.apply(this, arguments); callback(); return result; };
   }
-  hide(source, true);
-  hide(generation, true);
+  for (const item of owned) hide(item, true);
   refresh();
+  requestAnimationFrame(fit);
+  if (globalThis.ResizeObserver) {
+    const observer = new ResizeObserver(() => fit());
+    observer.observe(root);
+    const removed = node.onRemoved;
+    node.onRemoved = function () { observer.disconnect(); return removed?.apply(this, arguments); };
+  }
   load();
   reloadIdeas();
   return refresh;
