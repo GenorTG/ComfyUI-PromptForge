@@ -1,21 +1,29 @@
 # ComfyUI PromptForge
 
-> **1.30.0: this node set is frozen as legacy.** Same behaviour, bug fixes only. The per-family
-> nodes (Krea 2, Anima, MOSS Image, ACE-Step, MiniMax H3) replace the all-in-one nodes and their
-> hand-carried configs. Legacy nodes are listed as `PromptForge Legacy · …` in the picker and saved
-> workflows keep working. See [LEGACY.md](LEGACY.md).
+**PromptForge 1.31.0 adds the V2 image and video suite.** It runs alongside the
+existing nodes, preserving saved workflows and legacy behavior. ACE and
+audio-only workflows remain unchanged. See [legacy compatibility](LEGACY.md),
+[the V2 guide and node catalog](docs/V2.md), and [the implementation plan and
+audit](docs/V2_PLAN.md).
 
-A full model workflow suite, not just a prompt enhancer: load the model, encode the prompt and references,
-generate, upscale and save. It covers **Krea 2**, **MOSS Image**, **Qwen Image**, **Anima**, **MiniMax H3** and
-other families, plus shared loader, sampler, latent, action, prompt and save tooling.
+V2 provides 50 nodes and 15 blank workflow templates for Krea 2, MOSS Image,
+Anima, and MiniMax H3. Workflows separate model and LoRA loading, prompt choice
+and writing, reference selection, format and sampling, encoding, generation,
+refinement, interpolation, and saving. They depend on PromptForge and supported
+ComfyUI core APIs; model files and any needed checkpoints must be supplied by
+the user.
 
-- **Loading** — one loader for checkpoints, diffusion models and GGUF, with quant, context and GPU-layer planning; LoRA loader, and image / video / audio loaders with a picker and library.
-- **Encoding** — family-aware text encoding, edit encoders for Krea and MOSS, VAE encode, and reference conditioning.
-- **Prompting** — the Prompt Enhancer with per-family presets, the Action libraries, and the H3 Idea / Parts nodes.
-- **Generating** — family-aware sampler with saved presets, empty latent with aspect and size presets, preview override, frame interpolation.
-- **Saving** — image and video savers with codec control, plus batch and upscale helpers.
+The workflows are the ones you keep in ComfyUI's own workflow folder; each one is
+built from the same `PROMPTFORGE_V2_*` nodes and is blank (no prompts, no media
+paths). `scripts/build_v2_workflows.py` can regenerate a set into a directory of
+your choice. The optional LoRA Manager integration
+enhances browsing when installed; it is not required.
 
-The sections below cover the three main families and their workflows, then the shared node reference.
+## Legacy workflow notes
+
+The remainder of this README documents the old workflow set and its historical
+settings. Those examples may mention external node packs and model-specific
+assumptions; they do not describe the standalone V2 templates.
 
 ## Krea 2
 

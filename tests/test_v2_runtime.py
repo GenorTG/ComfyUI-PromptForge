@@ -1,0 +1,360 @@
+"""Run in a fresh process with ComfyUI's Python; see scripts/check_v2_runtime.py."""
+import importlib.util
+import json
+from pathlib import Path
+from types import SimpleNamespace
+import unittest
+from unittest.mock import patch
+
+
+class RuntimeTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location("pf_runtime_bootstrap", Path(__file__).parents[1] / "scripts/check_v2_runtime.py")
+        bootstrap = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bootstrap)
+        cls.runtime = bootstrap.bootstrap()
+        cls.v2 = cls.runtime.pack.v2
+        import torch
+        cls.torch = torch
+        torch.set_num_threads(1)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.runtime.loop.close()
+        cls.runtime.temporary.cleanup()
+
+    def pipe(self, family="krea2", **artifacts):
+        return self.v2.contracts.evolve(self.v2.contracts.new_pipe(family), artifacts=artifacts)
+
+    def clip(self):
+        torch = self.torch
+        class Clip:
+            def __init__(self):
+                self.calls = []
+            def tokenize(self, text, **kwargs):
+                self.calls.append((text, kwargs))
+                return text
+            def encode_from_tokens_scheduled(self, tokens):
+                return [[torch.ones(1, max(1, len(tokens.split())), 64), {}]]
+        return Clip()
+
+    def test_registration_through_real_init(self):
+        from comfy_api.latest import io
+        mappings = self.v2.NODE_CLASS_MAPPINGS
+        self.assertGreaterEqual(len(mappings), 49)
+        expected = {"PROMPTFORGE_V2_IMAGE_" + name for name in
+                    ("MODEL", "FORMAT", "SAMPLING_SETTINGS", "ENCODE", "SAMPLE", "DECODE", "SAVE")}
+        expected.update(("PROMPTFORGE_V2_KREA_EDIT_PREPARE", "PROMPTFORGE_V2_SUBJECT_MASK",
+                         "PROMPTFORGE_V2_PERFORMANCE", "PROMPTFORGE_V2_PREVIEW_SETTINGS", "PROMPTFORGE_V2_SAVE_METADATA"))
+        self.assertFalse(expected - mappings.keys(), f"Missing stage registrations: {sorted(expected - mappings.keys())}")
+        for key, node in mappings.items():
+            with self.subTest(node=key):
+                self.assertIs(self.runtime.nodes.NODE_CLASS_MAPPINGS[key], node)
+                self.assertTrue(issubclass(node, io.ComfyNode))
+                self.assertEqual(node.GET_SCHEMA().node_id, key)
+                self.assertIsInstance(node.INPUT_TYPES(), dict)
+        custom = self.runtime.folder_paths.get_folder_paths("custom_nodes")
+        self.assertEqual(len(custom), 1)
+        self.assertEqual([p.name for p in Path(custom[0]).iterdir()], ["ComfyUI-PromptForge"])
+        self.assertFalse(any("krea2-nag" in str(path) or "comfyui-krea2edit" in str(path)
+                             for path in self.runtime.nodes.LOADED_MODULE_DIRS.values()))
+
+    def test_raw_writer_lazy_bypass(self):
+        module = self.v2.prompting
+        for prompt, writer, family in ((module.ImagePrompt, module.ImagePromptWriter, "krea2"),
+                                       (module.H3Prompt, module.H3PromptWriter, "minimax_h3")):
+            with self.subTest(family=family):
+                text = 'A sign reads "No entry".'
+                pipe = prompt.execute(self.pipe(family), source="raw", text=text).args[0]
+                self.assertEqual(writer.check_lazy_status(pipe), [])
+                with patch.object(module, "_services", side_effect=AssertionError("raw loaded a writer")):
+                    output = writer.execute(pipe).args
+                self.assertEqual(output[1], text)
+                self.assertEqual(output[0]["artifacts"]["writer"]["status"], "raw")
+                idea = prompt.execute(self.pipe(family), source="idea", text="a tree").args[0]
+                self.assertEqual(writer.check_lazy_status(idea), ["writer_model"])
+
+    def test_image_encode_decode_and_branch_isolation(self):
+        torch = self.torch
+        clip = self.clip()
+        class Vae:
+            def decode(self, samples):
+                self.samples = samples
+                return torch.zeros(samples.shape[0], samples.shape[-2] * 8, samples.shape[-1] * 8, 3)
+        vae = Vae()
+        model = SimpleNamespace(model=SimpleNamespace(latent_format=SimpleNamespace(spacial_downscale_ratio=8, latent_channels=16)))
+        base = self.pipe(clip=clip, vae=vae, model=model)
+        fmt = self.v2.image.ImageFormat.execute(base, aspect="16:9", megapixels=.01, orientation="portrait").args[0]
+        pipe = self.v2.prompting.ImagePrompt.execute(fmt, text="a tree", negative="blur").args[0]
+        output, positive, negative, latent = self.v2.image.ImageEncode.execute(pipe).args
+        self.assertEqual([call[0] for call in clip.calls], ["a tree", "blur"])
+        decoded, images = self.v2.image.ImageDecode.execute(output).args
+        self.assertIs(vae.samples, latent["samples"])
+        self.assertIs(decoded["artifacts"]["images"], images)
+        self.assertEqual(tuple(images.shape), (1, latent["samples"].shape[-2]*8, latent["samples"].shape[-1]*8, 3))
+        self.assertNotIn("images", output["artifacts"] )
+        decoded_pipe, images = self.v2.image.ImageDecode.execute(output).args
+        self.assertIs(vae.samples, latent["samples"])
+        self.assertIs(decoded_pipe["artifacts"]["images"], images)
+        self.assertEqual(tuple(images.shape[1:3]), tuple(size * 8 for size in latent["samples"].shape[-2:]))
+        self.assertNotIn("images", output["artifacts"])
+        self.assertGreater(fmt["settings"]["format"]["height"], fmt["settings"]["format"]["width"])
+        self.assertNotIn("latent", pipe["artifacts"])
+        self.assertEqual(base["settings"], {})
+        decoded, images = self.v2.image.ImageDecode.execute(output).args
+        self.assertIs(vae.samples, latent["samples"])
+        self.assertIs(decoded["artifacts"]["images"], images)
+        self.assertIs(output["artifacts"]["positive"], positive)
+        self.assertIs(output["artifacts"]["negative"], negative)
+        invalid = self.v2.contracts.evolve(pipe, section="prompt", settings={"source":"idea"}, artifacts={"writer":{"status":"failed"}})
+        with self.assertRaisesRegex(ValueError, "writer"):
+            self.v2.image.ImageEncode.execute(invalid)
+
+    def test_image_sample_consumes_resolved_settings(self):
+        image, torch = self.v2.image, self.torch
+        model, positive, negative = object(), object(), object()
+        latent = {"samples":torch.zeros(1,16,2,2)}
+        pipe = self.pipe(model=model,positive=positive,negative=negative,latent=latent,images=object())
+        pipe = image.ImageSamplingSettings.execute(pipe, 17, 8, 1., "euler", "simple", .7).args[0]
+        sampled = {"samples":torch.ones(1,16,2,2)}
+        with patch.object(image.nodes, "common_ksampler", return_value=(sampled,)) as sampler:
+            result, output = image.ImageSample.execute(pipe).args
+        self.assertIs(output,sampled)
+        self.assertIs(result["artifacts"]["latent"],sampled)
+        self.assertIs(pipe["artifacts"]["latent"],latent)
+        self.assertNotIn("images",result["artifacts"])
+        self.assertEqual(sampler.call_args.args,(model,17,8,1.,"euler","simple",positive,negative,latent))
+        self.assertEqual(sampler.call_args.kwargs,{"denoise":.7})
+
+    def test_disabled_lora_stack_never_opens_weights(self):
+        shared = self.v2.shared
+        model, clip = object(), object()
+        pipe = self.pipe(model=model, clip=clip)
+        with patch.object(shared.lora_loader.comfy.utils, "load_torch_file", side_effect=AssertionError("disabled LoRA read weights")):
+            result = shared.LoraStack.execute(pipe, json.dumps({"items":[{"name":"missing.safetensors", "on":False}]})).args[0]
+            bypass = shared.SingleLora.execute(pipe, "missing.safetensors", enabled=False).args[0]
+        self.assertIs(result["artifacts"]["model"], model)
+        self.assertIs(result["artifacts"]["clip"], clip)
+        self.assertIs(bypass["artifacts"]["model"], model)
+        self.assertEqual(bypass["settings"]["single_loras"]["items"][0]["enabled"], False)
+        self.assertNotIn("single_loras", pipe["settings"])
+
+    def test_image_loader_containment_and_pixels(self):
+        from PIL import Image
+        torch = self.torch
+        root = Path(self.runtime.folder_paths.get_input_directory())
+        image_path = root / "fixture.png"
+        Image.new("RGBA", (4, 3), (255, 0, 0, 128)).save(image_path)
+        pipe, image, mask = self.v2.media.LoadImage.execute(self.pipe(), "fixture.png").args
+        self.assertEqual(tuple(image.shape), (1,3,4,3))
+        torch.testing.assert_close(image[0,0,0], torch.tensor([1.,0.,0.]))
+        self.assertAlmostEqual(float(mask[0,0,0]), 1 - 128/255, places=6)
+        self.assertIs(pipe["artifacts"]["reference_images"][0], image)
+        outside = self.runtime.base / "outside.png"
+        Image.new("RGB", (2,2)).save(outside)
+        link = root / "escape.png"
+        link.symlink_to(outside)
+        for filename in ("../outside.png", str(outside), "escape.png"):
+            with self.subTest(filename=filename), self.assertRaisesRegex(ValueError, "input directory"):
+                self.v2.media.LoadImage.execute(self.pipe(), filename)
+
+    def test_frame_interpolation_preserves_duration_and_audio(self):
+        torch = self.torch
+        frames = torch.stack((torch.zeros(2,2,3), torch.ones(2,2,3), torch.full((2,2,3), .5)))
+        audio = {"waveform":torch.randn(1,2,120), "sample_rate":960}
+        waveform = audio["waveform"].clone()
+        pipe = self.v2.contracts.evolve(self.pipe("minimax_h3", images=frames, audio=audio), "format", {"fps":24})
+        out, interpolated, fps = self.v2.media.FrameInterpolate.execute(pipe, enabled=True, multiplier=3).args
+        self.assertEqual(len(interpolated), len(frames)*3)
+        self.assertEqual(fps, 72.)
+        self.assertEqual(len(interpolated)/fps, len(frames)/24)
+        self.assertIs(out["artifacts"]["audio"], audio)
+        torch.testing.assert_close(audio["waveform"], waveform)
+        torch.testing.assert_close(interpolated[0], frames[0])
+        torch.testing.assert_close(interpolated[-1], frames[-1])
+        torch.testing.assert_close(interpolated[1], torch.lerp(frames[0], frames[1], 1/3))
+        self.assertEqual(out["settings"]["timing"]["duration"], len(frames)/24)
+        self.assertIs(self.v2.media.FrameInterpolate.execute(pipe, enabled=False).args[0], pipe)
+
+    def test_h3_encode_mode_dispatch(self):
+        h3, torch = self.v2.h3, self.torch
+        from comfy_api.latest import io
+        first, last = torch.zeros(1,4,4,3), torch.ones(1,4,4,3)
+        video = torch.randn(22,4,4,3)
+        audio = {"waveform":torch.randn(1,2,960), "sample_rate":960}
+        positive, latent = [[torch.ones(1,1,64), {}]], {"samples":torch.zeros(1,4,1,2,2)}
+        for mode in h3.MODES:
+            with self.subTest(mode=mode):
+                clip, vae = self.clip(), object()
+                pipe = self.pipe("minimax_h3", clip=clip, vae=vae, text="a tree", first_frame=first,
+                                 last_frame=last, reference_video=video, reference_audio=audio, reference_images=[first])
+                pipe = self.v2.contracts.evolve(pipe, "format", {"width":32,"height":32,"frames":22,"fps":24})
+                pipe = self.v2.contracts.evolve(pipe, "references", {"mode":mode})
+                pipe = self.v2.contracts.evolve(pipe, "prompt", {"source":"raw"})
+                with patch.object(h3.core.MiniMaxH3ImageToVideo, "execute", return_value=io.NodeOutput(positive,latent)) as still, \
+                     patch.object(h3.core.MiniMaxH3ReferenceToVideo, "execute", return_value=io.NodeOutput(positive,latent)) as refs, \
+                     patch.object(h3.core.MiniMaxH3AddGuide, "execute", return_value=io.NodeOutput(positive)) as guide:
+                    output = h3.H3Encode.execute(pipe).args[0]
+                self.assertIs(output["artifacts"]["latent"], latent)
+                self.assertEqual(refs.call_count, int(mode == "ref2v"))
+                self.assertEqual(still.call_count, int(mode != "ref2v"))
+                self.assertEqual(guide.call_count, int(mode == "continue"))
+                kwargs = (refs if mode == "ref2v" else still).call_args.kwargs
+                self.assertEqual(kwargs["prompt"], "a tree")
+                self.assertIs(kwargs["vae"], vae)
+                self.assertEqual("first_frame" in kwargs, mode in ("i2v","fl2v"))
+                self.assertEqual("last_frame" in kwargs, mode in ("l2v","fl2v"))
+                if mode == "ref2v":
+                    self.assertIs(kwargs["ref_images"]["ref_image_1"], first)
+                    self.assertIs(kwargs["ref_videos"]["ref_video_1"], video)
+                    self.assertIs(kwargs["ref_audios"]["ref_audio_1"], audio)
+                if mode == "continue":
+                    self.assertEqual(output["artifacts"]["continuation_overlap"], 22)
+                    torch.testing.assert_close(guide.call_args.kwargs["image"], video)
+                    self.assertIsNot(guide.call_args.kwargs["audio"]["waveform"], audio["waveform"])
+                    torch.testing.assert_close(guide.call_args.kwargs["audio"]["waveform"], audio["waveform"][..., -880:])
+
+    def test_save_metadata_redaction_counter_and_opt_in(self):
+        shared = self.v2.shared
+        pipe = self.pipe(model=object(), text="live text", source_mask=self.torch.ones(1,2,2))
+        pipe = self.v2.contracts.evolve(pipe, "prompt", {"source":"raw", "text":"private prompt", "negative":"private negative"})
+        pipe = self.v2.contracts.evolve(pipe, "parts", {"plan":[{"text":"private part", "seconds":5}]})
+        pipe = self.v2.contracts.evolve(pipe, "media", {"reference:1":{"description":"private caption"}})
+        first_pipe, first = shared.SaveRunMetadata.execute(pipe, "runtime/metadata").args
+        second_pipe, second = shared.SaveRunMetadata.execute(pipe, "runtime/metadata", include_text=True).args
+        self.assertIs(first_pipe, pipe)
+        self.assertIs(second_pipe, pipe)
+        self.assertTrue(first.endswith("metadata_00001_.json"))
+        self.assertTrue(second.endswith("metadata_00002_.json"))
+        redacted = json.loads(Path(first).read_text())
+        full = json.loads(Path(second).read_text())
+        self.assertNotIn("private", json.dumps(redacted))
+        self.assertNotIn("artifacts", redacted)
+        self.assertEqual(redacted["settings"]["parts"]["plan"][0]["seconds"], 5)
+        self.assertEqual(full["settings"], pipe["settings"])
+        self.assertEqual(pipe["settings"]["prompt"]["text"], "private prompt")
+        self.assertEqual(json.loads(Path(first).read_text()), redacted)
+        with self.assertRaises(Exception):
+            shared.SaveRunMetadata.execute(pipe, "../metadata-escape")
+        self.assertFalse((self.runtime.base / "metadata-escape_00001_.json").exists())
+
+    def test_save_metadata_redacts_subject_mask_query(self):
+        pipe = self.v2.contracts.evolve(self.pipe(), "mask", {"checkpoint":"sam.safetensors", "subject":"private mask query", "threshold":.5})
+        _, path = self.v2.shared.SaveRunMetadata.execute(pipe, "runtime/mask-metadata", include_text=False).args
+        saved = json.loads(Path(path).read_text())
+        self.assertNotIn("subject", saved["settings"]["mask"])
+        self.assertEqual(saved["settings"]["mask"]["threshold"],.5)
+        self.assertEqual(pipe["settings"]["mask"]["subject"],"private mask query")
+
+    def test_single_lora_preserves_stack_metadata(self):
+        shared = self.v2.shared
+        model, clip, patched_model, patched_clip = object(), object(), object(), object()
+        pipe = self.pipe(model=model, clip=clip, lora_report="stack report", lora_triggers="stack trigger", positive=object())
+        config = {"loras":{"items":[{"name":"stack.safetensors","on":True}]}, "seed":23,
+                  "layer_controls":"minimax audiovisual", "balance":True, "balance_floor":.8}
+        pipe = self.v2.contracts.evolve(pipe,"loras",config)
+        checkpoint = Path(self.runtime.folder_paths.get_folder_paths("loras")[0]) / "single.safetensors"
+        checkpoint.touch()
+        with patch.object(shared.lora_loader.PROMPTFORGE_LoraLoader,"load",
+                          return_value=(patched_model,patched_clip,"single trigger","single report")) as load:
+            out = shared.SingleLora.execute(pipe,checkpoint.name,model_strength=.7,clip_strength=.3).args[0]
+        self.assertEqual(out["settings"]["loras"],config)
+        self.assertIs(out["artifacts"]["model"],patched_model)
+        self.assertIs(out["artifacts"]["clip"],patched_clip)
+        self.assertEqual(out["artifacts"]["lora_report"],"stack report\nsingle report")
+        self.assertEqual(out["artifacts"]["lora_triggers"],"stack trigger, single trigger")
+        self.assertNotIn("positive",out["artifacts"])
+        self.assertIn("positive",pipe["artifacts"])
+        state = json.loads(load.call_args.args[1])
+        self.assertEqual(state["items"],[{"name":checkpoint.name,"on":True,"model":.7,"clip":.3,"part":"all"}])
+        bypass = shared.SingleLora.execute(out, "disabled.safetensors", enabled=False).args[0]
+        self.assertEqual(len(bypass["settings"]["single_loras"]["items"]),2)
+        self.assertEqual(bypass["settings"]["loras"],config)
+        self.assertIs(bypass["artifacts"]["model"],patched_model)
+        self.assertNotIn("single_loras",pipe["settings"])
+
+    def test_subject_mask_forwards_native_sam_parameters(self):
+        module, torch = self.v2.masking, self.torch
+        from comfy_api.latest import io
+        checkpoint = Path(self.runtime.folder_paths.get_folder_paths("checkpoints")[0]) / "sam-fixture.safetensors"
+        checkpoint.touch()
+        image, mask = torch.zeros(1,4,6,3), torch.ones(1,4,6)
+        base_model = object()
+        for family in ("SAM3","SAM31"):
+            with self.subTest(family=family):
+                clip = self.clip()
+                model = SimpleNamespace(model=SimpleNamespace(model_config=SimpleNamespace(unet_config={"image_model":family})))
+                pipe = self.pipe(model=base_model)
+                with patch.object(module.comfy.sd,"load_checkpoint_guess_config",return_value=(model,clip,None,None)) as load, \
+                     patch.object(module.SAM3_Detect,"execute",return_value=io.NodeOutput(mask)) as detect:
+                    out, result = module.SubjectMask.execute(pipe,image,checkpoint.name,"hair",.37,4).args
+                load.assert_called_once_with(str(checkpoint),output_vae=False,output_clip=True,
+                                            embedding_directory=self.runtime.folder_paths.get_folder_paths("embeddings"))
+                self.assertEqual(clip.calls,[("hair",{})])
+                self.assertIs(detect.call_args.args[0],model)
+                self.assertIs(detect.call_args.args[1],image)
+                self.assertEqual(detect.call_args.kwargs["threshold"],.37)
+                self.assertEqual(detect.call_args.kwargs["refine_iterations"],4)
+                self.assertFalse(detect.call_args.kwargs["individual_masks"])
+                self.assertEqual(tuple(detect.call_args.kwargs["conditioning"][0][0].shape),(1,1,64))
+                self.assertIs(result,mask)
+                self.assertIs(out["artifacts"]["source_mask"],mask)
+                self.assertIs(out["artifacts"]["model"],base_model)
+                self.assertNotIn("source_mask",pipe["artifacts"])
+        wrong = SimpleNamespace(model=SimpleNamespace(model_config=SimpleNamespace(unet_config={"image_model":"krea2"})))
+        with patch.object(module.comfy.sd,"load_checkpoint_guess_config",return_value=(wrong,self.clip(),None,None)), \
+             patch.object(module.SAM3_Detect,"execute") as detect:
+            with self.assertRaisesRegex(ValueError,"SAM3"):
+                module.SubjectMask.execute(self.pipe(),image,checkpoint.name)
+            detect.assert_not_called()
+
+    def test_performance_preview_configuration_and_forwarding(self):
+        module = self.v2.performance
+        from comfy_api.latest import io
+        base, attention_model, chunked, sparse = object(), object(), object(), object()
+        pipe = self.pipe("minimax_h3",model=base,images=object())
+        with patch.object(module.ModelAttentionBackend,"execute",return_value=io.NodeOutput(attention_model)) as attention, \
+             patch.object(module,"chunk_feed_forward",return_value=chunked) as chunks, \
+             patch.object(module.BlockSparseAttention,"execute",return_value=io.NodeOutput(sparse)) as patch_sparse:
+            out = module.Performance.execute(pipe,"pytorch attention",3,True,27.).args[0]
+        attention.assert_called_once_with(base,"pytorch attention")
+        chunks.assert_called_once_with(attention_model,3)
+        patch_sparse.assert_called_once_with(chunked,{"selection":"vsa","keep_percent":27.},0.,1.,dense_blocks="0, 1")
+        self.assertIs(out["artifacts"]["model"],sparse)
+        self.assertNotIn("images",out["artifacts"])
+        self.assertIs(pipe["artifacts"]["model"],base)
+        with patch.object(module.preview_override,"apply",side_effect=AssertionError("disabled preview patched model")):
+            preview = module.PreviewSettings.execute(pipe,enabled=False,max_resolution=256,preview_frames=2,preview_fps=6).args[0]
+        self.assertIs(preview["artifacts"]["model"],base)
+        self.assertEqual(preview["settings"]["preview"]["max_resolution"],256)
+
+    def test_native_tiny_krea_edit_nag(self):
+        torch = self.torch
+        import comfy.ops
+        from comfy.ldm.krea2.model import SingleStreamDiT
+        torch.manual_seed(7)
+        model = SingleStreamDiT(features=64,tdim=16,txtdim=32,heads=4,kvheads=2,layers=1,patch=2,
+                                channels=4,multiplier=2,txtlayers=2,txtheads=4,txtkvheads=2,
+                                operations=comfy.ops.disable_weight_init)
+        for parameter in model.parameters():
+            torch.nn.init.normal_(parameter, std=.02)
+        x, context, negative = torch.randn(1,4,4,6), torch.randn(1,3,64), torch.randn(1,2,64)
+        sources = [torch.randn(1,4,4,4), torch.randn(1,4,2,4)]
+        sampling = dict(use_nag=False,nag_phi=4.,nag_tau=2.5,nag_alpha=0.)
+        edit = dict(position="beside",position_a="aligned",ref_boost=1.5,mask=torch.ones(1,32,32))
+        import importlib
+        forward = importlib.import_module(self.v2.__name__ + ".krea")._forward
+        base = forward(model,x,torch.ones(1),context,sources,negative,edit,sampling,{})
+        sampling["use_nag"] = True
+        zero = forward(model,x,torch.ones(1),context,sources,negative,edit,sampling,{})
+        torch.testing.assert_close(base,zero,atol=1e-5,rtol=1e-5)
+        sampling["nag_alpha"] = .25
+        guided = forward(model,x.unsqueeze(2),torch.ones(1),context,sources,negative,edit,sampling,{})
+        self.assertEqual(tuple(guided.shape),(1,4,1,4,6))
+        self.assertTrue(torch.isfinite(guided).all())
+        self.assertGreater(float((guided.squeeze(2)-base).detach().abs().max()), 0.)
+
+
+if __name__ == "__main__":
+    unittest.main()

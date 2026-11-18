@@ -268,7 +268,7 @@ def strip_quant_suffix(name):
         name = name[:match.start()]
     return name
 
-def gguf_mmproj_loader(path):
+def gguf_mmproj_loader(path, qwen3vl=False):
     # Reverse version of Qwen2VLVisionModel.modify_tensors
     logging.info("Attenpting to find mmproj file for text encoder...")
 
@@ -304,6 +304,23 @@ def gguf_mmproj_loader(path):
         w1 = dequantize_tensor(vsd.pop("v.patch_embd.weight"), dtype=torch.float32)
         w2 = dequantize_tensor(vsd.pop("v.patch_embd.weight.1"), dtype=torch.float32)
         vsd["v.patch_embd.weight"] = torch.stack([w1, w2], dim=2)
+
+    if qwen3vl:
+        mapped = {}
+        for key, value in vsd.items():
+            key = key.replace("v.patch_embd", "visual.patch_embed.proj")
+            key = key.replace("v.position_embd", "visual.pos_embed")
+            key = key.replace("v.post_ln", "visual.merger.norm")
+            key = key.replace("mm.0.", "visual.merger.linear_fc1.").replace("mm.2.", "visual.merger.linear_fc2.")
+            for index, layer in enumerate((5, 11, 17)):
+                key = key.replace(f"v.deepstack.{layer}.", f"visual.deepstack_merger_list.{index}.")
+            key = key.replace("v.blk.", "visual.blocks.").replace("attn_qkv.", "attn.qkv.").replace("attn_out.", "attn.proj.")
+            key = key.replace("ffn_up.", "mlp.linear_fc1.").replace("ffn_down.", "mlp.linear_fc2.")
+            key = key.replace("ln1.", "norm1.").replace("ln2.", "norm2.")
+            if "deepstack_merger_list" in key:
+                key = key.replace(".fc1.", ".linear_fc1.").replace(".fc2.", ".linear_fc2.")
+            mapped["model." + key] = value
+        return mapped
 
     # run main replacement
     vsd = sd_map_replace(vsd, CLIP_VISION_SD_MAP)
@@ -498,7 +515,13 @@ def gguf_clip_loader(path):
             sd = sd_map_replace(sd, LLAMA_SD_MAP)
         if arch == "llama":
             sd = llama_permute(sd, 32, 8) # L3 / Mistral
-        if arch == "qwen2vl":
+        if arch == "qwen3vl":
+            visual = gguf_mmproj_loader(path, qwen3vl=True)
+            if not visual:
+                raise ValueError(f"Qwen3-VL requires a matching mmproj GGUF beside {path}")
+            sd = {("model.language_model." + key[len("model."):] if key.startswith("model.") else key): value for key, value in sd.items()}
+            sd.update(visual)
+        elif arch == "qwen2vl":
             vsd = gguf_mmproj_loader(path)
             sd.update(vsd)
     else:
