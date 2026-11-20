@@ -570,8 +570,16 @@ def _instructions(pipe, mode, context, max_words, style_prefix="", sections=None
         instruction += (
             "Output ONE line of lowercase comma-separated booru tags and nothing else: no sentences, no full stops. "
             f"Always start with: {style_prefix or ANIMA_PREFIX}. "
-            "Then, in this tag order: shot distance and angle, who is where relative to the other, count tag "
-            "(1girl for a solo woman, 2girls, 1girl 1boy), act, anatomy, pose, hands, place, light. "
+            "Then in this tag order: the count tag, then `hetero` for a man and a woman, then ONE framing tag "
+            "(close up / cowboy shot / full body / wide shot), ONE angle tag, the act and position, anatomy, hands, place, light. "
+            "Exactly one count tag and no combinations: 1girl for a solo woman, 1girl 1boy for a man and a woman, "
+            "2girls for two women, 2boys for two men. Never write both a number word and a count tag. "
+            "Use the canonical position tag rather than describing who sits where: missionary, cowgirl, reverse cowgirl, "
+            "doggy style, spooning, standing, piledriver, lotus. For any penetration use `full body`, "
+            "never `close up`, so both bodies and the join stay in frame; in cowgirl add `girl on top`, `straddling`, "
+            "`sitting on penis` and keep the man's chest and hips under her. "
+            "Name the face once only (`cute face`, not three face tags). "
+            "For a couple the framing tag is `full body`, and `hetero` sits right after `1girl 1boy`. "
             "Use Gelbooru spelling and the shortest clear tag; weight a stressed feature as (tag:1.2) at most. "
             "Every item stays a tag, at most four words, never a clause: write `penis in pussy`, not `the shaft is buried "
             "deep inside her`. For penetration always include `sex`, the position tag and `penis in pussy` (or `anal`), "
@@ -698,6 +706,8 @@ class ImagePromptWriter(io.ComfyNode):
                          "position, contact and camera fact as it is written and do not lengthen it. A NOT, never or no line is "
                          "a constraint: fold it into the state described, but keep the word when it prevents a real error "
                          "(which hole, a second tip, an extra limb, the body drifting).\n\n" + user_text)
+        elif prompt.get("source") == "action" and pipe["family"] == "anima" and len(re.findall(r"\bSubject 2\b", user_text)):
+            user_text = ("The pair is one man and one woman: use 1girl 1boy and hetero, full body framing.\n\n" + user_text)
         elif prompt.get("source") == "action":
             user_text = ("Condense this brief into affirmative scene description. Keep every position, contact and camera "
                          "fact; drop ornamental words. Its NOT, never, without and no lines are constraints: describe the "
