@@ -19,9 +19,9 @@ function button(label, action) {
 }
 function panel(node, name, minHeight, maxHeight) {
   const frame = element("div");
-  frame.style.cssText = "position:relative;width:100%;height:100%;min-width:0;overflow:auto;contain:layout paint";
+  frame.style.cssText = "position:relative;width:100%;height:100%;min-width:0;overflow:hidden;contain:layout paint";
   const content = element("div");
-  content.style.cssText = "display:flex;flex-direction:column;gap:5px;padding:3px 14px 3px 3px;box-sizing:border-box;color:var(--input-text);font:12px sans-serif";
+  content.style.cssText = "display:flex;flex-direction:column;gap:5px;padding:3px 14px 3px 3px;box-sizing:border-box;min-height:100%;color:var(--input-text);font:12px sans-serif";
   frame.append(content);
   frame.addEventListener("pointerdown", (event) => event.stopPropagation());
   frame.addEventListener("wheel", (event) => event.stopPropagation());
@@ -108,6 +108,11 @@ function promptUI(node, fallback) {
       item.callback?.(area.value);
     });
     areas.set(name, area);
+    // dragging the textarea grip grows the node instead of scrolling the panel
+    area.addEventListener("pointerup", () => {
+      const needed = node.computeSize?.()[1] || 0;
+      if (needed > (node.size?.[1] || 0)) node.setSize?.([node.size[0], needed]);
+    });
     return area;
   }
   function line(name, placeholder) {

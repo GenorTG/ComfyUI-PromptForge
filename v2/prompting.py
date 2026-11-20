@@ -94,7 +94,7 @@ def _strip_context_echo(text):
     return stripped[end:].lstrip("\n ") or text
 
 
-ANIMA_PREFIX = "masterpiece, best quality, score_7, nsfw, anime screencap, 2d, flat colors"
+ANIMA_PREFIX = "nsfw, anime style, 2d, flat colors"
 
 
 def _prompt(pipe):
