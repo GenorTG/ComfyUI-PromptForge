@@ -222,9 +222,10 @@ def _action_text(action, subjects, notes, camera):
             if not line or line.startswith(drop):
                 continue
             if line.startswith("Camera:"):
-                line = "The camera holds " + line[len("Camera:"):].strip().rstrip(".") + "."
+                line = "Camera: " + line[len("Camera:"):].strip().rstrip(".") + "."
+            line = line.replace("Subject 1", "the woman").replace("Subject 2", "the man").replace("Subject 3", "the second woman")
             kept.append(line)
-        return "\n".join(kept)
+        return " ".join(kept)
     if kind != "image":
         raise ValueError(f"Unknown action library: {kind}")
     return _library("image_actions").brief(label, subjects[:2], camera, "auto", "auto", "as in the image", "auto", notes, "", "text description", "")
@@ -481,7 +482,11 @@ def _h3_repair_sections(text, pipe, mode):
         order.append((name, match.end()))
     for position, (name, start) in enumerate(order):
         end = order[position + 1][1] if position + 1 < len(order) else len(text)
-        blocks[name] = text[start:end].strip()
+        body = text[start:end]
+        # a section body can contain another heading (the model likes to add audio sections twice)
+        for other in sections:
+            body = re.sub(rf"(?m)^{other}:[ \t]*$.*?(?=^[a-z_]+:[ \t]*$|\Z)", "", body) if other != name else body
+        blocks[name] = body.strip()
     fallback = (pipe["settings"].get("prompt", {}).get("text") or "").strip()
     rebuilt = []
     for name in sections:
@@ -555,10 +560,11 @@ def _instructions(pipe, mode, context, max_words, style_prefix="", sections=None
                  "overall_soundscape": "90-150 words of sound only",
                  "non_diegetic_music": "one line, or N/A"}
         instruction += (
-            f"Use at most {max_words} words in total. Exact layout, with nothing before the first heading and nothing "
-            "after the last one: "
-            + "; ".join(f"{name} ({guide[name]})" for name in sections)
-            + ". One heading per line, trailing colon, content directly under it, no other headings. "
+            f"Use at most {max_words} words in total. Copy this skeleton exactly, fill the brackets and delete them:\n"
+            + "\n\n".join(f"{name}:\n<{guide[name]}>" for name in sections)
+            + "\n\nNothing before the first heading, nothing after the last one, no other headings. "
+            "Open the visual description with [Shot 1]; later shots need a cut that changes subject, space or viewpoint, "
+            "never a slight reframe. "
             "Open the visual description with [Shot 1]; later shots need a cut that changes subject, space or viewpoint, "
             "never a slight reframe. "
             "One action carries the clip. Add a second one only when a hand or mouth is free and the clip is long. "
@@ -584,9 +590,11 @@ def _instructions(pipe, mode, context, max_words, style_prefix="", sections=None
                else "No reference is attached, so no <Picture N> or <Video N> label appears. ")
             + ("subject_definitions names each subject and its reference. " if "subject_definitions" in sections else "")
             + ("retention_analysis states which appearance features are kept. " if "retention_analysis" in sections else "")
-            + "overall_soundscape: room tone, body impact, wet penetration, hands and bedding, breath and voice, speech as "
-            "<d>[English] spoken words</d>. non_diegetic_music: N/A unless asked. "
-            "Plain present tense, one visible fact per clause, no rating words, no filler such as mood or quality, no (weight:1.2) syntax, no quoted speech: "
+            + ("overall_soundscape: room tone, body impact, wet penetration, hands and bedding, breath and voice, speech as "
+               "<d>[English] spoken words</d>. non_diegetic_music: N/A unless asked. "
+               if "overall_soundscape" in sections else "")
+            +
+            " Plain present tense, one visible fact per clause, no rating words, no filler such as mood or quality, no (weight:1.2) syntax, no quoted speech: "
             "dialogue lives in <d>[English] words</d> and the speaker carries (S1) or (S2) at the first vocal event. "
             "Never copy the brief or the notes into the output, never explain a choice, never summarise at the end. ")
     elif family == "anima":
@@ -712,7 +720,13 @@ class ImagePromptWriter(io.ComfyNode):
                               if name in ("overall_soundscape", "non_diegetic_music")]
             template = _instructions(pipe, mode, context, budget, style_prefix,
                                      [name for name in _services()._MINIMAX_SECTIONS[mode] if name not in audio_sections])
-            sound_template = _instructions(pipe, mode, context, 220, style_prefix, audio_sections)
+            sound_template = (
+                "Output only these two headings and their content, nothing else:\n\n"
+                "overall_soundscape:\n<90-150 words of real sound for this clip>\n\n"
+                "non_diegetic_music:\n<one line, or N/A>\n\n"
+                "The soundscape names the room tone, the body impacts, the wet penetration sounds at the contact, the "
+                "bedding, and the breath and voice with any speech as <d>[English] words</d>. Write the sounds themselves, "
+                "not a list of categories.")
         if manual_template:
             template = manual_template + "\n\n" + template
         reference_rules = (
@@ -724,12 +738,8 @@ class ImagePromptWriter(io.ComfyNode):
             ("Preserve the required H3 sections and reference labels." if cls.H3 else ""))
         user_text = prompt["text"]
         if prompt.get("source") == "action" and cls.H3:
-            user_text = ("BRIEF (rewrite it, never copy it):\n<<<\n" + user_text + "\n>>>\n\n"
-                         "Rewrite the block above as flowing shot prose in the layout and word count. Keep every position, "
-                         "contact and camera fact and fold the labels into prose. Start the shot with the framing from the "
-                         "framing note and the camera line. A NOT, never or no line is a constraint: turn it into the state "
-                         "described, but keep the word when it prevents a real error (which hole, a second tip, an extra "
-                         "limb, the body drifting).\n\n")
+            user_text = (user_text + "\n\nWrite this as 650-900 words of continuous shot prose only: expand every "
+                         "position, contact, angle and reaction into visible detail and start with `[Shot 1]`.")
         elif prompt.get("source") == "action" and pipe["family"] == "anima" and len(re.findall(r"\bSubject 2\b", user_text)):
             user_text = ("The pair is one man and one woman: use 1girl 1boy and hetero, full body framing.\n\n" + user_text)
         elif prompt.get("source") == "action":
