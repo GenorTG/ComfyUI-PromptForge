@@ -550,14 +550,13 @@ def decode(pipe, tile_size=256, frames_per_pass=0, output_device="auto", audio_n
     latent, vae, audio_vae = require(pipe, "latent", "vae", "audio_vae")
     decoder = pipe["artifacts"].get("decode_vae", vae)
     free_vram()
-    # pre-flight: size the tiles from the VRAM actually free instead of waiting for an OOM
+    # 256 px tiles are what the upscale VAE decodes cleanly; under pressure only the
+    # frame batch shrinks, never the tile, so the seams stay consistent
     free = comfy.model_management.get_free_memory()
-    if tile_size and free < 2 << 30:
-        tile_size = min(tile_size, 128)
+    if free < 2 << 30:
         frames_per_pass = frames_per_pass or 8
-    attempts = [(tile_size, frames_per_pass)]
-    if tile_size:
-        attempts += [(max(64, tile_size // 2), frames_per_pass or 8), (64, frames_per_pass or 4)]
+    attempts = [(256, frames_per_pass)]
+    attempts += [(256, frames_per_pass or 8), (256, frames_per_pass or 4)]
     images = None
     for index, (tiles, per_pass) in enumerate(attempts):
         try:
