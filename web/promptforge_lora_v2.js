@@ -26,6 +26,11 @@ const CSS = `
 .pflora-handle{cursor:grab;color:#7d8b98;padding:0 2px;user-select:none}
 .pflora-name{flex:1;min-width:50px;overflow-wrap:anywhere;cursor:pointer}
 .pflora-num{width:62px;flex:0 0 auto;background:#0f1419;color:#e7eef5;border:1px solid #3b4a56;border-radius:3px;padding:2px 4px;box-sizing:border-box}
+.pflora-range-num{width:52px}
+.pflora-range{width:80px;text-align:center;cursor:default;opacity:.9}
+.pflora-dice{flex:0 0 auto;display:flex;align-items:center;gap:2px;cursor:pointer;opacity:.45;user-select:none}
+.pflora-dice input{margin:0}
+.pflora-dice-on{opacity:1}
 .pflora-part{flex:0 0 auto;background:#0f1419;color:#e7eef5;border:1px solid #3b4a56;border-radius:3px}
 .pflora-info-btn{flex:0 0 auto;cursor:pointer;width:19px;height:19px;border-radius:50%;border:1px solid #4b5c69;background:#22303c;color:#bfe0f7;font-style:italic;font-weight:700;line-height:1}
 .pflora-remove{flex:0 0 auto;cursor:pointer;border:0;background:none;color:#e88;font-size:13px}
@@ -73,17 +78,23 @@ function style() {
 }
 const widget = (node, name) => node.widgets?.find((entry) => entry.name === name);
 const text = (value) => value == null || value === "" ? "" : String(value);
+const numeric = (value, fallback) => value == null || value === "" || !Number.isFinite(Number(value)) ? fallback : Number(value);
 
-function numberInput(value, onChange, placeholder) {
+function numberInput(value, onChange, placeholder, clamp) {
   const input = el("input", { type: "number", step: 0.05, value: value ?? "", placeholder: placeholder || "", title: placeholder || "" }, {});
   input.className = "pflora-num";
-  input.addEventListener("change", () => onChange(input.value === "" ? null : Number(input.value)));
+  const commit = (raw) => {
+    let next = raw === "" || raw == null ? null : Number(raw);
+    if (next !== null && !Number.isFinite(next)) next = null;
+    if (next !== null && clamp) next = Math.max(clamp[0], Math.min(clamp[1], next));
+    if (next !== null) input.value = next;
+    onChange(next);
+  };
+  input.addEventListener("change", () => commit(input.value));
   input.addEventListener("wheel", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    const next = Math.round(((Number(input.value) || 0) + (event.deltaY < 0 ? 0.05 : -0.05)) * 100) / 100;
-    input.value = next;
-    onChange(next);
+    commit(Math.round(((Number(input.value) || 0) + (event.deltaY < 0 ? 0.05 : -0.05)) * 100) / 100);
   }, { passive: false });
   return input;
 }
@@ -94,21 +105,31 @@ function normalize(row) {
     enabled: row.enabled ?? row.on ?? true,
     model_strength: row.model_strength ?? row.model ?? 1,
     clip_strength: row.clip_strength ?? row.clip ?? null,
+    random: row.random === true,
+    min: numeric(row.min, 0.6),
+    max: numeric(row.max, 1),
     part: row.part || "all",
   };
 }
 function canonical(row) {
-  const { on, model, clip, ...rest } = row;
+  const { on, model, clip, random, min, max, ...rest } = row;
   const strength = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+  const edge = (value, fallback) => Math.max(-2, Math.min(2, numeric(value, fallback)));
+  const low = edge(min, 0.6);
+  const high = edge(max, 1);
   return {
     ...rest,
     name: row.name,
     enabled: row.enabled !== false,
     model_strength: strength(row.model_strength, 1),
     clip_strength: row.clip_strength == null || row.clip_strength === "" ? null : strength(row.clip_strength, 1),
+    random: row.random === true,
+    min: Math.min(low, high),
+    max: Math.max(low, high),
     part: row.part || "all",
   };
 }
+const blankRow = (name) => ({ name, enabled: true, model_strength: 1, clip_strength: null, random: false, min: 0.6, max: 1, part: "all" });
 
 function readState(node) {
   try {

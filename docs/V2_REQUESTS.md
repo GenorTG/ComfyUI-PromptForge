@@ -58,6 +58,7 @@ Every item is required. Keep the status current; do not drop one silently.
 - [x] The first pass is encoded and saved before the second pass so it survives a crash and can be judged while the refine runs; the final save stays the workflow result asset.
 
 ## Seeds
+- [x] LoRA seed control defaults to randomize; the stack seed tooltip says it seeds random strengths and group picks.
 - [x] Writer sampling: top_p, top_k, repetition and presence penalty exposed (temperature alone caused gibberish tails).
 - [x] One seed field only: drop the duplicate on the sampler node, keep it on the sampling settings.
 
