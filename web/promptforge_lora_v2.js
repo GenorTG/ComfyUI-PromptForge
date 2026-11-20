@@ -140,7 +140,7 @@ function readState(node) {
   }
 }
 
-function edit(node, action) {
+function edit(node, action, refresh = true) {
   const state = widget(node, "loras");
   const rows = readState(node);
   action(rows);
@@ -149,7 +149,7 @@ function edit(node, action) {
   finally { node.graph?.afterChange(); }
   state.callback?.(state.value);
   node.setDirtyCanvas?.(true, true);
-  node.promptforgeV2Refresh?.();
+  if (refresh) node.promptforgeV2Refresh?.();
 }
 
 function upstreamFamily(node) {
@@ -446,14 +446,14 @@ function openPicker(node, anchor, entriesOf, reload) {
         const present = readState(node).some((item) => item.name === entry.name);
         edit(node, (items) => {
           if (present) items.splice(items.findIndex((item) => item.name === entry.name), 1);
-          else items.push({ name: entry.name, enabled: true, model_strength: 1, clip_strength: null, part: "all" });
+          else items.push(blankRow(entry.name));
         });
         render();
       });
       tick.addEventListener("change", () => {
         edit(node, (items) => {
           const at = items.findIndex((item) => item.name === entry.name);
-          if (tick.checked && at < 0) items.push({ name: entry.name, enabled: true, model_strength: 1, clip_strength: null, part: "all" });
+          if (tick.checked && at < 0) items.push(blankRow(entry.name));
           if (!tick.checked && at >= 0) items.splice(at, 1);
         });
         render();
@@ -475,6 +475,8 @@ function buildUI(node) {
   style();
   const state = widget(node, "loras");
   if (!state) return;
+  const seed = widget(node, "seed");
+  if (seed) seed.tooltip = "Seeds the random strengths and the random group picks.";
   state.hidden = true;
   state.computeSize = () => [0, -4];
   if (state.inputEl) state.inputEl.style.display = "none";
@@ -597,10 +599,18 @@ function buildUI(node) {
 
     const tick = el("input", { type: "checkbox", checked: item.enabled !== false, title: item.enabled === false ? "Disabled" : "Enabled" }, {});
     tick.addEventListener("change", () => edit(node, (items) => { items[index].enabled = tick.checked; }));
+    const dice = el("label", { title: "Random strength between min and max" }, {});
+    dice.className = item.random ? "pflora-dice pflora-dice-on" : "pflora-dice";
+    dice.setAttribute("aria-pressed", String(item.random));
+    dice.addEventListener("click", (event) => {
+      event.preventDefault();
+      edit(node, (items) => { items[index].random = !items[index].random; });
+    });
+    dice.append(el("input", { type: "checkbox", checked: item.random }), el("span", { textContent: "🎲" }));
     const name = el("span", { textContent: item.name, title: item.name }, {});
     name.className = "pflora-name";
     name.addEventListener("click", () => edit(node, (items) => { items[index].enabled = items[index].enabled === false; }));
-    line.append(handle, tick, name);
+    line.append(handle, tick, dice, name);
 
     if (item.part && resolvedMode() !== "standard") {
       const part = el("select", { title: "Target layers (audiovisual models)" }, {});
@@ -611,10 +621,38 @@ function buildUI(node) {
       line.append(part);
     }
 
-    line.append(
-      numberInput(item.model_strength, (value) => edit(node, (items) => { items[index].model_strength = value ?? 1; }), "model"),
-      numberInput(item.clip_strength, (value) => edit(node, (items) => { items[index].clip_strength = value; }), "= model"),
-    );
+    if (item.random) {
+      const values = { min: item.min, max: item.max };
+      const range = el("input", { type: "text", readOnly: true, value: `${values.min} – ${values.max}`,
+        title: "Strength is drawn from this range for every run; clip follows the model" }, {});
+      range.className = "pflora-num pflora-range";
+      const sync = () => { range.value = `${values.min} – ${values.max}`; };
+      const set = (key) => (value) => {
+        values[key] = Math.max(-2, Math.min(2, value ?? (key === "min" ? 0.6 : 1)));
+        edit(node, (items) => { items[index][key] = values[key]; }, false);
+        sync();
+      };
+      const low = numberInput(values.min, set("min"), "min", [-2, 2]);
+      const high = numberInput(values.max, set("max"), "max", [-2, 2]);
+      low.className = "pflora-num pflora-range-num";
+      high.className = "pflora-num pflora-range-num";
+      const order = () => {
+        if (values.min <= values.max) return;
+        [values.min, values.max] = [values.max, values.min];
+        low.value = values.min;
+        high.value = values.max;
+        edit(node, (items) => { items[index].min = values.min; items[index].max = values.max; }, false);
+        sync();
+      };
+      low.addEventListener("blur", order);
+      high.addEventListener("blur", order);
+      line.append(low, high, range);
+    } else {
+      line.append(
+        numberInput(item.model_strength, (value) => edit(node, (items) => { items[index].model_strength = value ?? 1; }), "model"),
+        numberInput(item.clip_strength, (value) => edit(node, (items) => { items[index].clip_strength = value; }), "= model"),
+      );
+    }
     if (managerReady) {
       const info = el("button", { type: "button", textContent: "i", title: "LoRA information" }, {});
       info.className = "pflora-info-btn";
