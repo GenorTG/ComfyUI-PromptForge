@@ -1,0 +1,408 @@
+{
+  "1": {
+    "class_type": "PROMPTFORGE_V2_H3_MODEL",
+    "inputs": {
+      "model_name": "<SELECT_H3_DIFFUSION_MODEL>",
+      "clip_name": "<SELECT_H3_TEXT_ENCODER>",
+      "vae_name": "<SELECT_H3_VIDEO_VAE>",
+      "audio_vae_name": "<SELECT_H3_AUDIO_VAE>",
+      "decode_vae_name": "same",
+      "weight_dtype": "default",
+      "optimize_for": "balanced"
+    },
+    "_meta": {
+      "title": "Model"
+    }
+  },
+  "2": {
+    "class_type": "PROMPTFORGE_V2_LORA_STACK",
+    "inputs": {
+      "loras": "{\"filter\":\"all\",\"items\":[]}",
+      "layer_controls": "auto",
+      "seed": 0,
+      "skip_mismatched": true,
+      "balance": false,
+      "balance_floor": 0.0,
+      "pipe": [
+        "1",
+        0
+      ],
+      "model": [
+        "1",
+        1
+      ],
+      "clip": [
+        "1",
+        2
+      ]
+    },
+    "_meta": {
+      "title": "Loras"
+    }
+  },
+  "3": {
+    "class_type": "PROMPTFORGE_V2_PERFORMANCE",
+    "inputs": {
+      "attention": "as loaded",
+      "ffn_chunks": 2,
+      "sparse_attention": false,
+      "keep_percent": 10.0,
+      "use_slg": false,
+      "slg_layers": "22",
+      "slg_start": 0.0,
+      "slg_end": 0.5,
+      "pipe": [
+        "2",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Performance"
+    }
+  },
+  "4": {
+    "class_type": "PROMPTFORGE_V2_PREVIEW_SETTINGS",
+    "inputs": {
+      "enabled": true,
+      "max_resolution": 512,
+      "preview_frames": 4,
+      "preview_fps": 12,
+      "preview_quality": 80,
+      "tiny_vae": "taeh3-approx.safetensors",
+      "pipe": [
+        "3",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Preview"
+    }
+  },
+  "5": {
+    "class_type": "PROMPTFORGE_V2_H3_FORMAT",
+    "inputs": {
+      "width": 848,
+      "height": 480,
+      "seconds": 5.0,
+      "aspect": "custom",
+      "megapixels": 1.0,
+      "orientation": "as selected",
+      "pipe": [
+        "4",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Format"
+    }
+  },
+  "6": {
+    "class_type": "PROMPTFORGE_V2_LOAD_IMAGE",
+    "inputs": {
+      "filename": "<INPUT_REFERENCE.png>",
+      "role": "reference",
+      "index": 1,
+      "enabled": true,
+      "description": "",
+      "pipe": [
+        "5",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Reference Image"
+    }
+  },
+  "7": {
+    "class_type": "PROMPTFORGE_V2_H3_REFERENCES",
+    "inputs": {
+      "mode": "ref2v",
+      "ref_image_size": "match",
+      "frame_fit": "match first frame",
+      "pipe": [
+        "6",
+        0
+      ],
+      "reference_images": {
+        "reference_images.item_0": [
+          "6",
+          1
+        ]
+      }
+    },
+    "_meta": {
+      "title": "References"
+    }
+  },
+  "8": {
+    "class_type": "PROMPTFORGE_V2_WRITER_MODEL",
+    "inputs": {
+      "model": "[gguf] [LOCAL] [VISION] text_encoders/Huihui-Qwen3-VL-4B-Instruct-abliterated/Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0.gguf",
+      "quantization": "auto",
+      "context_size": 0,
+      "local_model_path": "",
+      "mmproj_path": ""
+    },
+    "_meta": {
+      "title": "Writer Model"
+    }
+  },
+  "9": {
+    "class_type": "PROMPTFORGE_V2_H3_PROMPT",
+    "inputs": {
+      "source": "raw",
+      "text": "",
+      "negative": "",
+      "action": "image: Portrait - neutral, facing camera",
+      "subject_1": "",
+      "subject_2": "",
+      "subject_3": "",
+      "camera": "auto",
+      "notes": "",
+      "soundscape": "",
+      "music": "N/A",
+      "generation": "minimax",
+      "pipe": [
+        "7",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Prompt"
+    }
+  },
+  "10": {
+    "class_type": "PROMPTFORGE_V2_H3_PROMPT_WRITER",
+    "inputs": {
+      "writer_preset": "auto",
+      "seed": 1,
+      "max_tokens": 4096,
+      "style_prefix": "",
+      "temperature": 0.55,
+      "top_p": 0.9,
+      "top_k": 40,
+      "repetition_penalty": 1.05,
+      "presence_penalty": 0.4,
+      "thinking": "off",
+      "checks": "strict",
+      "retries": "1",
+      "pipe": [
+        "9",
+        0
+      ],
+      "writer_model": [
+        "8",
+        0
+      ],
+      "text": [
+        "9",
+        1
+      ]
+    },
+    "_meta": {
+      "title": "Prompt Writer"
+    }
+  },
+  "11": {
+    "class_type": "PROMPTFORGE_V2_PROMPT_INSPECT",
+    "inputs": {
+      "pipe": [
+        "10",
+        0
+      ],
+      "text": [
+        "10",
+        1
+      ]
+    },
+    "_meta": {
+      "title": "Prompt Review"
+    }
+  },
+  "12": {
+    "class_type": "PROMPTFORGE_V2_H3_SAMPLING_SETTINGS",
+    "inputs": {
+      "seed": 0,
+      "steps": 8,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "beta57",
+      "shift_video": 0.0,
+      "shift_audio": 0.0,
+      "refine_steps": 3,
+      "refine_cfg": 1.0,
+      "refine_sampler": "er_sde",
+      "refine_scheduler": "linear from start",
+      "start_sigma": 0.9035,
+      "pipe": [
+        "11",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Sampling First And Refine"
+    }
+  },
+  "13": {
+    "class_type": "PROMPTFORGE_V2_H3_UPSCALE_SETTINGS",
+    "inputs": {
+      "upscale_model": "<SELECT_H3_FP32_LATENT_UPSCALER>",
+      "enabled": false,
+      "mode": "megapixels",
+      "percent": 200.0,
+      "megapixels": 1.0,
+      "pipe": [
+        "12",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Upscale Settings"
+    }
+  },
+  "14": {
+    "class_type": "PROMPTFORGE_V2_H3_PARTS",
+    "inputs": {
+      "parts_json": "[{\"text\":\"\",\"seconds\":5},{\"text\":\"\",\"seconds\":5}]",
+      "seed_policy": "increment",
+      "pipe": [
+        "13",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Parts"
+    }
+  },
+  "15": {
+    "class_type": "PROMPTFORGE_V2_H3_CONTINUITY",
+    "inputs": {
+      "mode": "independent",
+      "carried_frames": 22,
+      "transition": "cut",
+      "overlap_frames": 0,
+      "pipe": [
+        "14",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Continuity"
+    }
+  },
+  "16": {
+    "class_type": "PROMPTFORGE_V2_H3_SEQUENCE",
+    "inputs": {
+      "max_parts": 0,
+      "pipe": [
+        "15",
+        0
+      ],
+      "writer_model": [
+        "8",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Sequence"
+    }
+  },
+  "17": {
+    "class_type": "PROMPTFORGE_V2_FRAME_INTERPOLATE",
+    "inputs": {
+      "enabled": false,
+      "multiplier": 2,
+      "model_name": "rife_v4.26.safetensors",
+      "batch_size": 0,
+      "overlap": 2,
+      "scale": 1.0,
+      "pipe": [
+        "16",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Optional Rife"
+    }
+  },
+  "18": {
+    "class_type": "PROMPTFORGE_V2_VIDEO_CLEANUP",
+    "inputs": {
+      "enabled": false,
+      "denoise": false,
+      "denoise_quality": "Ultra",
+      "deblur": false,
+      "deblur_quality": "Low",
+      "pipe": [
+        "17",
+        0
+      ],
+      "images": [
+        "17",
+        1
+      ]
+    },
+    "_meta": {
+      "title": "Optional Cleanup"
+    }
+  },
+  "19": {
+    "class_type": "PROMPTFORGE_V2_H3_PREVIEW_SAVE",
+    "inputs": {
+      "save": true,
+      "filename_prefix": "video/PromptForge/h3_multipart_references",
+      "encoder_preset": "high quality",
+      "codec": "h265 (cpu x265)",
+      "speed": "slow",
+      "rate_control": "quality",
+      "quality": 17,
+      "bitrate_mbit": 40,
+      "bit_depth": "10",
+      "audio_bitrate_kbps": 320,
+      "film_grain": 0.0,
+      "pingpong": false,
+      "save_metadata": true,
+      "show_preview": true,
+      "loop_preview": true,
+      "autoplay_preview": true,
+      "pipe": [
+        "18",
+        0
+      ],
+      "images": [
+        "18",
+        1
+      ]
+    },
+    "_meta": {
+      "title": "Save Video"
+    }
+  },
+  "20": {
+    "class_type": "PROMPTFORGE_V2_PRESETS",
+    "inputs": {
+      "preset_name": "",
+      "presets": "{\"schema_version\":2,\"presets\":{}}",
+      "include_text": false,
+      "pipe": [
+        "19",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Presets"
+    }
+  },
+  "21": {
+    "class_type": "PROMPTFORGE_V2_RUN_INSPECT",
+    "inputs": {
+      "pipe": [
+        "20",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Run Inspect"
+    }
+  }
+}

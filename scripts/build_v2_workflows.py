@@ -96,12 +96,13 @@ class Graph:
                 source_node = self.nodes[source - 1]
                 source_type = source_node["outputs"][output]["type"]
                 target_type = socket_type(spec)
-                if source_type != target_type and "*" not in (source_type, target_type):
+                autogrow = target_type == "COMFY_AUTOGROW_V3"
+                if not autogrow and source_type != target_type and "*" not in (source_type, target_type):
                     raise ValueError(f"{role}.{name}: {source_type} != {target_type}")
                 sockets[-1]["link"] = link_id
                 source_node["outputs"][output]["links"].append(link_id)
                 self.links.append([link_id, source, output, node_id, len(sockets)-1, source_type])
-                api_inputs[name] = [str(source), output]
+                api_inputs[name] = {f"{name}.item_0": [str(source), output]} if autogrow else [str(source), output]
             elif not widget and not optional:
                 raise ValueError(f"{role}.{name}: required socket has no link")
         output_names = info.get("output_name", info.get("output", []))

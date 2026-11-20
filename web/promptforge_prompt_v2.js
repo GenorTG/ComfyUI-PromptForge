@@ -25,7 +25,7 @@ function panel(node, name, minHeight, maxHeight) {
   frame.append(content);
   frame.addEventListener("pointerdown", (event) => event.stopPropagation());
   frame.addEventListener("wheel", (event) => event.stopPropagation());
-  node.addDOMWidget(name, "promptforge_v2", frame, { serialize: false, getMinHeight: minHeight, getMaxHeight: () => maxHeight });
+  node.addDOMWidget(name, "promptforge_v2", frame, { serialize: false, getMinHeight: minHeight });
   return { frame, content };
 }
 function change(node, action) {
@@ -306,6 +306,9 @@ function promptUI(node, fallback) {
     const overflow = Math.max(0, full - MAX_HEIGHT);
     if (overflow) panelHeight = Math.max(120, panelHeight - overflow);
     targetHeight = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, full - overflow));
+    // keep a height the user dragged taller than the content
+    const current = node.size?.[1] || 0;
+    if (current > targetHeight) { targetHeight = current; panelHeight = Math.max(120, current - CHROME); }
     const width = Math.max(node.size?.[0] || 0, WIDTH);
     if (node.size && Math.abs(node.size[0] - width) < 1 && Math.abs(node.size[1] - targetHeight) < 1) return;
     node.setSize?.([width, targetHeight]);
