@@ -95,6 +95,8 @@ def _strip_context_echo(text):
 
 
 ANIMA_PREFIX = "nsfw, anime style, 2d, flat colors"
+SHOTS = ["auto", "close up", "upper body", "cowboy shot", "full body", "wide shot"]
+ANGLES = ["auto", "front view", "side view", "three-quarter view", "from above", "from below", "from behind", "pov"]
 
 
 def _prompt(pipe):
@@ -209,7 +211,20 @@ def _action_text(action, subjects, notes, camera):
     kind, label = action.split(": ", 1)
     if kind == "h3":
         library = _library("h3_actions")
-        return library.brief(label, library.ANY_CAMERA if camera == "auto" else camera, subjects, notes)
+        text = library.brief(label, library.ANY_CAMERA if camera == "auto" else camera, subjects, notes)
+        # these lines restate the writer instruction; drop them so the brief is content only
+        drop = ("This action is exactly", "The act is already", "The join is the", "Recommended aspect",
+                "Motion beats", "Write ", "Only Subject", "Its NOT", "Anatomy anchors", "His hips drive",
+                "Action preset:", "Action:", "Subject 1 is", "Subject 2 is", "Subject 3 is")
+        kept = []
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith(drop):
+                continue
+            if line.startswith("Camera:"):
+                line = "The camera holds " + line[len("Camera:"):].strip().rstrip(".") + "."
+            kept.append(line)
+        return "\n".join(kept)
     if kind != "image":
         raise ValueError(f"Unknown action library: {kind}")
     return _library("image_actions").brief(label, subjects[:2], camera, "auto", "auto", "as in the image", "auto", notes, "", "text description", "")
@@ -249,6 +264,8 @@ class ImagePrompt(io.ComfyNode):
                     io.String.Input("subject_2", default="", multiline=True),
                     io.String.Input("subject_3", default="", multiline=True),
                     io.Combo.Input("camera", options=["auto"] + sorted(_services()._CAMERAS(cls.H3)), default="auto"),
+                    io.Combo.Input("shot", options=SHOTS, default="auto", tooltip="Distance. auto keeps the brief's framing."),
+                    io.Combo.Input("angle", options=ANGLES, default="auto", tooltip="Viewpoint. auto keeps the brief's angle."),
                     io.String.Input("notes", default="", multiline=True),
                     io.String.Input("soundscape", default="", multiline=True, tooltip="Minimax generation only, raw mode: overall_soundscape line (room tone, dialogue, effects)."),
                     io.String.Input("music", default="N/A", tooltip="Minimax generation only, raw mode: non_diegetic_music. N/A when there is no score."),
@@ -258,7 +275,8 @@ class ImagePrompt(io.ComfyNode):
 
     @classmethod
     def execute(cls, pipe=None, source="raw", text="", negative="", action="", subject_1="", subject_2="", subject_3="",
-                camera="auto", notes="", text_in=None, soundscape="", music="N/A", generation=None):
+                camera="auto", notes="", text_in=None, soundscape="", music="N/A", generation=None,
+                shot="auto", angle="auto"):
         pipe = ensure_pipe(pipe, family="minimax_h3" if cls.H3 else "image")
         audio = (generation or cls.GENERATION) == "minimax"
         if text_in:
@@ -266,7 +284,12 @@ class ImagePrompt(io.ComfyNode):
         if cls.H3 and pipe["family"] != "minimax_h3":
             raise ValueError("H3 Prompt requires a minimax_h3 pipe.")
         if source == "action":
-            text = _action_text(action, (subject_1, subject_2, subject_3), notes, camera) + (f"\nAdditional intent: {text}" if text else "")
+            frame = " and ".join(part for part in (shot if shot != "auto" else "", angle if angle != "auto" else "") if part)
+            text = _action_text(action, (subject_1, subject_2, subject_3), notes, camera)
+            if cls.H3 and frame:
+                text += f"\nFraming: {frame}. The framing note wins over the camera line." + (f"\nAdditional intent: {text}" if text else "")
+            if not cls.H3 and frame:
+                text += f"\nFraming: {frame}."
             if audio and soundscape.strip():
                 text += f"\nSound direction: {soundscape.strip()}"
             if audio and music.strip() and music.strip() != "N/A":
@@ -534,7 +557,7 @@ def _instructions(pipe, mode, context, max_words, style_prefix="", sections=None
         instruction += (
             f"Use at most {max_words} words in total. Exact layout, with nothing before the first heading and nothing "
             "after the last one: "
-            + "; ".join(f"{name}: {guide[name]}" for name in sections)
+            + "; ".join(f"{name} ({guide[name]})" for name in sections)
             + ". One heading per line, trailing colon, content directly under it, no other headings. "
             "Open the visual description with [Shot 1]; later shots need a cut that changes subject, space or viewpoint, "
             "never a slight reframe. "
@@ -701,11 +724,12 @@ class ImagePromptWriter(io.ComfyNode):
             ("Preserve the required H3 sections and reference labels." if cls.H3 else ""))
         user_text = prompt["text"]
         if prompt.get("source") == "action" and cls.H3:
-            # action briefs carry NOT / never lines as constraints, and the writer must still emit the audio sections
-            user_text = ("Turn this brief into the shot description, following the layout and the word count. Keep every "
-                         "position, contact and camera fact as it is written and do not lengthen it. A NOT, never or no line is "
-                         "a constraint: fold it into the state described, but keep the word when it prevents a real error "
-                         "(which hole, a second tip, an extra limb, the body drifting).\n\n" + user_text)
+            user_text = ("BRIEF (rewrite it, never copy it):\n<<<\n" + user_text + "\n>>>\n\n"
+                         "Rewrite the block above as flowing shot prose in the layout and word count. Keep every position, "
+                         "contact and camera fact and fold the labels into prose. Start the shot with the framing from the "
+                         "framing note and the camera line. A NOT, never or no line is a constraint: turn it into the state "
+                         "described, but keep the word when it prevents a real error (which hole, a second tip, an extra "
+                         "limb, the body drifting).\n\n")
         elif prompt.get("source") == "action" and pipe["family"] == "anima" and len(re.findall(r"\bSubject 2\b", user_text)):
             user_text = ("The pair is one man and one woman: use 1girl 1boy and hetero, full body framing.\n\n" + user_text)
         elif prompt.get("source") == "action":
