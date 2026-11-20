@@ -299,22 +299,32 @@ function promptUI(node, fallback) {
       + (audio ? 100 : 0);
   };
   let targetHeight = MIN_HEIGHT;
-  const fit = () => {
-    const measured = measurable() || Math.max(120, estimate() - CHROME);
-    panelHeight = Math.max(120, Math.min(measured, MAX_HEIGHT - CHROME, 540));
-    const full = node.computeSize?.()[1] || panelHeight + CHROME;
-    const overflow = Math.max(0, full - MAX_HEIGHT);
-    if (overflow) panelHeight = Math.max(120, panelHeight - overflow);
-    targetHeight = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, full - overflow));
-    // keep a height the user dragged taller than the content
+  let sizedOnce = false;
+  // `grow` is only true when the caller wants the node re-measured (mode/source change).
+  // A plain refresh leaves whatever height the user dragged.
+  const fit = (grow = false) => {
     const current = node.size?.[1] || 0;
-    if (current > targetHeight) { targetHeight = current; panelHeight = Math.max(120, current - CHROME); }
+    if (sizedOnce && !grow && current >= MIN_HEIGHT) {
+      panelHeight = Math.max(120, current - CHROME);
+      return;
+    }
+    const measured = measurable() || Math.max(120, estimate() - CHROME);
+    panelHeight = Math.max(120, measured);
+    const full = (node.computeSize?.()[1] || panelHeight + CHROME) ;
+    targetHeight = Math.max(MIN_HEIGHT, full);
+    if (current > targetHeight) targetHeight = current;
+    panelHeight = Math.max(120, targetHeight - CHROME);
     const width = Math.max(node.size?.[0] || 0, WIDTH);
+    sizedOnce = true;
     if (node.size && Math.abs(node.size[0] - width) < 1 && Math.abs(node.size[1] - targetHeight) < 1) return;
     node.setSize?.([width, targetHeight]);
   };
+  let lastShape = "";
   function refresh() {
     const actionMode = source?.value === "action";
+    const shape = `${source?.value || ""}|${generationOf()}`;
+    const grow = shape !== lastShape;
+    lastShape = shape;
     for (const item of owned) hide(item, true);
     visible(actionBlock, actionMode);
     visible(subjectBlock, actionMode);
@@ -325,7 +335,7 @@ function promptUI(node, fallback) {
     negativeArea.placeholder = actionMode ? "Constraints kept out of the brief" : "What to keep out";
     syncAreas();
     paint();
-    fit();
+    fit(grow);
     node.setDirtyCanvas?.(true, true);
   }
   async function load() {

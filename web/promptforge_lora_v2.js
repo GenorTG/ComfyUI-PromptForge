@@ -535,17 +535,21 @@ function buildUI(node) {
   let targetHeight = MIN_HEIGHT;
   const frameWidget = node.addDOMWidget("lora_stack_editor", "promptforge_v2", frame, {
     serialize: false, getMinHeight: () => panelHeight });
-  const fit = () => {
+  let sizedOnce = false;
+  const fit = (grow = false) => {
+    const now = node.size?.[1] || 0;
+    if (sizedOnce && !grow && now >= MIN_HEIGHT) { panelHeight = Math.max(120, now - 200); return; }
     const measured = panel.scrollHeight;
     const natural = Number.isFinite(measured) && measured > 0 ? measured + 8 : 300;
     panelHeight = Math.max(120, Math.min(natural, MAX_HEIGHT - 160));
     const full = node.computeSize?.()[1] || panelHeight + 240;
     const overflow = Math.max(0, full - MAX_HEIGHT);
     if (overflow) panelHeight = Math.max(100, panelHeight - overflow);
-    targetHeight = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, full - overflow));
-    // a node the user dragged taller keeps its height, the panel just fills it
+    targetHeight = Math.max(MIN_HEIGHT, full - overflow);
     const current = node.size?.[1] || 0;
-    if (current > targetHeight) { targetHeight = current; panelHeight = Math.max(120, current - 200); }
+    if (current > targetHeight) targetHeight = current;
+    panelHeight = Math.max(120, targetHeight - 200);
+    sizedOnce = true;
     const width = Math.max(node.size?.[0] || 0, WIDTH);
     if (node.size && Math.abs(node.size[0] - width) < 1 && Math.abs(node.size[1] - targetHeight) < 1) return;
     node.setSize?.([width, targetHeight]);
@@ -692,7 +696,7 @@ function buildUI(node) {
     const on = all.filter((item) => item.enabled !== false).length;
     status.textContent = `${on} enabled · ${all.length} in stack${query ? ` · ${rows.length} shown` : ""} · layer: ${resolvedMode()}`;
     refreshFamily();
-    fit();
+    fit(!sizedOnce);
   }
 
   async function reload(rescan = false) {
