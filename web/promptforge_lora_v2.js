@@ -482,7 +482,7 @@ function buildUI(node) {
   if (state.inputEl) state.inputEl.style.display = "none";
 
   const frame = el("div", {}, {});
-  frame.style.cssText = "position:relative;width:100%;height:100%;min-width:0;overflow:auto;contain:layout paint";
+  frame.style.cssText = "position:relative;width:100%;height:calc(100% - 12px);min-width:0;overflow:auto;contain:layout paint";
   const panel = el("div", {}, { padding: "4px", boxSizing: "border-box" });
   panel.className = "pflora-panel";
   frame.append(panel);
@@ -749,6 +749,9 @@ function buildUI(node) {
     return result;
   };
 
+  node.resizable = true;
+  node.flags = node.flags || {};
+  node.flags.resizable = true;
   const previousResize = node.onResize;
   node.onResize = function (size) {
     size[0] = Math.max(size[0], WIDTH);

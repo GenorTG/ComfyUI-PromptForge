@@ -19,7 +19,7 @@ function button(label, action) {
 }
 function panel(node, name, minHeight, maxHeight) {
   const frame = element("div");
-  frame.style.cssText = "position:relative;width:100%;height:100%;min-width:0;overflow:hidden;contain:layout paint";
+  frame.style.cssText = "position:relative;width:100%;height:calc(100% - 12px);min-width:0;overflow:hidden;contain:layout paint";
   const content = element("div");
   content.style.cssText = "display:flex;flex-direction:column;gap:5px;padding:3px 14px 3px 3px;box-sizing:border-box;min-height:100%;color:var(--input-text);font:12px sans-serif";
   frame.append(content);
@@ -391,6 +391,9 @@ app.registerExtension({
     const created = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
       const result = created?.apply(this, arguments);
+      this.resizable = true;
+      this.flags = this.flags || {};
+      this.flags.resizable = true;
       if (!this.promptforgeV2Prompt) this.promptforgeV2Prompt = promptUI(this, nodeData.name.includes("_H3_") ? "minimax" : "image");
       return result;
     };
