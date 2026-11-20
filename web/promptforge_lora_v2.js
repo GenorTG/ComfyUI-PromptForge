@@ -533,8 +533,30 @@ function buildUI(node) {
   const WIDTH = 470;
   let panelHeight = 300;
   let targetHeight = MIN_HEIGHT;
+
+  // own grip: the canvas corner sits under a DOM widget, so drag from here instead
+  const grip = el("div");
+  grip.title = "Drag to resize";
+  grip.style.cssText = "position:absolute;right:1px;bottom:1px;width:16px;height:16px;cursor:nwse-resize;z-index:3;"
+    + "background:linear-gradient(135deg,transparent 46%,var(--border-color,#888) 46%,var(--border-color,#888) 54%,transparent 54%,transparent 64%,var(--border-color,#888) 64%,var(--border-color,#888) 72%,transparent 72%)";
+  frame.append(grip);
+  let drag = null;
+  grip.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+    event.preventDefault();
+    drag = { x: event.clientX, y: event.clientY, w: node.size[0], h: node.size[1] };
+    try { grip.setPointerCapture(event.pointerId); } catch { /* synthetic events */ }
+  });
+  grip.addEventListener("pointermove", (event) => {
+    if (!drag) return;
+    event.stopPropagation();
+    node.setSize([Math.max(320, drag.w + event.clientX - drag.x), Math.max(220, drag.h + event.clientY - drag.y)]);
+  });
+  const release = () => { drag = null; };
+  grip.addEventListener("pointerup", release);
+  grip.addEventListener("pointercancel", release);
   const frameWidget = node.addDOMWidget("lora_stack_editor", "promptforge_v2", frame, {
-    serialize: false, getMinHeight: () => panelHeight });
+    serialize: false, getMinHeight: () => 200 });
   let sizedOnce = false;
   const fit = (grow = false) => {
     const now = node.size?.[1] || 0;
@@ -756,8 +778,6 @@ function buildUI(node) {
   node.onResize = function (size) {
     size[0] = Math.max(size[0], WIDTH);
     size[1] = Math.max(size[1], MIN_HEIGHT);
-    targetHeight = size[1];
-    panelHeight = Math.max(120, size[1] - 200);
     return previousResize?.apply(this, arguments);
   };
   render();

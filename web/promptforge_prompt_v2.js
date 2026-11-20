@@ -19,13 +19,35 @@ function button(label, action) {
 }
 function panel(node, name, minHeight, maxHeight) {
   const frame = element("div");
-  frame.style.cssText = "position:relative;width:100%;height:calc(100% - 12px);min-width:0;overflow:hidden;contain:layout paint";
+  frame.style.cssText = "position:relative;width:100%;height:calc(100% - 12px);min-width:0;overflow:auto;contain:layout paint";
   const content = element("div");
   content.style.cssText = "display:flex;flex-direction:column;gap:5px;padding:3px 14px 3px 3px;box-sizing:border-box;min-height:100%;color:var(--input-text);font:12px sans-serif";
   frame.append(content);
   frame.addEventListener("pointerdown", (event) => event.stopPropagation());
   frame.addEventListener("wheel", (event) => event.stopPropagation());
-  node.addDOMWidget(name, "promptforge_v2", frame, { serialize: false, getMinHeight: minHeight });
+
+  // own grip: the canvas corner sits under a DOM widget, so drag from here instead
+  const grip = element("div");
+  grip.title = "Drag to resize";
+  grip.style.cssText = "position:absolute;right:1px;bottom:1px;width:16px;height:16px;cursor:nwse-resize;z-index:3;"
+    + "background:linear-gradient(135deg,transparent 46%,var(--border-color,#888) 46%,var(--border-color,#888) 54%,transparent 54%,transparent 64%,var(--border-color,#888) 64%,var(--border-color,#888) 72%,transparent 72%)";
+  frame.append(grip);
+  let drag = null;
+  grip.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+    event.preventDefault();
+    drag = { x: event.clientX, y: event.clientY, w: node.size[0], h: node.size[1] };
+    try { grip.setPointerCapture(event.pointerId); } catch { /* synthetic events */ }
+  });
+  grip.addEventListener("pointermove", (event) => {
+    if (!drag) return;
+    event.stopPropagation();
+    node.setSize([Math.max(320, drag.w + event.clientX - drag.x), Math.max(220, drag.h + event.clientY - drag.y)]);
+  });
+  const release = () => { drag = null; };
+  grip.addEventListener("pointerup", release);
+  grip.addEventListener("pointercancel", release);
+  node.addDOMWidget(name, "promptforge_v2", frame, { serialize: false, getMinHeight: () => 200 });
   return { frame, content };
 }
 function change(node, action) {
@@ -358,8 +380,6 @@ function promptUI(node, fallback) {
   node.onResize = function (size) {
     size[0] = Math.max(size[0], WIDTH);
     size[1] = Math.max(size[1], MIN_HEIGHT);
-    targetHeight = size[1];
-    panelHeight = Math.max(120, size[1] - CHROME);
     return previousResize?.apply(this, arguments);
   };
 
