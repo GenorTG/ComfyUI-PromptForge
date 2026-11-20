@@ -357,7 +357,9 @@ function promptUI(node, fallback) {
   const previousResize = node.onResize;
   node.onResize = function (size) {
     size[0] = Math.max(size[0], WIDTH);
-    size[1] = targetHeight;
+    size[1] = Math.max(size[1], MIN_HEIGHT);
+    targetHeight = size[1];
+    panelHeight = Math.max(120, size[1] - CHROME);
     return previousResize?.apply(this, arguments);
   };
 
