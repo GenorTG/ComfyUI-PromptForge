@@ -1,0 +1,266 @@
+{
+ "Portrait - neutral, facing camera": {
+  "label": "Portrait - neutral, facing camera",
+  "category": "SFW - portrait and expression",
+  "people": 1,
+  "brief": "{A} faces the camera straight on, head level, eyes open and looking into the lens, mouth relaxed, shoulders square to the frame, hands out of frame."
+ },
+ "Portrait - soft smile": {
+  "label": "Portrait - soft smile",
+  "category": "SFW - portrait and expression",
+  "people": 1,
+  "brief": "{A} faces the camera with the head tilted a few degrees, a soft closed-mouth smile, eyes to the lens, one hand resting at the side of the neck."
+ },
+ "Portrait - looking away": {
+  "label": "Portrait - looking away",
+  "category": "SFW - portrait and expression",
+  "people": 1,
+  "brief": "{A} stands with the body at three-quarters to the camera, head turned away to the side, eyes on something outside the frame, hands relaxed at the sides."
+ },
+ "Portrait - over the shoulder": {
+  "label": "Portrait - over the shoulder",
+  "category": "SFW - portrait and expression",
+  "people": 1,
+  "brief": "{A} stands with the back three-quarters to the camera and looks back over one shoulder into the lens, chin near the shoulder, one hand loose at the hip."
+ },
+ "Portrait - from above, looking up": {
+  "label": "Portrait - from above, looking up",
+  "category": "SFW - portrait and expression",
+  "people": 1,
+  "brief": "{A} sits or crouches low and tilts the face up to the camera, eyes to the lens, shoulders relaxed, hands on the knees."
+ },
+ "Portrait - profile": {
+  "label": "Portrait - profile",
+  "category": "SFW - portrait and expression",
+  "people": 1,
+  "brief": "{A} stands side-on in full profile, face forward, eyes looking ahead out of frame, gaze directed past the camera, arms relaxed."
+ },
+ "Portrait - chin on hand": {
+  "label": "Portrait - chin on hand",
+  "category": "SFW - portrait and expression",
+  "people": 1,
+  "brief": "{A} leans forward with one elbow on a surface, chin resting on the back of the hand, eyes to the lens, the other arm folded under it."
+ },
+ "Portrait - hands in hair": {
+  "label": "Portrait - hands in hair",
+  "category": "SFW - portrait and expression",
+  "people": 1,
+  "brief": "{A} faces the camera with both hands in the hair, elbows out, head tilted back slightly, eyes half closed and lips parted."
+ },
+ "Portrait - laughing": {
+  "label": "Portrait - laughing",
+  "category": "SFW - portrait and expression",
+  "people": 1,
+  "brief": "{A} faces the camera mid-laugh, head tipped back, eyes squeezed shut, one hand lifted near the chest, shoulders loose."
+ },
+ "Portrait - serious, low angle": {
+  "label": "Portrait - serious, low angle",
+  "category": "SFW - portrait and expression",
+  "people": 1,
+  "brief": "{A} stands tall with the chin slightly down, eyes straight into a low camera, arms at the sides, expression flat and direct."
+ },
+ "Solo - standing, relaxed": {
+  "label": "Solo - standing, relaxed",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} stands facing the camera with the weight on one leg, the other knee soft, hips slightly offset, arms hanging loose, face to the lens."
+ },
+ "Solo - standing, hand on hip": {
+  "label": "Solo - standing, hand on hip",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} stands three-quarters to the camera, weight on the back leg, one hand planted on the hip with the elbow out, the other arm relaxed, chin lifted."
+ },
+ "Solo - sitting on a chair": {
+  "label": "Solo - sitting on a chair",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} sits on a chair facing the camera, both feet on the floor, knees together, hands resting on the thighs, back away from the backrest."
+ },
+ "Solo - sitting on the floor": {
+  "label": "Solo - sitting on the floor",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} sits on the floor with the knees drawn up and both arms wrapped around them, chin on the knees, eyes to the camera."
+ },
+ "Solo - kneeling": {
+  "label": "Solo - kneeling",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} kneels upright on both knees facing the camera, thighs together, hands resting on the thighs, back straight, face to the lens."
+ },
+ "Solo - crouching": {
+  "label": "Solo - crouching",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} crouches low on the balls of the feet, knees apart, forearms resting on the knees, face lifted to the camera."
+ },
+ "Solo - lying on the back": {
+  "label": "Solo - lying on the back",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} lies on the back along a surface, one knee bent, arms above the head, face turned to the camera, body in a long line."
+ },
+ "Solo - lying on the side": {
+  "label": "Solo - lying on the side",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} lies on one side, propped on the lower elbow, the top leg bent over the other, the free hand at the waist, face to the lens."
+ },
+ "Solo - lying on the stomach": {
+  "label": "Solo - lying on the stomach",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} lies face down with the elbows under the shoulders and the chin on the hands, ankles crossed in the air, eyes to the camera."
+ },
+ "Solo - walking toward camera": {
+  "label": "Solo - walking toward camera",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} walks toward the camera mid-step, one leg forward, arms swinging naturally, chin up, eyes on the lens."
+ },
+ "Solo - leaning on a wall": {
+  "label": "Solo - leaning on a wall",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} leans one shoulder against a wall, the near leg bent with the foot flat on the wall, arms crossed, face to the camera."
+ },
+ "Solo - leaning forward on a table": {
+  "label": "Solo - leaning forward on a table",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} leans forward with both forearms on a table, shoulders down, face lifted to the camera, hips back."
+ },
+ "Solo - stretching, arms up": {
+  "label": "Solo - stretching, arms up",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} stands with both arms stretched overhead, fingers linked, back arched, face lifted and eyes closed."
+ },
+ "Solo - dancing": {
+  "label": "Solo - dancing",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} is caught mid-dance with the hips swung to one side, one arm high and the other across the body, head turned to the camera."
+ },
+ "Solo - back to camera, looking back": {
+  "label": "Solo - back to camera, looking back",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} stands with the back to the camera, both arms raised to the hair, head turned so one eye meets the lens over the shoulder."
+ },
+ "Solo - sitting on a bed": {
+  "label": "Solo - sitting on a bed",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} sits on the edge of a bed facing the camera, legs crossed at the knee, hands braced either side of the hips, leaning back slightly."
+ },
+ "Solo - on all fours, SFW": {
+  "label": "Solo - on all fours, SFW",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} is on hands and knees side-on to the camera, back flat, head turned to the lens, hips level."
+ },
+ "Solo - jumping": {
+  "label": "Solo - jumping",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} is airborne with both knees tucked and both arms out, hair and clothing lifted, face to the camera."
+ },
+ "Solo - sitting on a windowsill": {
+  "label": "Solo - sitting on a windowsill",
+  "category": "SFW - solo pose",
+  "people": 1,
+  "brief": "{A} sits sideways on a windowsill with both legs drawn up, one arm around the knees, head against the glass, face to the camera."
+ },
+ "Couple - standing side by side": {
+  "label": "Couple - standing side by side",
+  "category": "SFW - couple pose",
+  "people": 2,
+  "brief": "{A} and {B} stand shoulder to shoulder facing the camera, the near arms around each other's waists, both faces to the lens."
+ },
+ "Couple - holding hands, walking": {
+  "label": "Couple - holding hands, walking",
+  "category": "SFW - couple pose",
+  "people": 2,
+  "brief": "{A} and {B} walk toward the camera hand in hand, mid-step, faces to each other and then to the lens, arms linked."
+ },
+ "Couple - embracing": {
+  "label": "Couple - embracing",
+  "category": "SFW - couple pose",
+  "people": 2,
+  "brief": "{A} and {B} stand chest to chest, arms around each other's backs, heads resting together, eyes closed."
+ },
+ "Couple - forehead to forehead": {
+  "label": "Couple - forehead to forehead",
+  "category": "SFW - couple pose",
+  "people": 2,
+  "brief": "{A} and {B} stand close with foreheads touching, eyes closed, hands on each other's arms, faces in profile to the camera."
+ },
+ "Couple - lifting": {
+  "label": "Couple - lifting",
+  "category": "SFW - couple pose",
+  "people": 2,
+  "brief": "{B} holds {A} up with both arms under the thighs, {A}'s arms around {B}'s neck and legs around the waist, both faces to the camera."
+ },
+ "Couple - dipping": {
+  "label": "Couple - dipping",
+  "category": "SFW - couple pose",
+  "people": 2,
+  "brief": "{B} dips {A} backward with one arm behind the shoulders, {A} holds {B}'s shoulder, one leg lifted, both faces to each other."
+ },
+ "Couple - dancing": {
+  "label": "Couple - dancing",
+  "category": "SFW - couple pose",
+  "people": 2,
+  "brief": "{A} and {B} hold a dance frame, one pair of hands joined and the other on the waist and shoulder, caught mid-turn, faces close."
+ },
+ "Couple - piggyback": {
+  "label": "Couple - piggyback",
+  "category": "SFW - couple pose",
+  "people": 2,
+  "brief": "{A} rides on {B}'s back with arms around the neck, {B}'s hands under the thighs, both faces to the camera."
+ },
+ "Couple - sitting together": {
+  "label": "Couple - sitting together",
+  "category": "SFW - couple pose",
+  "people": 2,
+  "brief": "{A} and {B} sit side by side on the floor with shoulders touching, legs out, hands resting together in the laps, faces to the lens."
+ },
+ "Couple - lying head to head": {
+  "label": "Couple - lying head to head",
+  "category": "SFW - couple pose",
+  "people": 2,
+  "brief": "{A} and {B} lie on their backs head to head, faces turned to the camera, arms loose at the sides, ankles crossed."
+ },
+ "Couple - back hug": {
+  "label": "Couple - back hug",
+  "category": "SFW - couple pose",
+  "people": 2,
+  "brief": "{B} stands behind {A} with arms wrapped around the waist, chin on {A}'s shoulder, {A}'s hands over {B}'s, both faces to the camera."
+ },
+ "Couple - kiss": {
+  "label": "Couple - kiss",
+  "category": "SFW - couple pose",
+  "people": 2,
+  "brief": "{A} and {B} kiss face to face, eyes closed, one hand on the other's jaw, heads tilted slightly, framed from the chest up."
+ },
+ "Couple - dancing close": {
+  "label": "Couple - dancing close",
+  "category": "SFW - couple pose",
+  "people": 2,
+  "brief": "{A} and {B} sway together chest to chest, {A}'s arms over {B}'s shoulders and {B}'s hands at {A}'s waist, temples touching."
+ },
+ "Couple - lifting on the shoulders": {
+  "label": "Couple - lifting on the shoulders",
+  "category": "SFW - couple pose",
+  "people": 2,
+  "brief": "{B} stands upright holding {A} up by the thighs so {A} sits on {B}'s shoulders, {A}'s hands on {B}'s head, both faces up to the camera."
+ },
+ "Couple - sitting back to back": {
+  "label": "Couple - sitting back to back",
+  "category": "SFW - couple pose",
+  "people": 2,
+  "brief": "{A} and {B} sit back to back on the floor with knees drawn up, heads tilted back against each other, eyes closed."
+ }
+}

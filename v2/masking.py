@@ -1,0 +1,72 @@
+"""Automatic reference masking using ComfyUI's native SAM3 implementation."""
+from pathlib import Path
+from threading import RLock
+
+import comfy.sd
+import folder_paths
+from comfy_api.latest import io
+from comfy_extras.nodes_sam3 import SAM3_Detect
+
+from .contracts import schema as nodes_schema, PIPE, ensure_pipe, evolve
+
+Pipe = io.Custom(PIPE)
+_SAM3_ATTENTION_LOCK = RLock()
+
+
+def sam3_checkpoints():
+    regular = folder_paths.get_filename_list("checkpoints")
+    root = Path(folder_paths.models_dir) / "sam3"
+    local = [f"sam3::{path.relative_to(root).as_posix()}" for path in root.rglob("*")
+             if path.is_file() and path.suffix.lower() in (".safetensors", ".ckpt", ".pt", ".pth")]
+    return ["(select SAM3 checkpoint)"] + regular + sorted(local)
+
+
+class SubjectMask(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return nodes_schema("SUBJECT", "MASK", "Subject Mask", description="Native SAM3 text segmentation. Select a SAM3 checkpoint containing its text encoder; no external node pack is needed.",
+                         inputs=[Pipe.Input("pipe", optional=True), io.Image.Input("image"),
+                                 io.Combo.Input("checkpoint", options=sam3_checkpoints()),
+                                 io.String.Input("subject", default="face, hair, neck"),
+                                 io.Float.Input("threshold", default=0.5, min=0, max=1, step=0.01),
+                                 io.Int.Input("refine_iterations", default=2, min=0, max=5)],
+                         outputs=[Pipe.Output(), io.Mask.Output("mask")])
+
+    @classmethod
+    def execute(cls, pipe=None, image=None, checkpoint=None, subject="face, hair, neck", threshold=0.5, refine_iterations=2):
+        pipe = ensure_pipe(pipe)
+        if not checkpoint:
+            raise ValueError("Select a SAM3 checkpoint first.")
+        if image is None:
+            raise ValueError("Connect an image to mask.")
+        if checkpoint.startswith("sam3::"):
+            root = (Path(folder_paths.models_dir) / "sam3").resolve()
+            path = (root / checkpoint.removeprefix("sam3::")).resolve()
+            if root not in path.parents or not path.is_file():
+                raise ValueError("Select an existing SAM3 checkpoint inside models/sam3.")
+        else:
+            path = folder_paths.get_full_path_or_raise("checkpoints", checkpoint)
+        model, clip, *_ = comfy.sd.load_checkpoint_guess_config(str(path), output_vae=False, output_clip=True,
+                                                               embedding_directory=folder_paths.get_folder_paths("embeddings"))
+        if model.model.model_config.unet_config.get("image_model") not in ("SAM3", "SAM31") or clip is None:
+            raise ValueError("Subject Mask requires a native SAM3/SAM3.1 checkpoint with its text encoder.")
+        conditioning = clip.encode_from_tokens_scheduled(clip.tokenize(subject))
+        # SAM3's masked cross-attention is unsupported by some xformers builds,
+        # including the current Blackwell kernels. Use ComfyUI's PyTorch path.
+        import comfy.ldm.sam3.detector as detector
+        from comfy.ldm.modules.attention import attention_pytorch
+        with _SAM3_ATTENTION_LOCK:
+            previous = detector.optimized_attention
+            detector.optimized_attention = attention_pytorch
+            try:
+                mask = SAM3_Detect.execute(model, image, conditioning=conditioning, threshold=threshold,
+                                          refine_iterations=refine_iterations, individual_masks=False).args[0]
+            finally:
+                detector.optimized_attention = previous
+        out = evolve(pipe, "mask", {"checkpoint": checkpoint, "subject": subject, "threshold": threshold,
+                                       "refine_iterations": refine_iterations}, {"source_mask": mask})
+        return io.NodeOutput(out, mask)
+
+
+NODE_CLASS_MAPPINGS = {"PROMPTFORGE_V2_SUBJECT_MASK": SubjectMask}
+NODE_DISPLAY_NAME_MAPPINGS = {"PROMPTFORGE_V2_SUBJECT_MASK": "PromptForge V2 · Subject Mask"}

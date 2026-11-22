@@ -1,0 +1,214 @@
+{
+  "template": "h3_ref2v_reference_bank",
+  "family": "h3",
+  "task": "ref2v",
+  "ui": "h3_ref2v_reference_bank.json",
+  "api": "h3_ref2v_reference_bank.api.json",
+  "blank": true,
+  "native_template_menu": {
+    "file": "V2_h3_ref2v_reference_bank.json",
+    "intentional_ui_duplicate": true
+  },
+  "custom_packs": [
+    "ComfyUI-PromptForge"
+  ],
+  "node_types": [
+    "PROMPTFORGE_V2_FRAME_INTERPOLATE",
+    "PROMPTFORGE_V2_H3_DECODE",
+    "PROMPTFORGE_V2_H3_ENCODE",
+    "PROMPTFORGE_V2_H3_FIRST_PASS_PREVIEW",
+    "PROMPTFORGE_V2_H3_FORMAT",
+    "PROMPTFORGE_V2_H3_LATENT_UPSCALE",
+    "PROMPTFORGE_V2_H3_MODEL",
+    "PROMPTFORGE_V2_H3_PREVIEW_SAVE",
+    "PROMPTFORGE_V2_H3_PROMPT",
+    "PROMPTFORGE_V2_H3_PROMPT_WRITER",
+    "PROMPTFORGE_V2_H3_REFERENCES",
+    "PROMPTFORGE_V2_H3_REFERENCE_BANK",
+    "PROMPTFORGE_V2_H3_REFERENCE_SELECT",
+    "PROMPTFORGE_V2_H3_REFINE",
+    "PROMPTFORGE_V2_H3_SAMPLE",
+    "PROMPTFORGE_V2_H3_SAMPLING_SETTINGS",
+    "PROMPTFORGE_V2_H3_UPSCALE_SETTINGS",
+    "PROMPTFORGE_V2_LOAD_AUDIO",
+    "PROMPTFORGE_V2_LOAD_IMAGE",
+    "PROMPTFORGE_V2_LOAD_VIDEO",
+    "PROMPTFORGE_V2_LORA_STACK",
+    "PROMPTFORGE_V2_PERFORMANCE",
+    "PROMPTFORGE_V2_PRESETS",
+    "PROMPTFORGE_V2_PREVIEW_SETTINGS",
+    "PROMPTFORGE_V2_PROMPT_INSPECT",
+    "PROMPTFORGE_V2_RUN_INSPECT",
+    "PROMPTFORGE_V2_VIDEO_CLEANUP",
+    "PROMPTFORGE_V2_WRITER_MODEL"
+  ],
+  "roles": {
+    "model": "1",
+    "loras": "2",
+    "performance": "3",
+    "preview": "4",
+    "format": "5",
+    "bank_image": "6",
+    "bank_video": "7",
+    "bank_audio": "8",
+    "bank_image_entry": "9",
+    "bank_video_entry": "10",
+    "bank_audio_entry": "11",
+    "reference_selection": "12",
+    "references": "13",
+    "writer_model": "14",
+    "prompt": "15",
+    "prompt_writer": "16",
+    "prompt_review": "17",
+    "sampling_first_and_refine": "18",
+    "upscale_settings": "19",
+    "encode": "20",
+    "sample_first": "21",
+    "first_pass_preview": "22",
+    "latent_upscale": "23",
+    "sample_refine": "24",
+    "decode": "25",
+    "optional_rife": "26",
+    "optional_cleanup": "27",
+    "save_video": "28",
+    "presets": "29",
+    "run_inspect": "30"
+  },
+  "placeholders": [
+    {
+      "node": "1",
+      "role": "model",
+      "input": "model_name",
+      "value": "<SELECT_H3_DIFFUSION_MODEL>"
+    },
+    {
+      "node": "1",
+      "role": "model",
+      "input": "clip_name",
+      "value": "<SELECT_H3_TEXT_ENCODER>"
+    },
+    {
+      "node": "1",
+      "role": "model",
+      "input": "vae_name",
+      "value": "<SELECT_H3_VIDEO_VAE>"
+    },
+    {
+      "node": "1",
+      "role": "model",
+      "input": "audio_vae_name",
+      "value": "<SELECT_H3_AUDIO_VAE>"
+    },
+    {
+      "node": "6",
+      "role": "bank_image",
+      "input": "filename",
+      "value": "<OPTIONAL_BANK_IMAGE.png>"
+    },
+    {
+      "node": "7",
+      "role": "bank_video",
+      "input": "filename",
+      "value": "<OPTIONAL_BANK_VIDEO.mp4>"
+    },
+    {
+      "node": "8",
+      "role": "bank_audio",
+      "input": "filename",
+      "value": "<OPTIONAL_BANK_AUDIO.wav>"
+    },
+    {
+      "node": "19",
+      "role": "upscale_settings",
+      "input": "upscale_model",
+      "value": "<SELECT_H3_FP32_LATENT_UPSCALER>"
+    }
+  ],
+  "validation": {
+    "registration": "passed",
+    "links_and_types": "passed",
+    "preset_upstream_reach": "passed",
+    "ui_api_parity": "passed",
+    "blank_content": "passed",
+    "layout_overlap": "passed",
+    "execution": "not run: blank inputs and model artifacts required"
+  },
+  "artifacts": [
+    {
+      "role": "model",
+      "input": "model_name",
+      "placeholder": "<SELECT_H3_DIFFUSION_MODEL>"
+    },
+    {
+      "role": "model",
+      "input": "clip_name",
+      "placeholder": "<SELECT_H3_TEXT_ENCODER>"
+    },
+    {
+      "role": "model",
+      "input": "vae_name",
+      "placeholder": "<SELECT_H3_VIDEO_VAE>"
+    },
+    {
+      "role": "model",
+      "input": "audio_vae_name",
+      "placeholder": "<SELECT_H3_AUDIO_VAE>"
+    },
+    {
+      "role": "bank_image",
+      "input": "filename",
+      "placeholder": "<OPTIONAL_BANK_IMAGE.png>"
+    },
+    {
+      "role": "bank_video",
+      "input": "filename",
+      "placeholder": "<OPTIONAL_BANK_VIDEO.mp4>"
+    },
+    {
+      "role": "bank_audio",
+      "input": "filename",
+      "placeholder": "<OPTIONAL_BANK_AUDIO.wav>"
+    },
+    {
+      "role": "upscale_settings",
+      "input": "upscale_model",
+      "placeholder": "<SELECT_H3_FP32_LATENT_UPSCALER>"
+    }
+  ],
+  "notes": [
+    "Fill blank prompt text before queueing.",
+    "Raw mode skips writer execution; idea/action needs Writer Model.",
+    "RIFE is disabled by its enabled widget; enabling it requires a selected interpolation checkpoint.",
+    "H3 baseline from the legacy workflow and quality notes: euler/beta57, 8 steps, CFG 1, shifts 0/0; second pass er_sde, 3 steps, start sigma 0.9035; the second pass is the Upscale Settings switch."
+  ],
+  "schema_sha256": {
+    "PROMPTFORGE_V2_FRAME_INTERPOLATE": "9b2230741c399b263682f040cba7fb2e4d5ffa560e153debad7603139b6bd5b7",
+    "PROMPTFORGE_V2_H3_DECODE": "811f9779f8ce12a2a8151bc946e5dade0e5d1a8ac7832d2ab51a6443b0285ad7",
+    "PROMPTFORGE_V2_H3_ENCODE": "960aee9520cd59a2e58dbe0a9831c4b84e1fad3debff1d65bc85e0971fd9e044",
+    "PROMPTFORGE_V2_H3_FIRST_PASS_PREVIEW": "19e5e0bba68f6ca0725d8ad637999995995a72fbddfb224605357bc47a0318bd",
+    "PROMPTFORGE_V2_H3_FORMAT": "d4d17e07829a9d44837faaa8d32f03a8c7d9fe57593f49c9de71ff29309c5820",
+    "PROMPTFORGE_V2_H3_LATENT_UPSCALE": "ea0c11c4a5366062354e37a7666cd87eaf47478b7f14948c6dc0bed4cd823d22",
+    "PROMPTFORGE_V2_H3_MODEL": "1ed496769efc45fe5258ffb5e1846895662ef84eeda38e25e063d233794db148",
+    "PROMPTFORGE_V2_H3_PREVIEW_SAVE": "4784a6d5e50d5abb1c280e2945d31163682a71c39a25d3193df836a936efac65",
+    "PROMPTFORGE_V2_H3_PROMPT": "4074b36bfc2fcd30dd6c8e21ff948defaca07a68a237e9f3e1ae9596c7b0f640",
+    "PROMPTFORGE_V2_H3_PROMPT_WRITER": "5bd9f39c3416575b20d1b4cd2b73e98b07814bba94489ca26524f51d26ef0cbe",
+    "PROMPTFORGE_V2_H3_REFERENCES": "9ea0be5dfe48fcb5d52a5d61e0a8de24818c422343c9bd80d5269a687667f3ff",
+    "PROMPTFORGE_V2_H3_REFERENCE_BANK": "9dc14ff7bf7c54c785fbe96eb7ef0b9e19530871531d344094aafae364d2cbaa",
+    "PROMPTFORGE_V2_H3_REFERENCE_SELECT": "c9390075f78a5a531214930d2b859aa23660e7ab3bee309c526cd9552d73d362",
+    "PROMPTFORGE_V2_H3_REFINE": "c0c59970092f85a96f0816f85a6eb542b690200c6c03e147bc3b053e3dd44f6e",
+    "PROMPTFORGE_V2_H3_SAMPLE": "ecc48584d3297ba28dfe6ea3f72d3d068bb038bcfcfecf30bf4885181aa4b2f8",
+    "PROMPTFORGE_V2_H3_SAMPLING_SETTINGS": "00ad1c584d9ca326fcb3b2aecf7e8d449ba37c3e70cb28e86569277a9fb8de0a",
+    "PROMPTFORGE_V2_H3_UPSCALE_SETTINGS": "ecf75abb95f3f194fe0901f0cbc57cacea6f1a93f5248c0ced8dd082c2d4b14e",
+    "PROMPTFORGE_V2_LOAD_AUDIO": "ad2f1e49f5ae3e9059779261ea9d1ebe737214413faa0f15c5a231109824f86b",
+    "PROMPTFORGE_V2_LOAD_IMAGE": "477f9fb5771a0b7bd3c697bac1d52ac9ef51f626e317f547e91a72d822f6a4f3",
+    "PROMPTFORGE_V2_LOAD_VIDEO": "51cd74fd21caf8ec1944a520d8b144aadb507699324d8b43ca459bf6c4507c75",
+    "PROMPTFORGE_V2_LORA_STACK": "c86a879a8b4d75178908c8cb6c817240420484dd50dc29ba5560806ac0113875",
+    "PROMPTFORGE_V2_PERFORMANCE": "4c10cdc5e48e87a9b2fac3f4a3f1ac58634c5ed55963ea011a21297ebb6b6558",
+    "PROMPTFORGE_V2_PRESETS": "046808dbaed407846d58730ee3a374f7d395a85b4f3d5bae2cbf956ada1e82cc",
+    "PROMPTFORGE_V2_PREVIEW_SETTINGS": "5423901b2b1e6e6ec2de5394b5b35621e8bf1803fc57404809e5072bed0230e1",
+    "PROMPTFORGE_V2_PROMPT_INSPECT": "bdbfc9ace17f018a5bd5b78a50962bcb3c65514f1f936fdeddc11de5a74d7646",
+    "PROMPTFORGE_V2_RUN_INSPECT": "dda1f256fd4e5fa2f14122a10b52bc5532c5fb1ecd24ca1e8fef147034e686d5",
+    "PROMPTFORGE_V2_VIDEO_CLEANUP": "f68b9a61dcd7c828f3d4e20841e889007c6f525b0dbe8e5d46d62f1d42b04427",
+    "PROMPTFORGE_V2_WRITER_MODEL": "31a848da3b02e2c165d8572059fcc0d2b0415a4bdd2a7010f89a42bad65fdbef"
+  }
+}

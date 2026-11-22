@@ -1,0 +1,54 @@
+{
+ "Solo - standing, still": {
+  "label": "Solo - standing, still",
+  "category": "Solo female",
+  "roles": [
+   {
+    "gender": "female",
+    "role": "the woman stands"
+   }
+  ],
+  "brief": "{A} stands still in place, weight even, arms loose at the sides, chin level and eyes to the lens; the camera is a static medium shot with the whole body in frame.",
+  "aspect": "9:16",
+  "penetration": "auto"
+ },
+ "Solo - walking toward camera": {
+  "label": "Solo - walking toward camera",
+  "category": "Solo female",
+  "roles": [
+   {
+    "gender": "female",
+    "role": "the woman walks"
+   }
+  ],
+  "brief": "{A} walks slowly toward the camera, arms swinging naturally, hips leading; the camera retreats at the same pace so the body stays the same size in frame.",
+  "aspect": "9:16",
+  "penetration": "auto"
+ },
+ "Solo - turning in place": {
+  "label": "Solo - turning in place",
+  "category": "Solo female",
+  "roles": [
+   {
+    "gender": "female",
+    "role": "the woman turns"
+   }
+  ],
+  "brief": "{A} turns slowly on the spot from front to profile to back and round again, arms slack; the camera holds a static wide frame.",
+  "aspect": "16:9",
+  "penetration": "auto"
+ },
+ "Solo - seated on a chair": {
+  "label": "Solo - seated on a chair",
+  "category": "Solo female",
+  "roles": [
+   {
+    "gender": "female",
+    "role": "the woman sits"
+   }
+  ],
+  "brief": "{A} sits upright on a chair, hands on the knees, one ankle behind the other, eyes to the lens; the camera is static at chest height.",
+  "aspect": "16:9",
+  "penetration": "auto"
+ }
+}
