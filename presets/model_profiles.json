@@ -107,5 +107,23 @@
    "refine_scheduler": "linear_quadratic",
    "start_sigma": 0.9035
   }
+ },
+ "10eros max 8stepturbo v1.0 hybrid hq": {
+  "label": "Eros Max 8-step Turbo v1.0 (int8 checkpoint)",
+  "source": "maker's notes and workflow: LCM + simple, 8 steps, video shift 12 / audio shift 3, second pass 3 steps; second-pass values are an assumption",
+  "assumed": true,
+  "settings": {
+   "steps": 8,
+   "cfg": 1.0,
+   "sampler_name": "lcm",
+   "scheduler": "simple",
+   "shift_video": 12.0,
+   "shift_audio": 3.0,
+   "refine_steps": 3,
+   "refine_cfg": 1.0,
+   "refine_sampler": "lcm",
+   "refine_scheduler": "linear_quadratic",
+   "start_sigma": 0.9035
+  }
  }
 }

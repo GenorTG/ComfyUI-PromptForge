@@ -524,13 +524,13 @@ def _land_text(text):
 
 
 OUTPUT_CAPS = {  # preset -> hard cap, in words (tags for Anima); MiniMax scales with video_seconds
-    "enhance": 220,
-    "krea 2 t2i": 220,
-    "krea 2 edit": 220,
-    "moss image t2i": 320,
-    "moss image edit": 80,
-    "qwen image t2i": 380,
-    "qwen image edit": 160,
+    "enhance": 300,
+    "krea 2 t2i": 320,
+    "krea 2 edit": 340,
+    "moss image t2i": 440,
+    "moss image edit": 180,
+    "qwen image t2i": 440,
+    "qwen image edit": 240,
     "anima tags": 150,
     "pony→natural": 600,
     "refine": 600,
@@ -545,7 +545,7 @@ def _output_cap(preset, video_seconds=5):
     """Hard output cap for a preset, so a compact family does not get a 2000-word prompt."""
     key = (preset or "").lower()
     if "minimax" in key or "h3" in key:
-        return 900 if video_seconds > 10 else 750
+        return 1100 if video_seconds > 10 else 900  # the action brief asks for 650-900 words
     return OUTPUT_CAPS.get(key, 0)
 
 

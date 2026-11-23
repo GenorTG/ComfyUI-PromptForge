@@ -72,7 +72,7 @@ class PromptTests(unittest.TestCase):
         with patch.object(self.service.PROMPTFORGE_PromptEnhancer, "_generate", side_effect=replies) as generate:
             self.prompts.H3PromptWriter.execute(pipe, writer_model={}, writer_preset="Creative Rewrite")
         system = generate.call_args_list[0].kwargs["system_prompt"]
-        self.assertIn(self.non_explicit("Creative Rewrite"), system)
+        self.assertIn(self.non_explicit("Creative Rewrite", prune=False), system)
         self.assertIn("integrated_multimodal_description", system)
 
     def test_exhausted_repairs_block_output(self):
@@ -107,14 +107,15 @@ class PromptTests(unittest.TestCase):
         self.assertEqual(self.prompts._h3_issues(text, "t2va", context), [])
         self.assertTrue(self.prompts._h3_issues(text.replace("A tree", "<Picture 7> A tree"), "t2va", context))
 
-    def non_explicit(self, name):
+    def non_explicit(self, name, prune=True):
         """The preset as the writer sees it for a request that is not sexual."""
         text = self.service.PROMPTFORGE_PRESETS[name]["text"]
         text = self.prompts._SIZE_SECTION.sub("", self.prompts._EXPLICIT_SECTIONS.sub("", text))
         text = text.replace("whether it is worn, open, pulled aside or off", "and how it is worn")
         text = text.replace("and only the two or three props actually in frame", "and only the props the request names")
         text = text.replace("Start with: nsfw, anime style, 2d, flat colors.", "Start with: anime style, 2d, flat colors.").replace(self.prompts._RATING, 'Rating: "safe".')
-        return self.prompts._CAPABLE.sub("", text)
+        text = self.prompts._CAPABLE.sub("", text)
+        return self.prompts._drop_unused_camera_rules(self.prompts._fit_to_idea(text, ""), "") if prune else text
 
     def test_auto_writer_sends_the_family_template_and_no_act_scaffolding_for_a_plain_idea(self):
         pipe = self.prompts.ImagePrompt.execute(self.contracts.new_pipe("krea2"), source="idea", text="a knight on a cliff").args[0]
@@ -394,6 +395,55 @@ class PromptTests(unittest.TestCase):
         self.assertTrue(search("the balls parted into labia"))
         self.assertFalse(search("His scrotum slaps against her vulva with every stroke."))
         self.assertFalse(search("His balls swing between her thighs, her vulva spread."))
+
+    def test_a_long_idea_keeps_its_facts_limits_scale_and_dropped_facts_trigger_a_retry(self):
+        idea = ("the same exact girl from the provided image but now fully naked, petite uni student young adult girl that is cute with small breasts bent over a desk in a classroom "
+                "full of students, she is naked and being taken from behind by her teacher while panting and blushing from embarrassment, her toes barely reaching the ground and curling, "
+                "other students staring at the girl and the teacher having sex, class in session, realistic size difference between the girl and the professor with him being older")
+        edit = self.service.PROMPTFORGE_PRESETS["Krea 2 Edit"]["text"]
+        fitted = self.prompts._fit_to_idea(edit, idea)
+        self.assertIn("usually 100-", fitted); self.assertNotIn("100-200 words", fitted)
+        self.assertNotIn("two or three props", fitted); self.assertNotIn("four arms, four legs", fitted)
+        self.assertIn("small whole figures", fitted)
+        short_idea = self.prompts._fit_to_idea(edit, "a girl on a bed")
+        self.assertIn("usually 100-280 words, more when the request has more facts", short_idea)
+        self.assertIn("four arms, four legs", short_idea)
+        short = "The same person as the photo: petite build, long dark hair. She is nude on a desk, a man behind her, soft light, three-quarter view."
+        missing = self.prompts._dropped_facts(idea, short)
+        for word in ("classroom", "students", "blushing", "toes", "panting"):
+            self.assertIn(word, missing)
+        self.assertNotIn("naked", missing)
+        full = short + " The classroom of students stares, she is blushing and panting, her toes curling, her teacher behind her."
+        self.assertEqual([w for w in self.prompts._dropped_facts(idea, full) if w in ("classroom", "students", "blushing", "toes", "panting", "teacher")], [])
+        pipe = self.prompts.ImagePrompt.execute(self.contracts.new_pipe("krea2"), source="idea", text=idea).args[0]
+        outputs = iter([short, full])
+        with patch.object(self.service.PROMPTFORGE_PromptEnhancer, "_generate", side_effect=lambda **kw: next(outputs)) as generate:
+            result = self.prompts.ImagePromptWriter.execute(pipe, writer_model={}, retries="1").args[0]
+        self.assertEqual(generate.call_count, 2)
+        self.assertEqual(result["artifacts"]["text"], full)
+        self.assertIn("facts from the request", generate.call_args_list[1].kwargs["system_prompt"])
+
+    def test_unused_camera_rules_are_dropped_and_a_long_idea_gets_a_facts_first_block(self):
+        edit = self.service.PROMPTFORGE_PRESETS["Krea 2 Edit"]["text"]
+        plain = self.prompts._drop_unused_camera_rules(edit, "a girl on a bed")
+        self.assertNotIn("POV means the camera IS", plain)
+        self.assertNotIn("Over-the-shoulder keeps", plain)
+        self.assertIn("POV means the camera IS", self.prompts._drop_unused_camera_rules(edit, "a POV shot of a girl"))
+        self.assertIn("Over-the-shoulder keeps", self.prompts._drop_unused_camera_rules(edit, "seen from behind"))
+        pipe = self.prompts.ImagePrompt.execute(self.contracts.new_pipe("krea2"), source="idea", text="a classroom full of students and a blushing girl at a desk").args[0]
+        with patch.object(self.service.PROMPTFORGE_PromptEnhancer, "_generate", return_value="x") as generate:
+            try:
+                self.prompts.ImagePromptWriter.execute(pipe, writer_model={}, retries="off")
+            except ValueError:
+                pass
+        system = generate.call_args_list[0].kwargs["system_prompt"]
+        self.assertIn("# Priority", system)
+        self.assertIn("never the request", system)
+        self.assertIn("a guide, not a limit", system)
+        self.assertNotIn("Hard limit", system)
+        self.assertNotIn("POV means the camera IS", system)
+        self.assertIn("100-280", self.service.PROMPTFORGE_PRESETS["Krea 2 Edit"]["text"])
+        self.assertEqual(self.service.OUTPUT_CAPS["krea 2 edit"], 340)
 
 
 if __name__ == "__main__":

@@ -224,6 +224,18 @@ class H3Tests(unittest.TestCase):
             self.h3.decode(self.contracts.evolve(pipe, invalidate=("first_pass_audio",)), audio_from="first pass")
         self.assertEqual([float(sample) for sample in seen], [2.0, 1.0, 2.0])
 
+    def test_deflicker_removes_brightness_pumping_in_the_opening_frames_but_keeps_slow_changes(self):
+        torch = self.torch
+        level = torch.linspace(.30, .34, 60)                       # a slow, real brightness drift
+        pump = torch.zeros(60); pump[13:19] = torch.tensor([.04, .06, .03, -.07, -.05, .06])
+        clip = (level + pump).view(-1, 1, 1, 1).expand(60, 8, 8, 3).clone()
+        fixed = self.h3.deflicker(clip, 58)
+        before = (clip.mean((1, 2, 3)) - level).abs().max()
+        after = (fixed.mean((1, 2, 3)) - level).abs().max()
+        self.assertLess(float(after), float(before) / 3)
+        self.assertTrue(torch.equal(fixed[58:], clip[58:]))
+        self.assertTrue(torch.equal(self.h3.deflicker(clip[:5], 5), clip[:5]))
+
     def test_first_pass_preview_is_optional_and_keeps_original_pipe(self):
         from comfy_api.latest import io
         pipe = self.contracts.evolve(self.pipe(), artifacts={"latent": {"samples": self.torch.ones(1)}})

@@ -195,6 +195,7 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual((found["settings"]["steps"], found["settings"]["sampler_name"], found["user"]), (steps, sampler, False))
         eros = profiles.profile("[unet] MiniMax H3/video/10Eros_Max_8stepTurbo_v1.0_hybrid_activation_learned_HQ.safetensors")
         self.assertEqual((eros["settings"]["sampler_name"], eros["settings"]["shift_video"], eros["assumed"]), ("lcm", 12.0, True))
+        self.assertEqual(profiles.profile("[ckpt] MiniMax H3/no tags/10Eros_Max_8stepTurbo_v1.0_hybrid-int8_HQ.safetensors")["settings"]["sampler_name"], "lcm")
         prism = profiles.profile("[unet] MiniMax H3/video/PRISM_DMAD_PDMD_w6a8_g32.safetensors")
         self.assertEqual((prism["settings"]["scheduler"], prism["settings"]["start_sigma"]), ("beta57", 0.9035))
         self.assertIsNone(profiles.profile("[unet] Other/never_heard_of_it.safetensors"))

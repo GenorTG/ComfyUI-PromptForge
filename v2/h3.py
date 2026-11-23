@@ -573,6 +573,24 @@ def match_levels(tail, right, fade):
     return right + (corrected - right) * weight
 
 
+def deflicker(images, count):
+    """A continued clip pumps in brightness for a few frames after its guide frames (measured: swings of +-8 levels within 6 frames).
+    Each of the first `count` frames moves to the clip's own smooth brightness: a 15-frame median, then a 9-frame mean, so slow changes stay."""
+    count = min(count, images.shape[0])
+    if count < 9:
+        return images
+    weights = torch.tensor([.299, .587, .114], device=images.device, dtype=images.dtype)
+    luma = (images[:count, ..., :3] * weights).sum(-1).mean((1, 2))
+    padded = torch.nn.functional.pad(luma[None, None], (7, 7), mode="replicate")[0, 0]
+    median = padded.unfold(0, 15, 1).median(-1).values
+    smooth = torch.nn.functional.avg_pool1d(torch.nn.functional.pad(median[None, None], (4, 4), mode="replicate"), 9, 1)[0, 0]
+    shift = (smooth - luma).clamp(-.1, .1)
+    shift[-8:] *= torch.linspace(1, 0, 8, device=shift.device, dtype=shift.dtype)
+    corrected = images.clone()
+    corrected[:count] = (images[:count] + shift.view(-1, 1, 1, 1)).clamp(0, 1)
+    return corrected
+
+
 def join(previous, current, overlap_frames=0, transition="crossfade", level=True):
     checked(previous)
     checked(current)
@@ -585,6 +603,7 @@ def join(previous, current, overlap_frames=0, transition="crossfade", level=True
     n = min(max(0, overlap_frames), left.shape[0], right.shape[0])
     right = right.to(left)
     if level:
+        right = deflicker(right, n + 36)
         edge = n or min(4, left.shape[0], right.shape[0])
         right = match_levels(left[-edge:], right, max(2 * edge, 24))
     if n and transition == "crossfade":

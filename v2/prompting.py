@@ -491,6 +491,30 @@ _LEAVES_THE_BODY = re.compile(r"(?i)\b(?:pull(?:s|ed|ing)?|slid(?:es|ing)?|slip(
 _H3_EMPTY_REF = re.compile(r"\s*\((?:appears in|the first frame of|from)?\s*\)")
 
 
+_FACT_STOP = set("""that this with from into onto over under while being then than their there these those would could should about after before also just very some such only same exact
+exactly form provided image picture photo now but and the her his she for are was were has have had who whom which what when where each every other another like make made show shows
+showing scene style realistic more most much many them they your you its not never without within between through while during still again here keep keeps kept look looks looking""".split())
+_FACT_SYNONYMS = [{"naked", "nude", "bare", "unclothed", "undressed", "topless", "bottomless", "unclad"}, {"blushing", "blush", "flushed", "flush", "reddened", "crimson", "embarrassed", "embarrassment", "embarassment"},
+                  {"fucked", "fucking", "sex", "penetrating", "penetrated", "thrusting", "inside", "behind"}, {"students", "student", "classmates", "pupils", "classroom", "class"},
+                  {"teacher", "professor", "lecturer", "instructor"}, {"breasts", "breast", "chest", "boobs"}, {"ass", "butt", "buttocks", "rear", "bottom"},
+                  {"panting", "gasping", "breathless", "breathing"}, {"toes", "toe", "feet", "foot"}, {"staring", "stare", "watching", "looking", "gazing"}]
+
+
+def _dropped_facts(idea, text):
+    """Content words of the idea that the finished prompt never mentions, synonyms and word stems allowed."""
+    have = {word[:5] for word in re.findall(r"[a-z]+", text.lower())}
+    have_words = set(re.findall(r"[a-z]+", text.lower()))
+    missing = []
+    for word in dict.fromkeys(re.findall(r"[a-z]{4,}", idea.lower())):
+        if word in _FACT_STOP or word[:5] in have:
+            continue
+        group = next((g for g in _FACT_SYNONYMS if word in g), None)
+        if group and (group & have_words or {w[:5] for w in group} & have):
+            continue
+        missing.append(word)
+    return missing
+
+
 def _h3_headings(text, mode):
     """One heading per line, colon attached, content underneath: repair what the writer returns."""
     for section in _h3_section_names(mode):
@@ -703,11 +727,42 @@ def _male_present(prompt):
     return bool(_MALE_WORDS.search(prompt.get("text", "")))
 
 
-def _system_text(service, preset, context, style_prefix="", sections=None, negative="", explicit=True, male=True, sized=True, brief=False):
+_CROWD = re.compile(r"(?i)\b(?:students|classmates|crowd|audience|onlookers|spectators|bystanders|everyone|other people|people watching|watching|staring)\b")
+
+
+_CAMERA_BULLETS = (("- POV means the camera IS", re.compile(r"(?i)\bpov\b|point of view|first person")),
+                   ("- Over-the-shoulder keeps the near shoulder", re.compile(r"(?i)over[- ]the[- ]shoulder|from behind|top[- ]down|low angle|high angle|dutch|close[- ]up")))
+
+
+def _drop_unused_camera_rules(text, request):
+    """The camera section describes every geometry; an idea that picked none spends its words on all of them."""
+    for start, wanted in _CAMERA_BULLETS:
+        if not wanted.search(request):
+            text = re.sub(rf"(?m)^{re.escape(start)}.*\n", "", text)
+    return text
+
+
+def _fit_to_idea(text, idea):
+    """Output limits are written for a short idea: a long one with many facts loses them to the word range, the two-body rule or the prop limit."""
+    words = len(idea.split())
+    need = min(450, round(words * 2.4)) if words > 40 else 0
+    text = re.sub(r"(# Output\n[^\n]*?)(\d+)-(\d+) words", lambda m: f"{m.group(1)}usually {m.group(2)}-{max(int(m.group(3)), need)} words, more when the request has more facts", text, count=1)
+    text = text.replace("One or two sentences,", "One paragraph,")
+    text = text.replace("and the two or three props in the frame", "and every prop and person the request names")
+    if _CROWD.search(idea):
+        text = text.replace("Keep two complete bodies: two heads, four arms, four legs.",
+                            "Keep every person's body complete and separate (count each head, arms and legs); the main pair's torsos meet only at the named contact. People the request places in the background stay in the picture as small whole figures.")
+    return text
+
+
+def _system_text(service, preset, context, style_prefix="", sections=None, negative="", explicit=True, male=True, sized=True, brief=False, idea="", request=None):
     """The writer's system prompt: the family template, then only the facts of this request."""
     seconds = float(context.get("duration") or 5)
     text = service.PROMPTFORGE_PRESETS[preset]["text"].replace("{video_seconds}", f"{seconds:.2f}")
     # the Order list asks for "two or three props": a small writer invents them (an apple, a pillow, a newspaper)
+    text = _fit_to_idea(text, idea)
+    if request is not None:
+        text = _drop_unused_camera_rules(text, request)
     text = text.replace("and only the two or three props actually in frame", "and only the props the request names").replace("5. Place and the props in the frame.", "5. Place and only the props the request names.")
     if not explicit:
         text = _EXPLICIT_SECTIONS.sub("", text).replace("Start with: nsfw, anime style, 2d, flat colors.", "Start with: anime style, 2d, flat colors.").replace(_RATING, 'Rating: "safe".')
@@ -726,10 +781,11 @@ def _system_text(service, preset, context, style_prefix="", sections=None, negat
     if not sized:
         text = _SIZE_SECTION.sub("", text)
     parts = [text]
+    # no model here truncates its text (the encoders and the image models take any length), so length is a guide: the facts decide it
     cap = service._output_cap(preset, seconds)
     if cap and not sections:
-        parts.append(f"# Output length\nHard limit: at most {cap} {'tags' if 'tags' in preset.lower() else 'words'}. "
-                     "Compress detail to fit; never drop a requested element.")
+        parts.append(f"# Output length\nA typical prompt for this model runs about {cap} {'tags' if 'tags' in preset.lower() else 'words'}. "
+                     "That is a guide, not a limit: write as much as the request needs, and never drop, merge or soften a fact to stay short.")
     if context.get("width") and context.get("height"):
         parts.append(f"# Target frame\nThe picture is {context['orientation']}: compose the scene to fit it. Never write the frame size.")
     if context["picture_count"] or context["video_count"] or context["audio"]:
@@ -752,6 +808,9 @@ def _system_text(service, preset, context, style_prefix="", sections=None, negat
         parts.append("If a person appears, they are dressed: name every garment they wear, with colour and material.")
     parts.append("Keep what the request states exactly: when it places the arms, hands, legs or camera, repeat that placement and give them no other position. "
                  "Add nothing that covers a face or body (helmet, mask, hood, shadow) unless the request names it.")
+    if idea.strip():
+        parts.append("# Priority\nEvery fact the request states appears in the prompt: each person and how many, the place, body state, expression, posture and each detail it names. "
+                     "The rules above for size, camera and anatomy shape how those facts are written; they never replace one. When words run short, shorten the rule-driven detail, never the request.")
     if explicit and context["family"] != "minimax_h3":
         parts.append("Describe only the anatomy the pose and camera show: a part the pose hides or turns away from the lens is left out, and nothing is shown twice.")
     parts.append("The lists and examples in this template show the format: write only what this request needs, never a whole list.")
@@ -830,7 +889,8 @@ class ImagePromptWriter(io.ComfyNode):
         explicit, male = _is_explicit(prompt), _male_present(prompt)
         sized = bool(_SIZE_WORDS.search(prompt.get("text", "")))
         system_base = _system_text(service, preset, context, style_prefix, picture_sections if cls.H3 else None, negative, explicit, male, sized,
-                                   brief=prompt.get("source") == "action")
+                                   brief=prompt.get("source") == "action", idea=prompt.get("text", "") if prompt.get("source") == "idea" else "",
+                                   request=" ".join(str(prompt.get(key, "")) for key in ("text", "camera", "shot", "angle")) if prompt.get("source") == "idea" and not cls.H3 else None)
         sound_base = _system_text(service, preset, context, "", sound_sections, negative, explicit, male, sized) if sound_sections else ""
         user_text = prompt["text"]
         if prompt.get("source") == "action" and cls.H3:
@@ -884,10 +944,15 @@ class ImagePromptWriter(io.ComfyNode):
                 if prompt.get("source") == "action" and _LEAVES_THE_BODY.search(text) and _library("h3_actions").penetration_modes(str(prompt.get("action", "")).split(": ", 1)[-1]):
                     issues.append("the shaft leaves the body during the stroke: keep it inside through the whole stroke")
             records.append({"seed": attempt_seed, "text": text, "validation": issues, "request": request, "thinking": thought})
+            if prompt.get("source") == "idea" and checks != "off":
+                dropped = _dropped_facts(prompt.get("text", ""), text)
+                if len(dropped) >= 3 and len(dropped) >= 0.2 * len(set(re.findall(r"[a-z]{4,}", prompt.get("text", "").lower()))):
+                    issues.append("facts from the request are missing from the prompt: " + ", ".join(dropped[:8]) + ". Write every one of them in")
+                    records[-1]["validation"] = issues
             conflict = _shot_conflict(text) if pipe["family"] == "anima" and checks != "off" else ""
             # negative wording alone is a blemish, not a failure: after the last retry the text is used and the warning stays in the report
             last = index == attempts - 1
-            blemish = all(issue.startswith(("negative wording", "description too long", "the shaft leaves", "female anatomy written")) for issue in issues)
+            blemish = all(issue.startswith(("negative wording", "description too long", "the shaft leaves", "female anatomy written", "facts from the request")) for issue in issues)
             if (not issues or last and blemish) and (not conflict or last):
                 result = evolve(pipe, artifacts={"text": text, "writer": {
                     "status": "valid", "validation": issues, "attempts": records, "max_tokens": max_tokens,
