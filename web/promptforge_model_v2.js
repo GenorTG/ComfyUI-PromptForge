@@ -7,8 +7,8 @@ const FOLDERS = { anima: "Anima/", krea2: "Krea 2/", moss_image: "MOSS Image/" }
 const FAMILY_ORDER = ["krea2", "moss_image", "anima"];
 
 const CSS = `
-.pfmodel-row{display:flex;gap:4px;align-items:center;width:100%;min-width:0;box-sizing:border-box;padding:0 2px}
-.pfmodel-select{flex:1;min-width:0;box-sizing:border-box;background:var(--comfy-input-bg,#1b2026);color:var(--input-text,#e7eef5);border:1px solid #46545f;border-radius:4px;padding:3px 4px;font:12px system-ui,sans-serif}
+.pfmodel-row{display:flex;flex-wrap:wrap;gap:4px;align-items:center;width:100%;min-width:0;box-sizing:border-box;padding:0 2px}
+.pfmodel-select{flex:1 1 100%;min-width:0;box-sizing:border-box;background:var(--comfy-input-bg,#1b2026);color:var(--input-text,#e7eef5);border:1px solid #46545f;border-radius:4px;padding:3px 4px;font:12px system-ui,sans-serif}
 .pfmodel-info{flex:0 0 auto;cursor:pointer;width:21px;height:21px;border-radius:50%;border:1px solid #4b5c69;background:#22303c;color:#bfe0f7;font-style:italic;font-weight:700;line-height:1;padding:0}
 .pfmodel-info:disabled{opacity:.4;cursor:default}
 .pfmodel-overlay{position:fixed;inset:0;z-index:10003;display:flex;align-items:center;justify-content:center;padding:8px;box-sizing:border-box;background:#000a}
@@ -286,7 +286,7 @@ function buildUI(node) {
   const info = el("button", { type: "button", textContent: "i", title: "Model information" });
   info.className = "pfmodel-info";
   row.append(select, info);
-  const rowWidget = node.addDOMWidget("model_picker", "promptforge_v2", row, { serialize: false, getMinHeight: () => 48 });
+  const rowWidget = node.addDOMWidget("model_picker", "promptforge_v2", row, { serialize: false, getMinHeight: () => 104 });
   rowWidget.serialize = false;
   reorder(node, rowWidget, model);
 

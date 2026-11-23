@@ -58,7 +58,9 @@
       "clip": [
         "2",
         2
-      ]
+      ],
+      "mlp_only": false,
+      "max_rank": 0
     },
     "_meta": {
       "title": "Edit Lora"

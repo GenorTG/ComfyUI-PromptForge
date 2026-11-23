@@ -2771,12 +2771,20 @@ class PROMPTFORGE_PromptEnhancer:
             clip_obj = comfy.sd.load_clip(ckpt_paths=[src])
         except Exception as exc:
             raise ValueError(f"[PromptForge] ComfyUI could not load this text encoder: {exc}") from exc
-        enhanced = self._generate_with_clip(
-            system_prompt=system_prompt, user_prompt=user_prompt or full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
-            top_p=top_p, top_k=top_k, repetition_penalty=repetition_penalty, presence_penalty=presence_penalty,
-            seed=seed, image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
-            clip=clip_obj, disable_thinking=disable_thinking, auto_retry=auto_retry, min_chars=min_chars,
-        )
+        try:
+            enhanced = self._generate_with_clip(
+                system_prompt=system_prompt, user_prompt=user_prompt or full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
+                top_p=top_p, top_k=top_k, repetition_penalty=repetition_penalty, presence_penalty=presence_penalty,
+                seed=seed, image=image, image2=image2, image3=image3, video=video, frame_count=frame_count,
+                clip=clip_obj, disable_thinking=disable_thinking, auto_retry=auto_retry, min_chars=min_chars,
+            )
+        finally:
+            # a finished writer left its 9 GB staged in system RAM, where a full swap makes the next load stream slowly
+            del clip_obj
+            gc.collect()
+            comfy.model_management.unload_all_models()
+            comfy.model_management.cleanup_models()
+            comfy.model_management.soft_empty_cache()
         return enhanced
 
     # ------------------------------------------------------------------ #

@@ -422,7 +422,8 @@
       "latent": [
         "20",
         1
-      ]
+      ],
+      "audio_from": "second pass"
     },
     "_meta": {
       "title": "Decode"

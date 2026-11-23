@@ -1497,7 +1497,8 @@
           "frames_per_pass": 0,
           "output_device": "auto",
           "audio_normalize": false,
-          "audio_gain_db": 0.0
+          "audio_gain_db": 0.0,
+          "audio_from": "second pass"
         }
       },
       "widgets_values": [
@@ -1505,7 +1506,8 @@
         0,
         "auto",
         false,
-        0.0
+        0.0,
+        "second pass"
       ],
       "color": "#7a3b8a",
       "bgcolor": "#3d2248"

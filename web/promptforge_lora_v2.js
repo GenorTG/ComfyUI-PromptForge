@@ -18,13 +18,13 @@ const CSS = `
 .pflora-list{flex:1 1 auto;min-height:40px;max-height:360px;overflow-y:auto;overflow-x:hidden;border:1px solid #33414c;border-radius:5px;background:#13191e}
 .pflora-searchbox{flex:0 0 auto;width:100%;box-sizing:border-box;background:#0b1014;color:#e7eef5;border:1px solid #46545f;border-radius:4px;padding:3px 6px}
 .pflora-scope[aria-pressed="true"]{border-color:#4a86b8;background:#2e5f86;color:#fff}
-.pflora-row{display:flex;gap:5px;align-items:center;padding:4px 5px;border-bottom:1px solid #26323b;background:#1b232a}
+.pflora-row{display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:4px 5px;border-bottom:1px solid #26323b;background:#1b232a}
 .pflora-row.pflora-off .pflora-name{opacity:.5}
 .pflora-row.pflora-dragging{opacity:.55}
 .pflora-row.pflora-drop-before{box-shadow:inset 0 2px 0 #58a6ff}
 .pflora-row.pflora-drop-after{box-shadow:inset 0 -2px 0 #58a6ff}
 .pflora-handle{cursor:grab;color:#7d8b98;padding:0 2px;user-select:none}
-.pflora-name{flex:1;min-width:50px;overflow-wrap:anywhere;cursor:pointer}
+.pflora-name{flex:1 1 150px;min-width:110px;overflow-wrap:anywhere;cursor:pointer}
 .pflora-num{width:62px;flex:0 0 auto;background:#0f1419;color:#e7eef5;border:1px solid #3b4a56;border-radius:3px;padding:2px 4px;box-sizing:border-box}
 .pflora-range-num{width:52px}
 .pflora-range{width:80px;text-align:center;cursor:default;opacity:.9}

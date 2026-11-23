@@ -235,7 +235,7 @@ function promptUI(node, fallback) {
   const subjectBlock = element("div");
   subjectBlock.style.cssText = "display:flex;flex-direction:column;gap:4px";
   const subjectRow = element("div");
-  subjectRow.style.cssText = "display:flex;gap:4px";
+  subjectRow.style.cssText = "display:flex;gap:4px;flex-wrap:wrap";
   const camera = widget(node, "camera");
   const cameraSelect = element("select", { ariaLabel: "Camera" });
   cameraSelect.style.cssText = FIELD;

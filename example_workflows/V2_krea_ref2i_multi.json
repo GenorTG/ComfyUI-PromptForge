@@ -10,8 +10,8 @@
         76
       ],
       "size": [
-        314,
-        326
+        320,
+        390
       ],
       "flags": {},
       "order": 0,
@@ -89,7 +89,7 @@
       "type": "PROMPTFORGE_V2_LORA_STACK",
       "pos": [
         44,
-        458
+        522
       ],
       "size": [
         560,
@@ -186,7 +186,7 @@
       "type": "PROMPTFORGE_V2_SINGLE_LORA",
       "pos": [
         44,
-        1150
+        1214
       ],
       "size": [
         400,
@@ -251,14 +251,18 @@
           "lora_name": "Krea 2/tool/krea2_identity_edit_v2.safetensors",
           "enabled": true,
           "model_strength": 1.0,
-          "clip_strength": 1.0
+          "clip_strength": 1.0,
+          "mlp_only": false,
+          "max_rank": 0
         }
       },
       "widgets_values": [
         "Krea 2/tool/krea2_identity_edit_v2.safetensors",
         true,
         1.0,
-        1.0
+        1.0,
+        false,
+        0
       ],
       "color": "#2b5278",
       "bgcolor": "#1d3347"
@@ -666,7 +670,7 @@
       "type": "PROMPTFORGE_V2_KREA_EDIT_PREPARE",
       "pos": [
         44,
-        1632
+        1696
       ],
       "size": [
         356,
@@ -1027,7 +1031,7 @@
       "type": "PROMPTFORGE_V2_IMAGE_ENCODE",
       "pos": [
         44,
-        1918
+        1982
       ],
       "size": [
         322,
@@ -1137,11 +1141,11 @@
       "type": "PROMPTFORGE_V2_IMAGE_SAMPLE",
       "pos": [
         44,
-        2268
+        2332
       ],
       "size": [
-        322,
-        294
+        560,
+        640
       ],
       "flags": {},
       "order": 15,
@@ -1231,7 +1235,7 @@
       "type": "PROMPTFORGE_V2_IMAGE_LATENT_UPSCALE",
       "pos": [
         1078,
-        1632
+        1696
       ],
       "size": [
         372,
@@ -1295,7 +1299,7 @@
       "type": "PROMPTFORGE_V2_IMAGE_DECODE",
       "pos": [
         1078,
-        1830
+        1894
       ],
       "size": [
         264,
@@ -1357,7 +1361,7 @@
       "type": "PROMPTFORGE_V2_IMAGE_SAVE",
       "pos": [
         3538,
-        1632
+        1696
       ],
       "size": [
         440,
@@ -1415,7 +1419,7 @@
       "type": "PROMPTFORGE_V2_PRESETS",
       "pos": [
         3538,
-        2184
+        2248
       ],
       "size": [
         420,
@@ -1465,7 +1469,7 @@
       "type": "PROMPTFORGE_V2_RUN_INSPECT",
       "pos": [
         4018,
-        1632
+        1696
       ],
       "size": [
         440,
@@ -1860,7 +1864,7 @@
         28,
         0,
         996,
-        1450
+        1514
       ],
       "color": "#2a4a6b",
       "font_size": 24,
@@ -1906,9 +1910,9 @@
       "title": "06 Encode & Sample",
       "bounding": [
         28,
-        1556,
+        1620,
         996,
-        1030
+        1376
       ],
       "color": "#6b2f2f",
       "font_size": 24,
@@ -1918,7 +1922,7 @@
       "title": "07 Refine & Decode",
       "bounding": [
         1062,
-        1556,
+        1620,
         1912,
         380
       ],
@@ -1930,7 +1934,7 @@
       "title": "09 Inspect & Save",
       "bounding": [
         3522,
-        1556,
+        1620,
         952,
         1048
       ],

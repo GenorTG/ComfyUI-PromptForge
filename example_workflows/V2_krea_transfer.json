@@ -10,8 +10,8 @@
         76
       ],
       "size": [
-        314,
-        326
+        320,
+        390
       ],
       "flags": {},
       "order": 0,
@@ -89,7 +89,7 @@
       "type": "PROMPTFORGE_V2_LORA_STACK",
       "pos": [
         44,
-        458
+        522
       ],
       "size": [
         560,
@@ -186,7 +186,7 @@
       "type": "PROMPTFORGE_V2_SINGLE_LORA",
       "pos": [
         44,
-        1150
+        1214
       ],
       "size": [
         400,
@@ -251,14 +251,18 @@
           "lora_name": "Krea 2/tool/krea2_identity_edit_v2.safetensors",
           "enabled": true,
           "model_strength": 1.0,
-          "clip_strength": 1.0
+          "clip_strength": 1.0,
+          "mlp_only": false,
+          "max_rank": 0
         }
       },
       "widgets_values": [
         "Krea 2/tool/krea2_identity_edit_v2.safetensors",
         true,
         1.0,
-        1.0
+        1.0,
+        false,
+        0
       ],
       "color": "#2b5278",
       "bgcolor": "#1d3347"
@@ -1202,8 +1206,8 @@
         2416
       ],
       "size": [
-        322,
-        294
+        560,
+        640
       ],
       "flags": {},
       "order": 16,
@@ -2092,7 +2096,7 @@
         28,
         0,
         996,
-        1450
+        1514
       ],
       "color": "#2a4a6b",
       "font_size": 24,
@@ -2140,7 +2144,7 @@
         28,
         1704,
         996,
-        1030
+        1376
       ],
       "color": "#6b2f2f",
       "font_size": 24,

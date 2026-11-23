@@ -74,7 +74,7 @@ function change(node, action) {
 function modeRow(values, current, pick) {
   const row = element("div");
   // the row stays on one line so no mode button can wrap out of the short panel
-  row.style.cssText = "display:flex;gap:4px;flex-wrap:nowrap";
+  row.style.cssText = "display:flex;gap:4px;flex-wrap:wrap";
   const controls = values.map(([value, title]) => {
     const control = button(title, () => pick(value));
     control.dataset.mode = value;

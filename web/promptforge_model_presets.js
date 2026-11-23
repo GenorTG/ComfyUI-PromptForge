@@ -21,11 +21,12 @@ const FIELDS = new Map([
 ]);
 
 const CSS = `
-.pfmp-tools{display:flex;gap:4px;align-items:center;flex:0 0 auto}
+.pfmp-tools{display:flex;flex-wrap:wrap;gap:4px;align-items:center;flex:1 1 auto}
 .pfmp-tools[hidden]{display:none}
 .pfmp-use{cursor:pointer;padding:3px 6px;border-radius:4px;border:1px solid #4b6b84;background:#23384a;color:#cfe8fb;font:11px system-ui,sans-serif;white-space:nowrap}
-.pfmp-pick{max-width:150px;background:var(--comfy-input-bg,#1b2026);color:var(--input-text,#e7eef5);border:1px solid #46545f;border-radius:4px;padding:2px 3px;font:11px system-ui,sans-serif}
-.pfmp-status{flex:0 0 100%;font:11px/1.25 system-ui,sans-serif;color:#9fc7e4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.pfmp-pick{flex:1 1 100%;background:var(--comfy-input-bg,#1b2026);color:var(--input-text,#e7eef5);border:1px solid #46545f;border-radius:4px;padding:2px 3px;font:11px system-ui,sans-serif}
+.pfmp-status{flex:0 0 100%;font:11px/1.25 system-ui,sans-serif;color:#9fc7e4;white-space:normal;overflow-wrap:anywhere}
 .pfmp-status[hidden]{display:none}
 `;
 
@@ -160,7 +161,7 @@ function refresh(node) {
     };
   }
   const store = entry?.value;
-  const real = current && !current.startsWith("(");
+  const real = current && !current.startsWith("(") && !current.startsWith("<");
   if (real && controls.profileFor !== current && controls.fetching !== current) fetchProfile(node, current);
   const profile = profileEntry(real && controls.profileFor === current ? controls.profile : null, current);
   const matches = [...(profile ? [profile] : []), ...(store && real ? matchesFor(store, current) : [])];

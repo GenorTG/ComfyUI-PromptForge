@@ -10,8 +10,8 @@
         76
       ],
       "size": [
-        314,
-        326
+        320,
+        390
       ],
       "flags": {},
       "order": 0,
@@ -89,7 +89,7 @@
       "type": "PROMPTFORGE_V2_LORA_STACK",
       "pos": [
         44,
-        458
+        522
       ],
       "size": [
         560,
@@ -337,7 +337,7 @@
       "type": "PROMPTFORGE_V2_WRITER_MODEL",
       "pos": [
         44,
-        1150
+        1214
       ],
       "size": [
         364,
@@ -627,7 +627,7 @@
       "type": "PROMPTFORGE_V2_IMAGE_ENCODE",
       "pos": [
         44,
-        1546
+        1610
       ],
       "size": [
         322,
@@ -737,11 +737,11 @@
       "type": "PROMPTFORGE_V2_IMAGE_SAMPLE",
       "pos": [
         44,
-        1896
+        1960
       ],
       "size": [
-        322,
-        294
+        560,
+        640
       ],
       "flags": {},
       "order": 9,
@@ -831,7 +831,7 @@
       "type": "PROMPTFORGE_V2_IMAGE_LATENT_UPSCALE",
       "pos": [
         674,
-        1546
+        1610
       ],
       "size": [
         372,
@@ -895,7 +895,7 @@
       "type": "PROMPTFORGE_V2_IMAGE_DECODE",
       "pos": [
         674,
-        1744
+        1808
       ],
       "size": [
         264,
@@ -957,7 +957,7 @@
       "type": "PROMPTFORGE_V2_IMAGE_SAVE",
       "pos": [
         1774,
-        1546
+        1610
       ],
       "size": [
         440,
@@ -1015,7 +1015,7 @@
       "type": "PROMPTFORGE_V2_PRESETS",
       "pos": [
         1774,
-        2098
+        2162
       ],
       "size": [
         420,
@@ -1065,7 +1065,7 @@
       "type": "PROMPTFORGE_V2_RUN_INSPECT",
       "pos": [
         2254,
-        1546
+        1610
       ],
       "size": [
         440,
@@ -1372,7 +1372,7 @@
         28,
         0,
         592,
-        1364
+        1428
       ],
       "color": "#2a4a6b",
       "font_size": 24,
@@ -1418,9 +1418,9 @@
       "title": "06 Encode & Sample",
       "bounding": [
         28,
-        1470,
+        1534,
         592,
-        744
+        1090
       ],
       "color": "#6b2f2f",
       "font_size": 24,
@@ -1430,7 +1430,7 @@
       "title": "07 Refine & Decode",
       "bounding": [
         658,
-        1470,
+        1534,
         552,
         380
       ],
@@ -1442,7 +1442,7 @@
       "title": "09 Inspect & Save",
       "bounding": [
         1758,
-        1470,
+        1534,
         952,
         1048
       ],
