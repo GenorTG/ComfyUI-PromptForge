@@ -1,0 +1,111 @@
+{
+ "krea2 turbo anime": {
+  "label": "Krea 2 Turbo anime",
+  "source": "Krea 2 Turbo INT8 ConvRot model cards: 8 steps, CFG 1, euler + simple, shift 1.15",
+  "settings": {
+   "steps": 8,
+   "cfg": 1.0,
+   "sampler_name": "euler",
+   "scheduler": "simple"
+  }
+ },
+ "muse by stable yogi krea2 v4.0 extended civ c86": {
+  "label": "Muse by Stable Yogi V4.0 Extended",
+  "source": "Stable Yogi guide: 16 steps, CFG 2 (range 8-20 steps, CFG 1-2.5), ER SDE + beta",
+  "settings": {
+   "steps": 16,
+   "cfg": 2.0,
+   "sampler_name": "er_sde",
+   "scheduler": "beta"
+  }
+ },
+ "fineporn v6.1": {
+  "label": "FinePorn V6.1",
+  "source": "baked on official Krea 2 Turbo, so Turbo settings; the author's own numbers were not found",
+  "assumed": true,
+  "settings": {
+   "steps": 8,
+   "cfg": 1.0,
+   "sampler_name": "euler",
+   "scheduler": "simple"
+  }
+ },
+ "dirty mossv2": {
+  "label": "Dirty-Moss V2",
+  "source": "author's Civitai page: 25 steps, CFG 2.5, shift 5, ER SDE + simple",
+  "settings": {
+   "steps": 25,
+   "cfg": 2.5,
+   "sampler_name": "er_sde",
+   "scheduler": "simple"
+  }
+ },
+ "jib mix moss v3 b 00001": {
+  "label": "Jib Mix Moss V3 B",
+  "source": "author's numbers not found; MOSS defaults at the 25 step draft count, CFG 3, shift 5",
+  "assumed": true,
+  "settings": {
+   "steps": 25,
+   "cfg": 3.0,
+   "sampler_name": "er_sde",
+   "scheduler": "simple"
+  }
+ },
+ "animaika v51": {
+  "label": "AnimaIka v51",
+  "source": "v4.7 page (v51 not found): ER SDE + simple, 24 steps, CFG 3.5",
+  "assumed": true,
+  "settings": {
+   "steps": 24,
+   "cfg": 3.5,
+   "sampler_name": "er_sde",
+   "scheduler": "simple"
+  }
+ },
+ "mistoon anima": {
+  "label": "mistoon Anima",
+  "source": "base Anima guidance: ER SDE + simple, 30 steps, CFG 4.5; no creator page found",
+  "assumed": true,
+  "settings": {
+   "steps": 30,
+   "cfg": 4.5,
+   "sampler_name": "er_sde",
+   "scheduler": "simple"
+  }
+ },
+ "prism dmad pdmd w6a8 g32": {
+  "label": "PRISM DMAD (pack defaults)",
+  "source": "the pack's H3 template defaults, used in every H3 test so far",
+  "settings": {
+   "steps": 8,
+   "cfg": 1.0,
+   "sampler_name": "euler",
+   "scheduler": "beta57",
+   "shift_video": 0.0,
+   "shift_audio": 0.0,
+   "refine_steps": 3,
+   "refine_cfg": 1.0,
+   "refine_sampler": "er_sde",
+   "refine_scheduler": "linear from start",
+   "start_sigma": 0.9035
+  }
+ },
+ "10eros max 8stepturbo v1.0 hybrid activation learned hq": {
+  "label": "Eros Max 8-step Turbo v1.0",
+  "source": "maker's notes and workflow: LCM + simple, 8 steps, video shift 12 / audio shift 3, second pass 3 steps; second-pass values are an assumption",
+  "assumed": true,
+  "settings": {
+   "steps": 8,
+   "cfg": 1.0,
+   "sampler_name": "lcm",
+   "scheduler": "simple",
+   "shift_video": 12.0,
+   "shift_audio": 3.0,
+   "refine_steps": 3,
+   "refine_cfg": 1.0,
+   "refine_sampler": "lcm",
+   "refine_scheduler": "linear_quadratic",
+   "start_sigma": 0.9035
+  }
+ }
+}

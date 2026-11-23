@@ -29,7 +29,7 @@ function apply(node) {
   // frame_fit only matters when a frame drives the format
   const fit = widget(node, "frame_fit");
   if (fit) fit.hidden = !["i2v", "l2v", "fl2v"].includes(mode);
-  node.setSize?.([Math.max(node.size?.[0] || 0, 520), Math.max(node.size?.[1] || 0, 420)]);
+  node.setSize?.(node.computeSize());
   node.setDirtyCanvas?.(true, true);
 }
 
@@ -40,7 +40,6 @@ app.registerExtension({
     const created = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
       created?.apply(this, arguments);
-      this.size = [Math.max(this.size?.[0] || 0, 520), Math.max(this.size?.[1] || 0, 420)];
       const mode = widget(this, "mode");
       const original = mode?.callback;
       if (mode) mode.callback = (...args) => { const result = original?.apply(mode, args); apply(this); return result; };

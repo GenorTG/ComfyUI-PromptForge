@@ -89,7 +89,7 @@ class H3Tests(unittest.TestCase):
         left = self.decoded(self.pipe(), 0)
         right = self.decoded(self.pipe(), 1)
         for transition in ("cut", "crossfade"):
-            joined = self.h3.H3Join.execute(right, previous=left, overlap_frames=2, transition=transition).args[0]
+            joined = self.h3.H3Join.execute(right, previous=left, overlap_frames=2, transition=transition, match_levels=False).args[0]
             self.assertEqual(joined["artifacts"]["images"].shape[0], 8)
             self.assertEqual(joined["artifacts"]["audio"]["waveform"].shape[-1], 16000)
             self.assertEqual(left["artifacts"]["images"].shape[0], 5)
@@ -139,7 +139,7 @@ class H3Tests(unittest.TestCase):
         self.assertEqual(result["artifacts"]["sequence_next"], 2)
 
     def test_refine_reencodes_keyframes_on_upscaled_grid(self):
-        pipe = self.h3.H3References.execute(self.pipe(), mode="i2v", first_frame=self.torch.zeros(1, 32, 32, 3)).args[0]
+        pipe = self.h3.H3References.execute(self.pipe(), mode="i2v", frame_fit="crop to workflow aspect", first_frame=self.torch.zeros(1, 32, 32, 3)).args[0]
         pipe = self.h3.H3Encode.execute(pipe).args[0]
         latent = self.h3.core.EmptyMiniMaxH3LatentAV.execute(64, 64, 5).args[0]
         positive = self.h3.refresh_keyframes(pipe, pipe["artifacts"]["positive"], latent)
@@ -166,16 +166,32 @@ class H3Tests(unittest.TestCase):
         with patch.object(self.h3.nodes_hunyuan.LatentUpscaleModelLoader, "execute", side_effect=AssertionError("loader ran")):
             self.assertIs(self.h3.H3LatentUpscale.execute(pipe, enabled=False).args[0], pipe)
 
-    def test_bank_selection_uses_one_native_video_clock(self):
+    def test_manager_sockets_use_one_native_video_clock_and_names_filter(self):
         frames = self.torch.zeros(30, 32, 32, 3)
-        bank = self.h3.H3ReferenceBank.execute("motion", "video", fps=30, images=frames).args[0]
-        selected = self.h3.H3ReferenceSelect.execute(self.pipe(), bank).args[0]
+        refs = self.runtime.pack.v2.refs.ReferenceManager
+        selected = refs.execute(self.pipe(), extra_video_fps=30.0, extra_videos={"item_0": frames},
+                                extra_images={"item_0": self.torch.zeros(2, 32, 32, 3)}).args[0]
         artifacts = selected["artifacts"]
         self.assertEqual(artifacts["reference_video_fps"], 24)
         self.assertEqual(artifacts["reference_video"].shape[0], 24)
         self.assertIs(artifacts["reference_video"], artifacts["reference_videos"][0])
+        self.assertEqual(len(artifacts["reference_images"]), 2)
+        self.assertEqual(selected["settings"]["references"]["selected_names"], ["image 1", "image 2", "video 1"])
+        only = refs.execute(self.pipe(), names="video 1", extra_videos={"item_0": frames}, extra_images={"item_0": self.torch.zeros(2, 32, 32, 3)}).args[0]
+        self.assertEqual(only["artifacts"]["reference_images"], [])
+        with self.assertRaisesRegex(ValueError, "Unknown references"):
+            refs.execute(self.pipe(), names="missing")
         selected = self.h3.H3References.execute(selected, mode="continue").args[0]
         self.assertIn("positive", self.h3.H3Encode.execute(selected).args[0]["artifacts"])
+
+    def test_join_levels_and_crossfades_the_seam_instead_of_stepping(self):
+        left, right = self.decoded(self.pipe(), .3), self.decoded(self.pipe(), .4)
+        matched = self.h3.join(left, right, 4)["artifacts"]["images"]
+        stepped = self.h3.join(left, right, 4, "cut", False)["artifacts"]["images"]
+        self.assertLess((matched[1:] - matched[:-1]).abs().max(), .02)
+        self.assertGreater((stepped[1:] - stepped[:-1]).abs().max(), .09)
+        independent = self.h3.join(left, right, 0)["artifacts"]["images"]
+        self.assertLess((independent[1:] - independent[:-1]).abs().max(), .02)
 
     def test_beta57_uses_native_training_resolution_without_registration(self):
         from comfy_api.latest import io
@@ -191,6 +207,23 @@ class H3Tests(unittest.TestCase):
         combo = next(item for item in self.h3.H3SamplingSettings.define_schema().inputs if item.id == "scheduler")
         self.assertIn("beta57", combo.options)
 
+    def test_decode_audio_comes_from_the_chosen_pass(self):
+        torch = self.torch
+        second, first = torch.full((1,), 2.0), torch.full((1,), 1.0)
+        latent = {"samples": SimpleNamespace(unbind=lambda: (torch.zeros(1), second))}
+        pipe = self.contracts.evolve(self.pipe(), artifacts={"latent": latent, "first_pass_audio": first})
+        frames = pipe["settings"]["format"]["frames"]
+        seen = []
+        def audio(vae, latent):
+            seen.append(latent["samples"])
+            return {"waveform": torch.zeros(1, 2, 48000), "sample_rate": 48000}
+        decoder = SimpleNamespace(decode=lambda *args: (torch.zeros(frames, 32, 32, 3),))
+        with patch.object(self.h3.minimax_decode, "PROMPTFORGE_MiniMaxDecode", return_value=decoder), patch.object(self.h3.nodes_audio, "vae_decode_audio", side_effect=audio):
+            self.h3.decode(pipe)
+            self.h3.decode(pipe, audio_from="first pass")
+            self.h3.decode(self.contracts.evolve(pipe, invalidate=("first_pass_audio",)), audio_from="first pass")
+        self.assertEqual([float(sample) for sample in seen], [2.0, 1.0, 2.0])
+
     def test_first_pass_preview_is_optional_and_keeps_original_pipe(self):
         from comfy_api.latest import io
         pipe = self.contracts.evolve(self.pipe(), artifacts={"latent": {"samples": self.torch.ones(1)}})
@@ -202,7 +235,7 @@ class H3Tests(unittest.TestCase):
             self.assertIs(output.args[0], pipe)
             self.assertEqual(output.ui, {"preview": True})
             decode.assert_called_once()
-            self.assertFalse(save.call_args.kwargs["save"])
+            self.assertTrue(save.call_args.kwargs["save"])
             self.assertNotIn("images", pipe["artifacts"])
 
     def test_real_cpu_preview_encodes_audio_and_video(self):

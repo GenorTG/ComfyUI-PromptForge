@@ -166,8 +166,6 @@ def brief(action, people, camera="auto", place="auto", lighting="auto", outfit="
     """The action block appended to the writer's user text."""
     entry = action_store.get(FAMILY, action)
     count, arrangement = entry["people"], entry["brief"]
-    subjects = [people[0].strip() or ("the person in the input image" if source == "input image" else "the woman"),
-                people[1].strip() or ("the other person in the input image" if source == "input image" else "the man")]
     labels = ["the woman in the input image" if source == "input image" else "the woman", "the man"]
     action_text = arrangement.format(A=labels[0], B=labels[1])
     action_text = re.sub(r"(?<=[.!?])\s+([a-z])", lambda m: m.group(0)[:-1] + m.group(1).upper(), action_text)

@@ -15,6 +15,7 @@
   "node_types": [
     "PROMPTFORGE_V2_FRAME_INTERPOLATE",
     "PROMPTFORGE_V2_H3_CONTINUITY",
+    "PROMPTFORGE_V2_H3_FIRST_PASS_PREVIEW",
     "PROMPTFORGE_V2_H3_FORMAT",
     "PROMPTFORGE_V2_H3_MODEL",
     "PROMPTFORGE_V2_H3_PARTS",
@@ -25,12 +26,12 @@
     "PROMPTFORGE_V2_H3_SAMPLING_SETTINGS",
     "PROMPTFORGE_V2_H3_SEQUENCE",
     "PROMPTFORGE_V2_H3_UPSCALE_SETTINGS",
-    "PROMPTFORGE_V2_LOAD_IMAGE",
     "PROMPTFORGE_V2_LORA_STACK",
     "PROMPTFORGE_V2_PERFORMANCE",
     "PROMPTFORGE_V2_PRESETS",
     "PROMPTFORGE_V2_PREVIEW_SETTINGS",
     "PROMPTFORGE_V2_PROMPT_INSPECT",
+    "PROMPTFORGE_V2_REFERENCES_MANAGER",
     "PROMPTFORGE_V2_RUN_INSPECT",
     "PROMPTFORGE_V2_VIDEO_CLEANUP",
     "PROMPTFORGE_V2_WRITER_MODEL"
@@ -41,7 +42,7 @@
     "performance": "3",
     "preview": "4",
     "format": "5",
-    "reference_image": "6",
+    "reference_board": "6",
     "references": "7",
     "writer_model": "8",
     "prompt": "9",
@@ -52,11 +53,12 @@
     "parts": "14",
     "continuity": "15",
     "sequence": "16",
-    "optional_rife": "17",
-    "optional_cleanup": "18",
-    "save_video": "19",
-    "presets": "20",
-    "run_inspect": "21"
+    "first_pass_preview": "17",
+    "optional_rife": "18",
+    "optional_cleanup": "19",
+    "save_video": "20",
+    "presets": "21",
+    "run_inspect": "22"
   },
   "placeholders": [
     {
@@ -82,12 +84,6 @@
       "role": "model",
       "input": "audio_vae_name",
       "value": "<SELECT_H3_AUDIO_VAE>"
-    },
-    {
-      "node": "6",
-      "role": "reference_image",
-      "input": "filename",
-      "value": "<INPUT_REFERENCE.png>"
     },
     {
       "node": "13",
@@ -127,11 +123,6 @@
       "placeholder": "<SELECT_H3_AUDIO_VAE>"
     },
     {
-      "role": "reference_image",
-      "input": "filename",
-      "placeholder": "<INPUT_REFERENCE.png>"
-    },
-    {
       "role": "upscale_settings",
       "input": "upscale_model",
       "placeholder": "<SELECT_H3_FP32_LATENT_UPSCALER>"
@@ -146,23 +137,24 @@
   ],
   "schema_sha256": {
     "PROMPTFORGE_V2_FRAME_INTERPOLATE": "9b2230741c399b263682f040cba7fb2e4d5ffa560e153debad7603139b6bd5b7",
-    "PROMPTFORGE_V2_H3_CONTINUITY": "ca0f8910162f5767f75a74e539fdb71ae3379939fd8ba83ab725ee52bbc9b4c9",
+    "PROMPTFORGE_V2_H3_CONTINUITY": "45395d0462d35ab49f320b3b163bdb8131f3ad5c595711c41f201c3c84f89cea",
+    "PROMPTFORGE_V2_H3_FIRST_PASS_PREVIEW": "19e5e0bba68f6ca0725d8ad637999995995a72fbddfb224605357bc47a0318bd",
     "PROMPTFORGE_V2_H3_FORMAT": "d4d17e07829a9d44837faaa8d32f03a8c7d9fe57593f49c9de71ff29309c5820",
     "PROMPTFORGE_V2_H3_MODEL": "1ed496769efc45fe5258ffb5e1846895662ef84eeda38e25e063d233794db148",
     "PROMPTFORGE_V2_H3_PARTS": "0f7039ac0712b0c87b2171ca4c30209b3bab495101c202df0958aaea8f637ae5",
     "PROMPTFORGE_V2_H3_PREVIEW_SAVE": "4784a6d5e50d5abb1c280e2945d31163682a71c39a25d3193df836a936efac65",
-    "PROMPTFORGE_V2_H3_PROMPT": "4074b36bfc2fcd30dd6c8e21ff948defaca07a68a237e9f3e1ae9596c7b0f640",
+    "PROMPTFORGE_V2_H3_PROMPT": "866bfb584511070e2bcfbabd9e47a435e1f038baa64be353aa8a561bc960a1e9",
     "PROMPTFORGE_V2_H3_PROMPT_WRITER": "5bd9f39c3416575b20d1b4cd2b73e98b07814bba94489ca26524f51d26ef0cbe",
     "PROMPTFORGE_V2_H3_REFERENCES": "9ea0be5dfe48fcb5d52a5d61e0a8de24818c422343c9bd80d5269a687667f3ff",
     "PROMPTFORGE_V2_H3_SAMPLING_SETTINGS": "00ad1c584d9ca326fcb3b2aecf7e8d449ba37c3e70cb28e86569277a9fb8de0a",
-    "PROMPTFORGE_V2_H3_SEQUENCE": "d21923a62d78ada92f347fae7152619ecc7519f7b6b37e2501523e4249036e69",
+    "PROMPTFORGE_V2_H3_SEQUENCE": "efd8ef029447e8e54e8317a64617b886b02a12706d89261cf46992e567bc7adb",
     "PROMPTFORGE_V2_H3_UPSCALE_SETTINGS": "ecf75abb95f3f194fe0901f0cbc57cacea6f1a93f5248c0ced8dd082c2d4b14e",
-    "PROMPTFORGE_V2_LOAD_IMAGE": "477f9fb5771a0b7bd3c697bac1d52ac9ef51f626e317f547e91a72d822f6a4f3",
     "PROMPTFORGE_V2_LORA_STACK": "c86a879a8b4d75178908c8cb6c817240420484dd50dc29ba5560806ac0113875",
     "PROMPTFORGE_V2_PERFORMANCE": "4c10cdc5e48e87a9b2fac3f4a3f1ac58634c5ed55963ea011a21297ebb6b6558",
     "PROMPTFORGE_V2_PRESETS": "046808dbaed407846d58730ee3a374f7d395a85b4f3d5bae2cbf956ada1e82cc",
     "PROMPTFORGE_V2_PREVIEW_SETTINGS": "5423901b2b1e6e6ec2de5394b5b35621e8bf1803fc57404809e5072bed0230e1",
     "PROMPTFORGE_V2_PROMPT_INSPECT": "bdbfc9ace17f018a5bd5b78a50962bcb3c65514f1f936fdeddc11de5a74d7646",
+    "PROMPTFORGE_V2_REFERENCES_MANAGER": "acb1dd42d3f9e9cbda028cec8049a187fcdbbcc95f541efe8e6eff47d77b41b2",
     "PROMPTFORGE_V2_RUN_INSPECT": "dda1f256fd4e5fa2f14122a10b52bc5532c5fb1ecd24ca1e8fef147034e686d5",
     "PROMPTFORGE_V2_VIDEO_CLEANUP": "f68b9a61dcd7c828f3d4e20841e889007c6f525b0dbe8e5d46d62f1d42b04427",
     "PROMPTFORGE_V2_WRITER_MODEL": "31a848da3b02e2c165d8572059fcc0d2b0415a4bdd2a7010f89a42bad65fdbef"

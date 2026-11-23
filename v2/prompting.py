@@ -44,12 +44,23 @@ _QUOTE_CONTEXT = re.compile(
 _NEGATIVE = re.compile(
     r"\b(?:no|not|never|without|avoid(?:ing)?|exclude|excluding|omit|remove|"
     r"do\s+not|don['’]t|mustn['’]t|shouldn['’]t|can['’]t|cannot|won['’]t)\b|"
-    r"\b(?:free\s+of|negative\s+prompt|negative\s+constraints?)\b|\b\w+[- ]free\b", re.I)
+    r"\b(?:free\s+of|negative\s+prompt|negative\s+constraints?)\b|\b(?!(?:hands?|arms?|legs?|fingers?)\b)\w+[- ]free\b", re.I)
 _REASONING = re.compile(
     r"</?(?:think|analysis|reasoning)>|<\|(?:analysis|assistant|im_start)\|>|"
     r"(?:^|\n)\s*(?:analysis|reasoning|final answer|final prompt|here(?:'s| is) (?:the|your) prompt)\s*:|"
     r"\b(?:I (?:need to|should|will|must)|let me (?:think|analy[sz]e)|"
     r"the user (?:wants|asked|requests)|we need to|I cannot (?:help|assist))\b", re.I)
+
+
+_SHOT_TAGS = ("close-up", "portrait", "upper body", "cowboy shot", "full body", "wide shot")
+_HEAD_COUNT = re.compile(r"\b(\d+)(?:girls?|boys?|others?)\b")
+
+
+def _shot_conflict(text):
+    """Several shot sizes in one tag list: the model draws a mix of them."""
+    tags = [tag.strip().lower() for tag in text.split(",")]
+    shots = [shot for shot in _SHOT_TAGS if shot in tags]
+    return f"conflicting shot sizes ({', '.join(shots)}): keep only the one the brief names" if len(shots) > 1 else ""
 
 
 def validation_issues(text, family=None):
@@ -92,10 +103,9 @@ def _strip_context_echo(text):
         return text
     if not isinstance(data, dict) or "family" not in data:
         return text
-    return stripped[end:].lstrip("\n ") or text
+    return stripped[end:].lstrip("\n ")
 
 
-ANIMA_PREFIX = "nsfw, anime style, 2d, flat colors"
 SHOTS = ["auto", "close up", "upper body", "cowboy shot", "full body", "wide shot"]
 ANGLES = ["auto", "front view", "side view", "three-quarter view", "from above", "from below", "from behind", "pov"]
 
@@ -209,28 +219,61 @@ def _h3_sections(pipe, description, soundscape, music):
     return block
 
 
+_SUBJECT_LINE = re.compile(r"^Subject (\d) is (the [a-z0-9 ]+?) \((.+?)\):\s*(.*)$")
+
+
 def _action_text(action, subjects, notes, camera):
     kind, label = action.split(": ", 1)
     if kind == "h3":
         library = _library("h3_actions")
         text = library.brief(label, library.ANY_CAMERA if camera == "auto" else camera, subjects, notes)
+        names = library.subject_names(label)
         # these lines restate the writer instruction; drop them so the brief is content only
         drop = ("This action is exactly", "The act is already", "The join is the", "Recommended aspect",
-                "Motion beats", "Write ", "Only Subject", "Its NOT", "Anatomy anchors", "His hips drive",
-                "Action preset:", "Action:", "Subject 1 is", "Subject 2 is", "Subject 3 is")
-        kept = []
+                "Motion beats", "Write ", "Its NOT", "Anatomy anchors", "His hips drive", "Action preset:")
+        kept, seen = [], set()
         for line in text.splitlines():
             line = line.strip()
             if not line or line.startswith(drop):
                 continue
+            subject = _SUBJECT_LINE.match(line)
+            if subject:
+                name, role, who = subject.group(2), subject.group(3), subject.group(4)
+                if role == "solo" and not who:
+                    continue
+                line = name.capitalize() + ("" if role == "solo" else f" is {role}") + (f": {who}" if who else "") + "."
             if line.startswith("Camera:"):
                 line = "Camera: " + line[len("Camera:"):].strip().rstrip(".") + "."
-            line = line.replace("Subject 1", "the woman").replace("Subject 2", "the man").replace("Subject 3", "the second woman")
-            kept.append(line)
+            for number, name in enumerate(names, 1):
+                line = line.replace(f"Subject {number}", name)
+            line = line.replace("Subject 3", "the other person")
+            if line.startswith("Action: "):
+                line = line[len("Action: "):]
+            payload = line.split(": ", 1)[-1]
+            if len(payload) > 40 and payload in seen:
+                continue
+            seen.add(payload)
+            kept.append(line[:1].upper() + line[1:])
         return " ".join(kept)
     if kind != "image":
         raise ValueError(f"Unknown action library: {kind}")
-    return _library("image_actions").brief(label, subjects[:2], camera, "auto", "auto", "as in the image", "auto", notes, "", "text description", "")
+    lines, seen = [], set()
+    for line in _library("image_actions").brief(label, subjects[:2], camera, "auto", "auto", "as in the image", "auto", notes, "", "text description", "").splitlines():
+        # the first states a pose the action may contradict (it keys on the label), the second invites invented hand and limb detail
+        if line.startswith(("Replace the source pose", "Both bodies are horizontal", "The pose is exactly this arrangement")):
+            continue
+        # the camera stage line talks about the join of the pelvises (wrong for oral, hands and every SFW pair) and the contact line makes the writer
+        # elaborate anatomy; the plain Camera line already carries the framing. The limb counts get quoted into the prompt and invite extra limbs
+        if line.startswith(("Camera stage:", "Show the point of contact")):
+            continue
+        line = line.replace("Two complete, separate bodies: two heads, two torsos, four arms and four legs.", "Write two separate bodies.")
+        line = _positive(line)
+        payload = line.split(": ", 1)[-1]
+        if not line or len(payload) > 40 and payload in seen:
+            continue
+        seen.add(payload)
+        lines.append(line)
+    return "\n".join(lines)
 
 
 class WriterModel(io.ComfyNode):
@@ -433,11 +476,26 @@ def _write(encoder, service, config, system, text, images, video, seed, max_toke
     return service._clean_prompt_output(answer), thinking
 
 
+# female anatomy written onto the scrotum ("a slit down the middle of his sac"); the verbs of contact keep "his balls slap against her vulva" legal
+_SCROTUM_AS_VULVA = re.compile(r"(?i)\b(?:scrotum|balls|testicles|sac)\b(?:(?!\b(?:against|onto|on|between|slaps?|presses|press|swings?|hits?|touch\w*|brush\w*|rest\w*|rubs?|grind\w*|bounc\w*|her)\b)[^.,;]){0,40}?\b(?:labia|vulva|pussy|slit|cleft|folds|vagina\w*)\b")
+# the template says to keep a given age "exactly as written"; small writers write that sentence into the scene
+_H3_AGE_ECHO = re.compile(r"(?i),?\s*\b(?:aged?|age)\s+(?:exactly\s+)?as\s+(?:specified|written|given|stated)\s+(?:in|by)\s+the\s+(?:request|user|brief|prompt)\b,?")
+
+
+# a penetrative stroke that leaves the body gets drawn as the shaft falling out and landing back in
+_LEAVES_THE_BODY = re.compile(r"(?i)\b(?:pull(?:s|ed|ing)?|slid(?:es|ing)?|slip(?:s|ped|ping)?|pop(?:s|ped|ping)?|fall(?:s|ing)?|withdraw(?:s|n|ing)?)\s+(?:all the way |completely |fully |right |back )?out\b"
+                              r"|\bleaves? (?:her|the) (?:vagina|body|opening|entrance|anus)\b|\b(?:completely|fully) withdraw\w*")
+
+
+# "(appears in )" / "(the first frame of )": the template's placeholders written out with nothing in them
+_H3_EMPTY_REF = re.compile(r"\s*\((?:appears in|the first frame of|from)?\s*\)")
+
+
 def _h3_headings(text, mode):
     """One heading per line, colon attached, content underneath: repair what the writer returns."""
     for section in _h3_section_names(mode):
         text = re.sub(rf"(?<=[^\n])({section}:)", r"\n\n\1", text)          # heading written mid-line
-        text = re.sub(rf"(?m)^({section}):?[ \t]*:?[ \t]*(?=\S)", rf"\1:\n", text)  # content glued to it
+        text = re.sub(rf"(?m)^({section}):?[ \t]*:?[ \t]*(?=\S)", r"\1:\n", text)  # content glued to it
         text = re.sub(rf"(?m)^({section}):?[ \t]*:?[ \t]*$", r"\1:", text)     # bare heading, double colon
     text = re.sub(r"(?m)^:[ \t]*$\n?", "", text)
     return re.sub(r"(?<!\[)\bShot (\d+)\b(?!\])", r"[Shot \1]", text)
@@ -451,45 +509,42 @@ def _h3_section_names(mode):
     return table[short.get(mode, "t2va")]
 
 
-def _h3_repair_sections(text, pipe, mode):
-    """Drop duplicate shot labels, renumber them, and rebuild missing sections in order."""
-    seen, counter = [], 0
-    for number in re.findall(r"\[Shot \d+\]", text):
-        counter += 1
-        if number not in seen:
-            seen.append(number)
-    labels = iter(range(1, len(seen) + 1))
-    state = {"done": set()}
+def _number_shots(body):
+    """Shot labels belong to the description alone: drop repeats, number the rest from 1, and add [Shot 1] when the writer wrote none."""
+    seen, count = set(), [0]
 
     def renumber(match):
-        token = match.group(0)
-        if token in state["done"]:
+        if match.group(0) in seen:
             return ""
-        state["done"].add(token)
-        return f"[Shot {next(labels)}]"
+        seen.add(match.group(0))
+        count[0] += 1
+        return f"[Shot {count[0]}]"
 
-    text = re.sub(r"\[Shot \d+\]", renumber, text)
+    body = re.sub(r"[ \t]{2,}", " ", re.sub(r"\[Shot \d+\]", renumber, body))
+    return body if count[0] else "[Shot 1] " + body
+
+
+def _h3_repair_sections(text, pipe, mode):
+    """Rebuild missing sections in order and keep the shot labels in the description only."""
     text = re.sub(r"[ \t]{2,}", " ", text)
 
     sections = _h3_section_names(mode)
-    blocks, order = {}, []
-    for match in re.finditer(r"(?m)^([a-z_]+):[ \t]*$", text):
+    blocks = {}
+    headings = list(re.finditer(r"(?m)^([a-z_]+):[ \t]*$", text))
+    for position, match in enumerate(headings):
         name = match.group(1)
         # a t2v style body written while the mode wants ref2v keeps its text, only the heading changes
         if name not in sections and name == "integrated_multimodal_description" and "detailed_description" in sections:
             name = "detailed_description"
-        if name not in sections or name in blocks:
-            continue
-        blocks[name] = ""
-        order.append((name, match.end()))
-    for position, (name, start) in enumerate(order):
-        end = order[position + 1][1] if position + 1 < len(order) else len(text)
-        body = text[start:end]
-        # a section body can contain another heading (the model likes to add audio sections twice)
-        for other in sections:
-            body = re.sub(rf"(?m)^{other}:[ \t]*$.*?(?=^[a-z_]+:[ \t]*$|\Z)", "", body) if other != name else body
-        blocks[name] = body.strip()
-    fallback = (pipe["settings"].get("prompt", {}).get("text") or "").strip()
+        # the model likes to write a section twice: the first one wins, a body ends at the next heading
+        if name in sections and name not in blocks:
+            blocks[name] = text[match.end():headings[position + 1].start() if position + 1 < len(headings) else len(text)].strip()
+    for name, body in blocks.items():
+        if name in ("integrated_multimodal_description", "detailed_description"):
+            blocks[name] = _number_shots(body) if body else body
+        else:
+            blocks[name] = re.sub(r"[ \t]{2,}", " ", re.sub(r"\[Shot \d+\]\s*", "", body))
+    fallback = (pipe["settings"].get("prompt", {}).get("text") or "").strip() if blocks else text.strip()
     rebuilt = []
     for name in sections:
         if name in blocks and blocks[name]:
@@ -519,7 +574,7 @@ def _h3_repair_audio(text, pipe, mode):
         if text.rstrip().endswith("overall_soundscape:"):
             text += " soft room tone, breathing and quiet moans"
     if "non_diegetic_music" in sections and not re.search(r"(?m)^non_diegetic_music:", text):
-        text += "\n\nnon_diegetic_music:\n" + (prompt.get("music") or "").strip() or "N/A"
+        text += "\n\nnon_diegetic_music:\n" + ((prompt.get("music") or "").strip() or "N/A")
     return text
 
 
@@ -538,116 +593,170 @@ def _h3_issues(text, mode, context):
     for label, count in (("Picture", context["picture_count"]), ("Video", context["video_count"]), ("Audio", len(context["audio"]))):
         if any(int(number) < 1 or int(number) > count for number in re.findall(rf"<{label}\s+(\d+)>", text)):
             issues.append(f"unknown {label} reference label")
+    body = re.search(r"(?ms)^(?:integrated_multimodal_description|detailed_description):\s*(.*?)(?=^[a-z_]+:\s*$|\Z)", text)
+    words = len(body.group(1).split()) if body else 0
+    if words > 1500:
+        issues.append(f"description too long ({words} words): the brief asks for 650-900")
     return issues
 
 
-def _instructions(pipe, mode, context, max_words, style_prefix="", sections=None):
-    family = pipe["family"]
-    instruction = (
-        "Write the final generation prompt from the user's intent. Every sentence must carry a positional or visible "
-        "fact: who or what is where, in what direction, at what height. Describe visible desired outcomes affirmatively. "
-        "Convert exclusions into positive visible facts. Keep the brief's camera, angle, framing and stacking exactly; "
-        "never swap them for a closer crop. In a couple act the person on top sits between the camera and the person "
-        "below. Keep every position, contact and camera fact from the brief; drop ornamental words. Do not invent limbs. ")
-    if family == "minimax_h3":
-        sections = sections or _services()._MINIMAX_SECTIONS[mode]
-        labels = [f"<{name} 1>" + (f" to <{name} {count}>" if count > 1 else "")
-                  for name, count in (("Picture", context["picture_count"]), ("Video", context["video_count"]),
-                                      ("Audio", len(context["audio"]))) if count]
-        guide = {"integrated_multimodal_description": "the shot description, 650-900 words",
-                 "detailed_description": "the shot description, 650-900 words",
-                 "subject_definitions": "one line per subject, 40-80 words in total",
-                 "summary": "two or three sentences",
-                 "retention_analysis": "one line per subject",
-                 "overall_soundscape": "90-150 words of sound only",
-                 "non_diegetic_music": "one line, or N/A"}
-        instruction += (
-            f"Use at most {max_words} words in total. Copy this skeleton exactly, fill the brackets and delete them:\n"
-            + "\n\n".join(f"{name}:\n<{guide[name]}>" for name in sections)
-            + "\n\nNothing before the first heading, nothing after the last one, no other headings. "
-            "Open the visual description with [Shot 1]; later shots need a cut that changes subject, space or viewpoint, "
-            "never a slight reframe. "
-            "Open the visual description with [Shot 1]; later shots need a cut that changes subject, space or viewpoint, "
-            "never a slight reframe. "
-            "One action carries the clip. Add a second one only when a hand or mouth is free and the clip is long. "
-            "Start from anatomy, then mood: who owns the shaft, which hole it enters, what wraps it, what drives it. "
-            "Name the opening once and never switch it. Short shallow strokes with the shaft held inside beat full "
-            "withdrawals: keep the base attached to the pelvis, only the visible part changes. "
-            "Frame from hip height, a little above, so the join sits in the lower middle and both faces stay inside: no thigh, "
-            "belly or hand covers the entry, the labia part around the shaft and stay visible while it moves. "
-            "Register contact in three visible steps - the path, the first touch, the kept pressure - and never teleport a hand. "
-            "The reaction lands one beat after its cause; show it on brows, eyes and jaw. "
-            "One camera idea per shot, canonical wording, positive: static shot, push in, pan left, tilt down. "
-            "Say <Subject 2>'s penis, never make a <Picture> an actor. "
-            + ("A <Picture> of a cock is that man's anatomy, not a third body. In subject_definitions the man's line also "
-               "carries: the shape, size and appearance of his erect penis come from <Picture N> and it stays attached at his "
-               "pelvis, unchanged; retention_analysis keeps a matching fully_preserved line for that picture. "
-               if mode == "ref2v" else "")
-            + "Every sentence names the labelled actor who moves. "
-            + ("Start exactly on the supplied first frame, same bodies, light and framing, and move only the named parts. "
-               if mode in ("i2v", "fl2v") else "")
-            + ("End exactly on the supplied last frame: same pose, same framing, same light. "
-               if mode in ("l2v", "fl2v") else "")
-            + (("Reference labels, and nothing else: " + ", ".join(labels) + ". ") if labels
-               else "No reference is attached, so no <Picture N> or <Video N> label appears. ")
-            + ("subject_definitions names each subject and its reference. " if "subject_definitions" in sections else "")
-            + ("retention_analysis states which appearance features are kept. " if "retention_analysis" in sections else "")
-            + ("overall_soundscape: room tone, body impact, wet penetration, hands and bedding, breath and voice, speech as "
-               "<d>[English] spoken words</d>. non_diegetic_music: N/A unless asked. "
-               if "overall_soundscape" in sections else "")
-            +
-            " Plain present tense, one visible fact per clause, no rating words, no filler such as mood or quality, no (weight:1.2) syntax, no quoted speech: "
-            "dialogue lives in <d>[English] words</d> and the speaker carries (S1) or (S2) at the first vocal event. "
-            "Never copy the brief or the notes into the output, never explain a choice, never summarise at the end. ")
-    elif family == "anima":
-        instruction += (
-            "Output ONE line of lowercase comma-separated booru tags and nothing else: no sentences, no full stops. "
-            f"Always start with: {style_prefix or ANIMA_PREFIX}. "
-            "Then in this tag order: the count tag, then `hetero` for a man and a woman, then ONE framing tag "
-            "(close up / cowboy shot / full body / wide shot), ONE angle tag, the act and position, anatomy, hands, place, light. "
-            "Exactly one count tag and no combinations: 1girl for a solo woman, 1girl 1boy for a man and a woman, "
-            "2girls for two women, 2boys for two men. Never write both a number word and a count tag. "
-            "Use the canonical position tag rather than describing who sits where: missionary, cowgirl, reverse cowgirl, "
-            "doggy style, spooning, standing, piledriver, lotus. For any penetration use `full body`, "
-            "never `close up`, so both bodies and the join stay in frame; in cowgirl add `girl on top`, `straddling`, "
-            "`sitting on penis` and keep the man's chest and hips under her. "
-            "Name the face once only (`cute face`, not three face tags). "
-            "For a couple the framing tag is `full body`, and `hetero` sits right after `1girl 1boy`. "
-            "Use Gelbooru spelling and the shortest clear tag; weight a stressed feature as (tag:1.2) at most. "
-            "Every item stays a tag, at most four words, never a clause: write `penis in pussy`, not `the shaft is buried "
-            "deep inside her`. For penetration always include `sex`, the position tag and `penis in pussy` (or `anal`), "
-            "then `nude`, then the bodies. One body fact per tag so limbs stay countable. "
-            f"At most {min(max_words, 70)} tags, so the framing tags are not drowned. ")
-    elif pipe["artifacts"].get("krea_references"):
-        identity = "identical face, hair and body of the photo"
-        extra = ""
-        if context.get("picture_count", 0) > 1:
-            extra = ("References after the first show the same person's outfit and jewellery: name each piece they show "
-                     "in the second sentence and keep it. ")
-        instruction += (
-            "This is a Krea identity edit. Output one paragraph, no labels, no 'Notes:'.\n"
-            "Sentence 1 is identity only: \"The same person as the photo, the " + identity + ", in <place>.\" Name no age, "
-            "nationality or build there unless the idea gives one. "
-            + extra +
-            "Then the change: \"The <garment> is removed\" and the bare skin, breasts and vulva that appear; do not also "
-            "say she wears it. Any garment a reference wears goes unless the idea keeps it; jewellery, necklaces, glasses and "
-            "shoes stay unless the idea removes them. If the idea "
-            "says naked, nude or topless, every garment goes and nothing from the reference outfit stays on. Then the new "
-            "pose with concrete body positions, then the camera. Close with one clause on the identity and skin that stay. "
-            "Fold the extra notes into the flow instead of quoting them. "
-            f"Do not exceed {min(max_words, 140)} words. ")
+_REFERENCE_LABEL = {"image": "Picture", "video": "Video", "audio": "Audio"}
+
+
+_EXPLICIT = re.compile(r"\b(?:nsfw|nude|naked|topless|bottomless|sex|sexual|explicit|erotic|porn\w*|fuck\w*|cock|dick|penis|pussy|vagina|vulva|clit\w*|cum|cumming|blowjob|handjob|anal|nipples?|breasts?|boobs?|tits|orgasm\w*|masturbat\w*|genitals?)\b", re.I)
+
+
+# the template sections that only matter when the request is sexual; a small writer copies their example lists into any prompt
+_EXPLICIT_SECTIONS = re.compile(r"(?ms)^# (?:NSFW|NSFW standard|NSFW audio \(mandatory\)|Genital anatomy and penetration|Genitals)\n.*?(?=^# |\Z)")
+# booru tags that state an absence in the picture; every other "no X" tag is a copied instruction
+_ABSENCE_TAGS = {"no humans", "no panties", "no bra", "no pants", "no shirt", "no shoes", "no socks", "no legwear"}
+
+
+def _clean_tags(text):
+    tags = [tag.strip() for tag in text.split(",")]
+    tags = [tag for tag in tags if tag and (tag.lower() in _ABSENCE_TAGS or not re.match(r"(?i)(?:no|not|without|never)\b", tag))]
+    # "solo" next to a second person makes the model draw one of them
+    if sum(int(count) for tag in tags for count in _HEAD_COUNT.findall(tag.lower())) > 1:
+        tags = [tag for tag in tags if tag.lower() != "solo"]
+    return ", ".join(tags)
+
+
+_NEGATION_START = re.compile(r"(?i)^\W*(?:no|not|never|without|avoid)\b")
+
+
+# a negated clause after a comma or dash ("..., no props"), or a trailing "without X" / "but not X"; a plain "is not moving" stays
+_NEGATION_CLAUSE = re.compile(r"(?i)(?:\s*[,;\u2014\u2013]\s*(?:(?:but|and|with|while)\s+)?(?:no|not|without|never)\b|\s+(?:but\s+not|without)\b)[^,;.!?\u2014\u2013]*")
+_AGE_ECHO = re.compile(r"(?i),?\s*\bage (?:un)?(?:specified|stated|given)\b,?")
+
+
+def _drop_negations(text):
+    """A prose prompt states what is there: negations the writer wrote are the brief's constraints echoed back, and an image model draws the noun."""
+    sentences = [sentence for sentence in re.split(r"(?<=[.!?])\s+", text) if not _NEGATION_START.match(sentence)]
+    return " ".join(_AGE_ECHO.sub("", _NEGATION_CLAUSE.sub("", sentence)) for sentence in sentences)
+
+
+_GENITALS = {name: re.compile(rf"(?i)\b(?:{words})\b") for name, words in (
+    ("female", "vulva|labia|clitoris|clitoral|pussy|vagina|vaginal"), ("male", "penis|cock|scrotum|testicles|balls|glans|foreskin"), ("anal", "anus|anal|asshole"))}
+_CAMERA_SENTENCE = re.compile(r"(?i)^\W*(?:the )?camera\b")
+
+
+def _grounded(text, brief, tags=False):
+    """An action brief is the whole scene. A genital it never names, or a camera it never gives, is the writer's
+    invention from the template lists, and the image model draws it (a second set of genitals, a stranger's shoulder)."""
+    absent = [pattern for pattern in _GENITALS.values() if not pattern.search(brief)]
+    camera = bool(re.search(r"(?m)(?:^|[.!?]\s+)(?:The )?Camera\b", brief))
+    def unsupported(part):
+        return any(pattern.search(part) for pattern in absent)
+
+    if tags:
+        kept = [tag.strip() for tag in text.split(",") if not unsupported(tag)]
+        return ", ".join(kept) if kept else text
+    sentences = []
+    for sentence in re.split(r"(?<=[.!?])\s+", text):
+        if not camera and _CAMERA_SENTENCE.match(sentence):
+            continue
+        # only the clause that names the invented part goes: the act often shares its sentence
+        body, end = re.match(r"(.*?)([.!?]*)$", sentence, re.S).groups()
+        clauses = [clause for clause in re.split(r"\s*[,;]\s+", body) if not unsupported(clause)]
+        if clauses:
+            joined = re.sub(r"(?i)^(?:and|but|while|with)\s+", "", ", ".join(clauses))
+            sentences.append(joined[0].upper() + joined[1:] + end)
+    return " ".join(sentences) if sentences else text
+
+
+def _grounded_h3(text, brief):
+    """The same guard for the H3 description body; the brief's own 'never a vulva' constraints do not count as naming one."""
+    named = re.sub(r"(?i)\b(?:never|no) (?:(?:gets|grows|has|shows) )?(?:a |an |any )?(?:penis|vulva|vagina|pussy|cock)\b", "", brief)
+    parts = re.split(r"(?m)^([a-z_]+:)[ \t]*$", text)
+    for index in range(2, len(parts), 2):
+        if parts[index - 1] in ("integrated_multimodal_description:", "detailed_description:"):
+            parts[index] = "\n" + _grounded(parts[index].strip(), named) + "\n\n"
+    return "".join(parts)
+
+
+def _positive(line):
+    return " ".join(sentence for sentence in re.split(r"(?<=[.!?])\s+", line) if not _NEGATIVE.search(sentence))
+
+
+def _is_explicit(prompt):
+    """Whether the request asks for nudity or sex: an action carries its own flag, an idea is read for the words."""
+    if prompt.get("source") == "action":
+        family, label = prompt["action"].split(": ", 1)
+        return _store.nsfw(family, label)
+    return bool(_EXPLICIT.search(prompt.get("text", "")))
+
+
+_SIZE_SECTION = re.compile(r"(?ms)^# Body size and scale\n.*?(?=^# |\Z)")
+_SIZE_WORDS = re.compile(r"(?i)\b(?:flat|small|narrow|skinny|slim|thick|curvy|petite|tiny|huge|plump|muscular|bigger|smaller|taller|shorter|larger|big (?:breasts|tits|ass)|large (?:breasts|tits))\b")
+_MALE_ANATOMY = re.compile(r"(?i)\b(?:penis|glans|foreskin|shaft|erect\w*|balls|scrotum)\b")
+_MALE_WORDS = re.compile(r"(?i)\b(?:man|men|male|boy|guy|he|his|him|husband|boyfriend|penis|cock|dick)\b")
+_CAPABLE = re.compile(r"(?:The preset is NSFW capable[^.\n]*\.|You are NSFW generation capable\.)\s*")
+_RATING = 'Rating: "safe" for a clothed everyday scene, "nsfw" for nudity or sex, "explicit" for hardcore.'
+
+
+def _male_present(prompt):
+    """Whether a man is in the scene: an action knows its cast, an idea is read for the words."""
+    if prompt.get("source") == "action":
+        family, label = prompt["action"].split(": ", 1)
+        entry = _store.get(family, label)
+        return any(role["gender"] == "male" for role in entry["roles"]) if "roles" in entry else entry.get("people", 1) > 1
+    return bool(_MALE_WORDS.search(prompt.get("text", "")))
+
+
+def _system_text(service, preset, context, style_prefix="", sections=None, negative="", explicit=True, male=True, sized=True, brief=False):
+    """The writer's system prompt: the family template, then only the facts of this request."""
+    seconds = float(context.get("duration") or 5)
+    text = service.PROMPTFORGE_PRESETS[preset]["text"].replace("{video_seconds}", f"{seconds:.2f}")
+    # the Order list asks for "two or three props": a small writer invents them (an apple, a pillow, a newspaper)
+    text = text.replace("and only the two or three props actually in frame", "and only the props the request names").replace("5. Place and the props in the frame.", "5. Place and only the props the request names.")
+    if not explicit:
+        text = _EXPLICIT_SECTIONS.sub("", text).replace("Start with: nsfw, anime style, 2d, flat colors.", "Start with: anime style, 2d, flat colors.").replace(_RATING, 'Rating: "safe".')
+        # the Order list offers "open, pulled aside or off" for every garment; a small writer takes the offer
+        text = _CAPABLE.sub("", text.replace("whether it is worn, open, pulled aside or off", "and how it is worn"))
     else:
-        instruction += (
-            "Write one flowing paragraph without numbered labels. Cover these in order, one short sentence each:\n"
-            "1. Shot: begin with the distance (wide or full body shot when the whole figure fits head to toe), then angle, "
-            "height and which side, for example wide three-quarter view from the foot of the bed, just above mattress height.\n"
-            "2. Staging: what supports each body, who is above or below, hips aligned, legs on both sides of the partner.\n"
-            "3. Contact: which part enters what, how much shaft or fingers stay visible, where each hand and arm is.\n"
-            "4. Bodies: count them (one head and one torso for a solo, two heads and four arms for a couple); which face the camera sees.\n"
-            "5. Place and light in one clause.\n"
-            f"Do not exceed {max_words} words. Banned filler: intimate, connection, composition centres, concrete detail, "
-            "frozen frame, atmosphere. ")
-    return instruction
+        text = text.replace(_RATING, 'Rating: "nsfw" for nudity, "explicit" for sex acts.')
+        if not male and context["family"] != "minimax_h3":
+            kept = [line for line in text.split("\n") if not _MALE_ANATOMY.search(line)]
+            if len(kept) < len(text.split("\n")):
+                text = "\n".join(kept) + "\n\nEveryone in this scene is a woman: name only the anatomy the camera shows, by its exact name."
+    if brief and explicit and context["family"] == "anima":
+        # an action brief already names the act; the template's act lists get copied into the tags whole
+        text = re.sub(r"(?m)^- (?:Acts|Choreography):.*\n", "", text)
+        text = re.sub(r"(?ms)^# Genitals\n.*?(?=^# |\Z)", "# Genitals\n- The brief names the act, positions, hands, gaze and framing. Tag those facts with the usual booru tag for each and add no other act, position, motion, sound or anatomy tag.\n\n", text)
+    if not sized:
+        text = _SIZE_SECTION.sub("", text)
+    parts = [text]
+    cap = service._output_cap(preset, seconds)
+    if cap and not sections:
+        parts.append(f"# Output length\nHard limit: at most {cap} {'tags' if 'tags' in preset.lower() else 'words'}. "
+                     "Compress detail to fit; never drop a requested element.")
+    if context.get("width") and context.get("height"):
+        parts.append(f"# Target frame\nThe picture is {context['orientation']}: compose the scene to fit it. Never write the frame size.")
+    if context["picture_count"] or context["video_count"] or context["audio"]:
+        lines = [f"<{_REFERENCE_LABEL[item['kind']]} {item['index']}> {item['name']}" + (f": {item['description']}" if item["description"] else "")
+                 for item in context["descriptions"]] or list(context["references"])
+        if context["contact_sheet"]:
+            lines.append("The attached picture is a contact sheet: its cells are separate references, not the target composition.")
+        if context["audio"]:
+            lines.append("Audio references cannot be heard by you; use only what the user wrote about them.")
+        parts.append("# References\n" + "\n".join(lines))
+    if sections:
+        parts.append("# This call\nWrite only these sections, each with its heading: " + ", ".join(sections)
+                     + ". The other sections are written by a separate call; do not write them.")
+    if style_prefix:
+        parts.append(f"Always start with: {style_prefix}.")
+    if negative:
+        parts.append("# Negative constraints\nThe scene must not contain: " + negative + ". Write the scene so they are absent, "
+                     "describing the desired state instead; never name them inside the prompt.")
+    if not explicit:
+        parts.append("If a person appears, they are dressed: name every garment they wear, with colour and material.")
+    parts.append("Keep what the request states exactly: when it places the arms, hands, legs or camera, repeat that placement and give them no other position. "
+                 "Add nothing that covers a face or body (helmet, mask, hood, shadow) unless the request names it.")
+    if explicit and context["family"] != "minimax_h3":
+        parts.append("Describe only the anatomy the pose and camera show: a part the pose hides or turns away from the lens is left out, and nothing is shown twice.")
+    parts.append("The lists and examples in this template show the format: write only what this request needs, never a whole list.")
+    parts.append(service.OUTPUT_GUARD + " Do not output chain-of-thought or reasoning; start with the final prompt.")
+    return "\n\n".join(parts)
 
 
 class ImagePromptWriter(io.ComfyNode):
@@ -711,81 +820,84 @@ class ImagePromptWriter(io.ComfyNode):
         preset_family = _preset_family(preset) if override else None
         mismatch = (f"{preset} is a {preset_family} template, the pipe is {pipe['family']}"
                     if preset_family and preset_family != pipe["family"] else "")
-        manual_template = service.PROMPTFORGE_PRESETS[preset]["text"] if override else ""
         encoder = service.PROMPTFORGE_PromptEnhancer()
-        budget = {"krea2": 260, "moss_image": 320, "anima": 120, "minimax_h3": 2600}.get(pipe["family"], 300)
-        template = _instructions(pipe, mode, context, budget, style_prefix)
         # H3 writes the picture and the sound in separate calls: one long output tends to
         # run past every section and lose the audio, so each call gets its own stop.
-        if cls.H3:
-            audio_sections = [name for name in _services()._MINIMAX_SECTIONS[mode]
-                              if name in ("overall_soundscape", "non_diegetic_music")]
-            template = _instructions(pipe, mode, context, budget, style_prefix,
-                                     [name for name in _services()._MINIMAX_SECTIONS[mode] if name not in audio_sections])
-            sound_template = (
-                "Output only these two headings and their content, nothing else:\n\n"
-                "overall_soundscape:\n<90-150 words of real sound for this clip>\n\n"
-                "non_diegetic_music:\n<one line, or N/A>\n\n"
-                "The soundscape names the room tone, the body impacts, the wet penetration sounds at the contact, the "
-                "bedding, and the breath and voice with any speech as <d>[English] words</d>. Write the sounds themselves, "
-                "not a list of categories.")
-        if manual_template:
-            template = manual_template + "\n\n" + template
-        reference_rules = (
-            "Reference mapping and target format: " + json.dumps(context) +
-            "\nContact sheet cells are separate reference pictures, not the target composition. "
-            "Use the original Picture numbers from the mapping in the final prompt. "
-            "Audio semantics are unavailable to this writer; use only user-supplied audio descriptions. "
-            "For continuation, continue the supplied video using the continuity settings. " +
-            ("Preserve the required H3 sections and reference labels." if cls.H3 else ""))
+        sections = _services()._MINIMAX_SECTIONS[mode] if cls.H3 else None
+        sound_sections = [name for name in sections or () if name in ("overall_soundscape", "non_diegetic_music")]
+        picture_sections = [name for name in sections or () if name not in sound_sections]
+        negative = (prompt.get("negative") or "").strip()
+        explicit, male = _is_explicit(prompt), _male_present(prompt)
+        sized = bool(_SIZE_WORDS.search(prompt.get("text", "")))
+        system_base = _system_text(service, preset, context, style_prefix, picture_sections if cls.H3 else None, negative, explicit, male, sized,
+                                   brief=prompt.get("source") == "action")
+        sound_base = _system_text(service, preset, context, "", sound_sections, negative, explicit, male, sized) if sound_sections else ""
         user_text = prompt["text"]
         if prompt.get("source") == "action" and cls.H3:
             user_text = (user_text + "\n\nWrite this as 650-900 words of continuous shot prose only: expand every "
                          "position, contact, angle and reaction into visible detail and start with `[Shot 1]`.")
-        elif prompt.get("source") == "action" and pipe["family"] == "anima" and len(re.findall(r"\bSubject 2\b", user_text)):
-            user_text = ("The pair is one man and one woman: use 1girl 1boy and hetero, full body framing.\n\n" + user_text)
+        elif prompt.get("source") == "action" and pipe["family"] == "anima":
+            user_text = ("Turn this brief into booru tags. Keep every position, contact and camera fact. Lines with NOT, never, "
+                         "without or no are constraints: tag the state they ask for and leave those words out. "
+                         "Camera facts become framing and angle tags (full body, from side); never a camera tag, the model draws the object."
+                         + ("" if explicit else " Tag every garment each person wears.") + "\n\n" + user_text)
         elif prompt.get("source") == "action":
             user_text = ("Condense this brief into affirmative scene description. Keep every position, contact and camera "
-                         "fact; drop ornamental words. Its NOT, never, without and no lines are constraints: describe the "
-                         "state they ask for and leave those words out. Do not invent limbs or second parts.\n\n" + user_text)
+                         "fact. Lines with NOT, never, without or no are constraints: describe the state they ask for and "
+                         "leave those words out. Write a camera only when the brief gives one." + ("" if explicit else " Name what each person wears, with colour and material.") + "\n\n" + user_text)
+        elif prompt.get("source") == "idea" and not explicit:
+            user_text += "\n\nName what each person wears, with colour and material." if pipe["family"] != "anima" else "\n\nTag every garment each person wears."
         records = []
         feedback = ""
         for index in range(attempts):
             attempt_seed = (int(seed) + index) % (2**32 - 1) or 1
-            system = template + "\n\n" + reference_rules + (
-                "\nDescribe the desired result affirmatively in every descriptive field. "
-                "Return only the target model prompt. Writer constraints describe desired outcomes: " +
-                json.dumps({"excluded_from_scene": prompt.get("negative", "")}) + "\n" + feedback)
-            text, thinking = _write(encoder, service, writer_model, system, user_text, images, video,
-                                    attempt_seed, min(max_tokens, 4096), temperature, thinking == "on",
-                                    top_p, top_k, repetition_penalty, presence_penalty)
+            system = system_base + ("\n\n" + feedback if feedback else "")
+            text, thought = _write(encoder, service, writer_model, system, user_text, images, video,
+                                   attempt_seed, min(max_tokens, 4096), temperature, thinking == "on",
+                                   top_p, top_k, repetition_penalty, presence_penalty)
             text = _strip_context_echo(text)
+            if pipe["family"] == "anima":
+                text = _clean_tags(text)
+            elif not cls.H3:
+                text = _drop_negations(text)
+            if prompt.get("source") == "action" and not cls.H3:
+                text = _grounded(text, user_text, tags=pipe["family"] == "anima")
             audio_text = ""
-            if cls.H3:
-                text = _h3_headings(text, mode)
-                sound_system = sound_template + "\n\n" + reference_rules + "\nReturn only the sound sections."
-                sound_user = ("Name the sound for this clip. Return only overall_soundscape and non_diegetic_music.\n\nClip:\n"
-                              + text + "\n\nBrief for reference:\n" + user_text)
-                audio_text, sound_thinking = _write(encoder, service, writer_model, sound_system, sound_user,
-                                                    images, video, (attempt_seed + 7919) % (2**32 - 1), 1024, temperature)
+            if cls.H3 and text.strip():
+                text = _H3_EMPTY_REF.sub("", _H3_AGE_ECHO.sub("", _h3_headings(text, mode)))
+                if prompt.get("source") == "action":
+                    text = _grounded_h3(text, user_text)
+                sound_user = ("Name the sound for this clip.\n\nClip:\n" + text + "\n\nBrief for reference:\n" + user_text)
+                audio_text, _ = _write(encoder, service, writer_model, sound_base, sound_user,
+                                       images, video, (attempt_seed + 7919) % (2**32 - 1), 1024, temperature)
                 audio_text = _h3_headings(_strip_context_echo(audio_text), mode)
                 if "overall_soundscape" in audio_text:
-                    text = text.rstrip() + "\n\n" + audio_text.strip()
+                    # the dedicated sound call wins over the audio sections the picture call wrote on the side
+                    text = re.split(r"(?m)^(?:overall_soundscape|non_diegetic_music):", text)[0].rstrip() + "\n\n" + audio_text.strip()
                 text = _h3_repair_audio(_h3_repair_sections(text, pipe, mode), pipe, mode)
             request = json.dumps({"system": system, "user": user_text, "context": context}, ensure_ascii=False)
             issues = [] if checks == "off" else validation_issues(text, pipe["family"])
             if cls.H3 and checks != "off":
                 issues.extend(_h3_issues(text, mode, context))
-            records.append({"seed": attempt_seed, "text": text, "validation": issues, "request": request, "thinking": thinking})
-            if not issues:
+                if _SCROTUM_AS_VULVA.search(text):
+                    issues.append("female anatomy written onto the man's scrotum: it is one closed sac with a centre seam")
+                if prompt.get("source") == "action" and _LEAVES_THE_BODY.search(text) and _library("h3_actions").penetration_modes(str(prompt.get("action", "")).split(": ", 1)[-1]):
+                    issues.append("the shaft leaves the body during the stroke: keep it inside through the whole stroke")
+            records.append({"seed": attempt_seed, "text": text, "validation": issues, "request": request, "thinking": thought})
+            conflict = _shot_conflict(text) if pipe["family"] == "anima" and checks != "off" else ""
+            # negative wording alone is a blemish, not a failure: after the last retry the text is used and the warning stays in the report
+            last = index == attempts - 1
+            blemish = all(issue.startswith(("negative wording", "description too long", "the shaft leaves", "female anatomy written")) for issue in issues)
+            if (not issues or last and blemish) and (not conflict or last):
                 result = evolve(pipe, artifacts={"text": text, "writer": {
-                    "status": "valid", "validation": [], "attempts": records, "max_tokens": max_tokens,
+                    "status": "valid", "validation": issues, "attempts": records, "max_tokens": max_tokens,
                     "context": context, "preset": preset, **({"preset_mismatch": mismatch} if mismatch else {})}},
                     invalidate=("positive", "negative"))
                 return io.NodeOutput(result, text)
             feedback = ("Rewrite affirmatively: drop these words and replace each with what is visible in the scene: "
-                        "no, not, never, without, avoid. Failures: " + "; ".join(issues))
+                        "no, not, never, without, avoid. Failures: " + "; ".join(issues + [conflict] if conflict else issues))
         dump = Path(folder_paths.get_temp_directory()) / "PromptForge_writer_failed.json"
+        dump.parent.mkdir(parents=True, exist_ok=True)
         dump.write_text(json.dumps(records, ensure_ascii=False), encoding="utf-8")
         reasons = "; ".join(f"attempt {index + 1}: {', '.join(record['validation'])}" for index, record in enumerate(records))
         raise ValueError(f"Prompt writer exhausted {attempts} validation attempts, encoding blocked. {reasons}. "

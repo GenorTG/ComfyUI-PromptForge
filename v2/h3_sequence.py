@@ -66,16 +66,17 @@ class H3Continuity(io.ComfyNode):
         return schema("CONTINUITY", "Continuity", [Pipe.Input("pipe", optional=True),
             io.Combo.Input("mode", options=["independent", "last_frame", "continue"], default="continue"),
             io.Int.Input("carried_frames", default=22, min=1, max=3600),
-            io.Combo.Input("transition", options=["cut", "crossfade"], default="cut"),
-            io.Int.Input("overlap_frames", default=0, min=0, max=3600)])
+            io.Combo.Input("transition", options=["cut", "crossfade"], default="crossfade"),
+            io.Int.Input("overlap_frames", default=0, min=0, max=3600),
+            io.Boolean.Input("match_levels", default=True, tooltip="Match each part's brightness, colour and contrast to the end of the previous part.")])
 
     @classmethod
-    def execute(cls, pipe=None, mode="continue", carried_frames=22, transition="cut", overlap_frames=0):
+    def execute(cls, pipe=None, mode="continue", carried_frames=22, transition="crossfade", overlap_frames=0, match_levels=True):
         pipe = ensure_pipe(pipe, family="minimax_h3")
         from .h3 import checked
         checked(pipe)
         return io.NodeOutput(evolve(pipe, section="continuity", settings={"mode": mode,
-            "carried_frames": carried_frames, "transition": transition, "overlap_frames": overlap_frames}))
+            "carried_frames": carried_frames, "transition": transition, "overlap_frames": overlap_frames, "match_levels": match_levels}))
 
 
 class H3Sequence(io.ComfyNode):
@@ -83,6 +84,7 @@ class H3Sequence(io.ComfyNode):
     def define_schema(cls):
         return schema("SEQUENCE", "Sequence", [Pipe.Input("pipe", optional=True),
             io.Int.Input("max_parts", default=0, min=0, max=10000, tooltip="0 runs all remaining parts; a limit produces a resumable pipe."),
+            io.Boolean.Input("save_first_pass", default=True, tooltip="Keep each part's decoded first pass, joined like the result, for First Pass Preview. Only kept when a second pass runs."),
             Pipe.Input("resume", optional=True), Writer.Input("writer_model", optional=True, lazy=True)], [Pipe.Output("pipe"), io.Image.Output("images"),
             io.Audio.Output("audio"), io.String.Output("report")])
 
@@ -95,7 +97,7 @@ class H3Sequence(io.ComfyNode):
         return ["writer_model"] if writer_model is None and any(p.get("source", "raw") != "raw" for p in parts) else []
 
     @classmethod
-    def execute(cls, pipe=None, max_parts=0, resume=None, writer_model=None):
+    def execute(cls, pipe=None, max_parts=0, save_first_pass=True, resume=None, writer_model=None):
         pipe = ensure_pipe(pipe, family="minimax_h3")
         if not pipe["settings"].get("parts"):
             raise ValueError("Connect Parts before Sequence.")
@@ -114,6 +116,7 @@ class H3Sequence(io.ComfyNode):
                 raise ValueError("Resume pipe has different plan, models, sampling or continuity settings.")
         clips = list(resume["artifacts"].get("sequence_parts", [])) if resume is not None else []
         assembled = resume if clips else None
+        first_pass = resume["artifacts"].get("sequence_first_pass") if clips else None
         report = list(resume["artifacts"].get("sequence_report", [])) if clips else []
         start = len(clips)
         end = min(len(plan), start + max_parts) if max_parts else len(plan)
@@ -169,13 +172,20 @@ class H3Sequence(io.ComfyNode):
             comfy.model_management.soft_empty_cache(force=True)
             working = h3.sample(working, **dict(sampling["first"], seed=seed))
             upscale = pipe["settings"].get("upscale")
+            second_pass = bool(upscale and upscale.get("enabled", True)) or sampling.get("refine_enabled", False)
+            if second_pass and save_first_pass:
+                first = h3.decode(working, **pipe["settings"].get("decode", {}))
+                first = {**first, "artifacts": {"images": first["artifacts"]["images"].to("cpu"), "audio": first["artifacts"]["audio"]}}
+                first_overlap = working["artifacts"].get("continuation_overlap", continuity.get("overlap_frames", 0))
+                first_pass = h3.join(first_pass, first, first_overlap, continuity.get("transition", "crossfade"), continuity.get("match_levels", True)) if first_pass is not None else first
+                del first
             if upscale and upscale.get("enabled", True):
                 working = h3.H3LatentUpscale.execute(working).args[0]
             if sampling.get("refine_enabled", False):
                 working = h3.sample(working, **dict(sampling["refine"], seed=(seed + 7) % 2**64))
             working = h3.decode(working, **pipe["settings"].get("decode", {}))
             overlap = working["artifacts"].get("continuation_overlap", continuity.get("overlap_frames", 0))
-            assembled = h3.join(assembled, working, overlap, continuity.get("transition", "cut")) if assembled is not None else working
+            assembled = h3.join(assembled, working, overlap, continuity.get("transition", "crossfade"), continuity.get("match_levels", True)) if assembled is not None else working
             # Only decoded clips are retained for resume and continuity, not per-part model/latent copies.
             # a retained clip keeps no model patchers: their refcount would pin staged weights in VRAM
             working = evolve(working, invalidate=("model", "clip", "vae", "audio_vae", "decode_vae",
@@ -190,5 +200,6 @@ class H3Sequence(io.ComfyNode):
         if assembled is None:
             raise ValueError("Sequence has no completed parts.")
         assembled = evolve(assembled, section="sampling", settings=sampling)
-        result = evolve(assembled, artifacts={"sequence_parts": clips, "sequence_next": len(clips), "sequence_report": report, "sequence_format": dict(fmt)})
+        result = evolve(assembled, artifacts={"sequence_parts": clips, "sequence_next": len(clips), "sequence_report": report, "sequence_format": dict(fmt),
+                                              **({"sequence_first_pass": first_pass} if first_pass is not None else {})})
         return io.NodeOutput(result, *require(result, "images", "audio"), "\n".join(report))

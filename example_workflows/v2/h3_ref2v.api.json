@@ -97,20 +97,18 @@
     }
   },
   "6": {
-    "class_type": "PROMPTFORGE_V2_LOAD_IMAGE",
+    "class_type": "PROMPTFORGE_V2_REFERENCES_MANAGER",
     "inputs": {
-      "filename": "<INPUT_REFERENCE.png>",
-      "role": "reference",
-      "index": 1,
-      "enabled": true,
-      "description": "",
+      "items": "[]",
+      "names": "",
+      "extra_video_fps": 24.0,
       "pipe": [
         "5",
         0
       ]
     },
     "_meta": {
-      "title": "Reference Image"
+      "title": "Reference Board"
     }
   },
   "7": {
@@ -122,13 +120,7 @@
       "pipe": [
         "6",
         0
-      ],
-      "reference_images": {
-        "reference_images.item_0": [
-          "6",
-          1
-        ]
-      }
+      ]
     },
     "_meta": {
       "title": "References"
@@ -158,6 +150,8 @@
       "subject_2": "",
       "subject_3": "",
       "camera": "auto",
+      "shot": "auto",
+      "angle": "auto",
       "notes": "",
       "soundscape": "",
       "music": "N/A",
@@ -329,7 +323,7 @@
     "inputs": {
       "enabled": true,
       "save": true,
-      "filename_prefix": "video/PromptForge_H3_first_pass",
+      "filename_prefix": "video/PromptForge/h3_ref2v_first_pass",
       "pipe": [
         "15",
         0
@@ -445,7 +439,7 @@
     "class_type": "PROMPTFORGE_V2_H3_PREVIEW_SAVE",
     "inputs": {
       "save": true,
-      "filename_prefix": "video/PromptForge/h3_ref2v",
+      "filename_prefix": "video/PromptForge/h3_ref2v_second_pass",
       "encoder_preset": "high quality",
       "codec": "h265 (cpu x265)",
       "speed": "slow",

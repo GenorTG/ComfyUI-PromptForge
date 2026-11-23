@@ -44,7 +44,7 @@ def _ffmpeg():
             import imageio_ffmpeg
             path = imageio_ffmpeg.get_ffmpeg_exe()
         except ImportError:
-            raise ValueError("[PromptForge] ffmpeg was not found. Install ffmpeg or put it on PATH.")
+            raise ValueError("[PromptForge] ffmpeg was not found. Install ffmpeg or put it on PATH.") from None
     if not Path(path).is_file():
         path = shutil.which(path)
         if path is None:

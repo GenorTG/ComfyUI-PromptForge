@@ -109,6 +109,8 @@ function normalize(row) {
     min: numeric(row.min, 0.6),
     max: numeric(row.max, 1),
     part: row.part || "all",
+    layers: row.layers === "mlp" ? "mlp" : "all",
+    rank: Math.max(0, Math.round(numeric(row.rank, 0))),
   };
 }
 function canonical(row) {
@@ -127,9 +129,11 @@ function canonical(row) {
     min: Math.min(low, high),
     max: Math.max(low, high),
     part: row.part || "all",
+    layers: row.layers === "mlp" ? "mlp" : "all",
+    rank: Math.max(0, Math.round(numeric(row.rank, 0))),
   };
 }
-const blankRow = (name) => ({ name, enabled: true, model_strength: 1, clip_strength: null, random: false, min: 0.6, max: 1, part: "all" });
+const blankRow = (name) => ({ name, enabled: true, model_strength: 1, clip_strength: null, random: false, min: 0.6, max: 1, part: "all", layers: "all", rank: 0 });
 
 function readState(node) {
   try {
@@ -682,6 +686,14 @@ function buildUI(node) {
         numberInput(item.clip_strength, (value) => edit(node, (items) => { items[index].clip_strength = value; }), "= model"),
       );
     }
+    const layers = el("select", { title: "Layers of this LoRA to use. Feed-forward only is the soft patch for a LoRA trained on another base model: it keeps the motion and concept and leaves the attention alone." }, {});
+    layers.className = "pflora-part";
+    layers.append(new Option("all layers", "all"), new Option("ff only", "mlp"));
+    layers.value = item.layers;
+    layers.addEventListener("change", () => edit(node, (items) => { items[index].layers = layers.value; }));
+    const rank = numberInput(item.rank || "", (value) => edit(node, (items) => { items[index].rank = Math.max(0, Math.round(value ?? 0)); }), "rank", [0, 512]);
+    rank.title = "Cut every layer of this LoRA to this many strongest directions. Empty or 0 keeps the LoRA's own rank.";
+    line.append(layers, rank);
     if (managerReady) {
       const info = el("button", { type: "button", textContent: "i", title: "LoRA information" }, {});
       info.className = "pflora-info-btn";

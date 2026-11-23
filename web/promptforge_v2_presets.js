@@ -41,7 +41,7 @@ export function parsePresets(value) {
   return data;
 }
 
-const OWNED_SOCKETS = new Set([PIPE, "PROMPTFORGE_V2_WRITER_MODEL", "PROMPTFORGE_V2_H3_REFERENCE_BANK"]);
+const OWNED_SOCKETS = new Set([PIPE, "PROMPTFORGE_V2_WRITER_MODEL"]);
 const MEDIA_SOURCES = new Set(["PROMPTFORGE_V2_LOAD_IMAGE", "PROMPTFORGE_V2_MASK_PREPARE", "PROMPTFORGE_V2_IMAGE_SCALE", "PROMPTFORGE_V2_IMAGE_COMPOSITE"]);
 
 export function upstreamNodes(start) {

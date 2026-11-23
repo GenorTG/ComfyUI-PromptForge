@@ -12,6 +12,16 @@ PREFIX = "PROMPTFORGE_V2_"
 GROUPS = ["01 Models & LoRAs", "02 Intent & References", "03 Prompt & Review",
           "04 Format & Sampling", "06 Encode & Sample", "07 Refine & Decode", "08 Optional RIFE", "09 Inspect & Save",
           "05 Performance & Preview"]
+GAP = 56
+SIDE_GAP = 40
+MAX_STACK = 1500  # a group taller than this wraps into a second column
+# stage -> (group, node title, node body): one hue per pipeline stage
+GROUP_COLORS = {"01": ("#2a4a6b", "#2b5278", "#1d3347"), "02": ("#27564f", "#2a6b5f", "#1b403a"),
+                "03": ("#3a5a2a", "#4a7a35", "#2c4421"), "04": ("#6b5527", "#8a6d2f", "#4a3b1b"),
+                "05": ("#4a4a6b", "#5a5a8a", "#33334d"), "06": ("#6b2f2f", "#8a3b3b", "#4a2222"),
+                "07": ("#5a2f6b", "#7a3b8a", "#3d2248"), "08": ("#4a4a4a", "#5a5a5a", "#333333"),
+                "09": ("#2f5a6b", "#3b7a8a", "#223d48")}
+NODE_SIZES = json.loads((Path(__file__).with_name("node_sizes.json")).read_text())
 
 
 def write_json(path, value):
@@ -120,28 +130,8 @@ class Graph:
             self.pipe = (node_id, info["output"].index(PIPE))
         return node_id
 
-    # canvas sizes mirror web/promptforge_v2.js SIZES so the builder and the frontend agree
-    ROLE_SIZE = {"loras": (560, 620), "edit_lora": (400, 260), "prompt": (440, 300), "prompt_writer": (420, 250),
-                 "prompt_review": (440, 260), "preview": (420, 320), "first_pass_preview": (420, 300),
-                 "save_video": (440, 400), "save_image": (440, 360), "presets": (420, 380),
-                 "latent_upscale": (360, 200), "run_inspect": (440, 280), "reference_1": (440, 460), "reference_2": (440, 460),
-                 "reference_3": (440, 460), "reference_4": (440, 460), "reference_scale": (400, 200),
-                 "first_frame": (440, 460), "last_frame": (440, 460), "reference_image": (440, 460),
-                 "source_video": (420, 300), "bank_image": (440, 460), "bank_video": (420, 300),
-                 "bank_audio": (420, 240), "subject_mask": (420, 240), "edit_mask": (380, 220)}
-    HIDDEN_INPUTS = {"source", "loras", "layer_controls", "action", "subject_1", "subject_2", "subject_3", "camera", "notes"}
-
     def node_size(self, node):
-        role = node["properties"]["promptforge_role"]
-        width, min_height = self.ROLE_SIZE.get(role, (400, 0))
-        named = node["properties"]["promptforge_v2_widget_values"]
-        height = 96
-        for name, spec, _ in inputs(self.catalogue[node["type"]]):
-            if name not in named or name in self.HIDDEN_INPUTS:
-                continue
-            options = spec[1] if len(spec) > 1 else {}
-            height += (86 if name in ("text", "negative") else 58) if options.get("multiline") else 25
-        return width, max(190, min_height, height)
+        return tuple(NODE_SIZES[node["type"]])
 
     def layout(self):
         groups, plans = [], []
@@ -150,27 +140,39 @@ class Graph:
             members = [self.nodes[n - 1] for n, group in self.roles.values() if group == label]
             if not members:
                 continue
-            plans.append((index, label, members, [self.node_size(node) for node in members]))
+            stacks = [[]]
+            for node in members:
+                size = self.node_size(node)
+                if stacks[-1] and sum(h + GAP for _, (_, h) in stacks[-1]) + size[1] > MAX_STACK:
+                    stacks.append([])
+                stacks[-1].append((node, size))
+            widths = [max(width for _, (width, _) in stack) for stack in stacks]
+            plans.append((index, label, stacks, widths, sum(widths) + SIDE_GAP * (len(stacks) - 1),
+                          max(sum(h + GAP for _, (_, h) in stack) for stack in stacks)))
 
-        columns = [0, 0, 0, 0, 0]
-        for index, _, _, sizes in plans:
-            columns[index % 5] = max(columns[index % 5], max(width for width, _ in sizes))
+        columns = [0] * 5
+        for index, _, _, _, width, _ in plans:
+            columns[index % 5] = max(columns[index % 5], width)
         offsets, x = {}, 44
         for column, width in enumerate(columns):
             offsets[column] = x
             x += width + 70
-        tallest = max((sum(height + 56 for _, height in sizes) for _, _, _, sizes in plans if True), default=1400)
-        row_height = tallest + 170
+        row_tops = {0: 0, 1: max((height for index, _, _, _, _, height in plans if index < 5), default=0) + 150}
 
-        for index, label, members, sizes in plans:
+        for index, label, stacks, widths, width, height in plans:
             column, row = index % 5, index // 5
-            x, top = offsets[column], row * row_height
-            y = top + 76
-            for node, (width, height) in zip(members, sizes):
-                node["pos"], node["size"] = [x, y], [width, height]
-                y += height + 56
-            groups.append({"title": label, "bounding": [x - 16, top, columns[column] + 32, y - top - 24],
-                           "color": "#35566b", "font_size": 24, "flags": {}})
+            left, top = offsets[column], row_tops[row]
+            color, node_color, body = GROUP_COLORS[label[:2]]
+            x = left
+            for stack, stack_width in zip(stacks, widths):
+                y = top + 76
+                for node, size in stack:
+                    node["pos"], node["size"] = [x, y], list(size)
+                    node["color"], node["bgcolor"] = node_color, body
+                    y += size[1] + GAP
+                x += stack_width + SIDE_GAP
+            groups.append({"title": label, "bounding": [left - 16, top, columns[column] + 32, height + 76 - GAP + 24],
+                           "color": color, "font_size": 24, "flags": {}})
         return groups
 
     def validate(self):
@@ -269,7 +271,7 @@ def add_writer(graph, h3=False):
 
 
 def add_end(graph, video=False, images=None, audio=None):
-    prefix = f"video/PromptForge/{graph.name}" if video else f"PromptForge/{graph.name}"
+    prefix = f"video/PromptForge/{graph.name}_second_pass" if video else f"PromptForge/{graph.name}"
     if video:
         wires = {"images": images} if images else {}
         if images and audio:
@@ -368,29 +370,12 @@ def h3_graph(catalogue, name, mode, multipart=False):
         graph.add("LOAD_IMAGE", "first_frame", GROUPS[1], {"filename": "<INPUT_FIRST_FRAME.png>", "role": "first_frame"})
     if mode in ("l2v", "fl2v"):
         graph.add("LOAD_IMAGE", "last_frame", GROUPS[1], {"filename": "<INPUT_LAST_FRAME.png>", "role": "last_frame"})
-    reference_image = None
-    if mode == "ref2v" and name != "h3_ref2v_reference_bank":
-        reference_image = graph.add("LOAD_IMAGE", "reference_image", GROUPS[1],
-                                    {"filename": "<INPUT_REFERENCE.png>", "role": "reference"})
-    if mode == "ref2v" and name == "h3_ref2v_reference_bank":
-        image = graph.add("LOAD_IMAGE", "bank_image", GROUPS[1], {"filename": "<OPTIONAL_BANK_IMAGE.png>", "role": "reference", "index": 2})
-        video = graph.add("LOAD_VIDEO", "bank_video", GROUPS[1], {"filename": "<OPTIONAL_BANK_VIDEO.mp4>", "role": "reference"})
-        audio = graph.add("LOAD_AUDIO", "bank_audio", GROUPS[1], {"filename": "<OPTIONAL_BANK_AUDIO.wav>"})
-        bank_image = graph.add("H3_REFERENCE_BANK", "bank_image_entry", GROUPS[1],
-                               {"name": "subject", "kind": "image"}, {"images": (image, 1)}, chain=False)
-        bank_video = graph.add("H3_REFERENCE_BANK", "bank_video_entry", GROUPS[1],
-                               {"name": "motion", "kind": "video"},
-                               {"bank": (bank_image, 0), "images": (video, 1), "audio": (video, 2)}, chain=False)
-        bank_audio = graph.add("H3_REFERENCE_BANK", "bank_audio_entry", GROUPS[1],
-                               {"name": "sound", "kind": "audio"},
-                               {"bank": (bank_video, 0), "audio": (audio, 1)}, chain=False)
-        graph.add("H3_REFERENCE_SELECT", "reference_selection", GROUPS[1],
-                  {"names": "subject,motion,sound"}, {"bank": (bank_audio, 0)})
+    if mode == "ref2v":
+        graph.add("REFERENCES_MANAGER", "reference_board", GROUPS[1], {"items": "[]"})
     if mode == "continue":
         source = graph.add("LOAD_VIDEO", "source_video", GROUPS[1], {"filename": "<INPUT_SOURCE_VIDEO.mp4>", "role": "continue"})
         source_clip = graph.add("H3_SOURCE_CLIP", "source_clip", GROUPS[5], connections={"pipe": (source, 0)}, chain=False)
-    graph.add("H3_REFERENCES", "references", GROUPS[1], {"mode": mode},
-              connections={"reference_images": (reference_image, 1)} if reference_image else None)
+    graph.add("H3_REFERENCES", "references", GROUPS[1], {"mode": mode})
     writer, prompt = add_writer(graph, h3=True)
     graph.add("H3_SAMPLING_SETTINGS", "sampling_first_and_refine", GROUPS[3])
     upscale_model = "<SELECT_H3_FP32_LATENT_UPSCALER>"
@@ -402,6 +387,8 @@ def h3_graph(catalogue, name, mode, multipart=False):
         graph.add("H3_PARTS", "parts", GROUPS[3], {"parts_json": '[{"text":"","seconds":5},{"text":"","seconds":5}]'})
         graph.add("H3_CONTINUITY", "continuity", GROUPS[3], {"mode": "independent" if mode == "ref2v" else "continue"})
         graph.add("H3_SEQUENCE", "sequence", GROUPS[4], connections={"writer_model": (writer, 0)})
+        graph.add("H3_FIRST_PASS_PREVIEW", "first_pass_preview", GROUPS[5],
+                  {"enabled": True, "filename_prefix": f"video/PromptForge/{name}_first_pass"})
     else:
         if mode == "continue":
             graph.add("H3_CONTINUITY", "continuity", GROUPS[3])
@@ -410,7 +397,8 @@ def h3_graph(catalogue, name, mode, multipart=False):
         sample_node = graph.add("H3_SAMPLE", "sample_first", GROUPS[4],
                                 connections={"model": model_out, "positive": (encode, 1),
                                              "negative": (encode, 2), "latent": (encode, 3)})
-        graph.add("H3_FIRST_PASS_PREVIEW", "first_pass_preview", GROUPS[5], {"enabled": True},
+        graph.add("H3_FIRST_PASS_PREVIEW", "first_pass_preview", GROUPS[5],
+                  {"enabled": True, "filename_prefix": f"video/PromptForge/{name}_first_pass"},
                   connections={"pipe": (sample_node, 0)})
         upscaled = graph.add("H3_LATENT_UPSCALE", "latent_upscale", GROUPS[5],
                              connections={"latent": (sample_node, 1)})
@@ -439,8 +427,7 @@ def build_catalogue(catalogue):
               image_graph(catalogue, "anima_t2i", "anima")]
     for mode in ("t2v", "i2v", "l2v", "fl2v", "ref2v"):
         graphs.append(h3_graph(catalogue, f"h3_{mode}", mode))
-    graphs.extend([h3_graph(catalogue, "h3_ref2v_reference_bank", "ref2v"),
-                   h3_graph(catalogue, "h3_multipart_t2v", "t2v", multipart=True),
+    graphs.extend([h3_graph(catalogue, "h3_multipart_t2v", "t2v", multipart=True),
                    h3_graph(catalogue, "h3_multipart_references", "ref2v", multipart=True),
                    h3_graph(catalogue, "h3_continue_existing", "continue")])
     return graphs

@@ -48,7 +48,7 @@ from .empty_latent import NODE_CLASS_MAPPINGS as LATENT_CLASS_MAPPINGS, NODE_DIS
 from .sampler import NODE_CLASS_MAPPINGS as SAMPLER_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as SAMPLER_DISPLAY_NAMES
 from .quantize_model import NODE_CLASS_MAPPINGS as QUANT_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as QUANT_DISPLAY_NAMES
 from .minimax_decode import NODE_CLASS_MAPPINGS as DECODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as DECODE_DISPLAY_NAMES
-from . import image_library, image_actions
+from . import image_library, image_actions, h3_actions
 from .image_actions_node import PROMPTFORGE_ImageAction
 from . import legacy
 from .moss_nodes import NODE_CLASS_MAPPINGS as MOSS_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as MOSS_DISPLAY_NAMES
@@ -2369,11 +2369,17 @@ class PROMPTFORGE_PromptEnhancer:
             raise ValueError("[PromptForge] Vision GGUF needs an mmproj file next to the model (e.g. mmproj-F16.gguf). Put one in the same folder, set mmproj_path, or switch mode to text_only.")
 
         from llama_cpp import Llama
+        from llama_cpp import _logger as llama_log
+
+        # llama.cpp warns about a '</s>' token typed wrong in some GGUF vocabularies and fixes it itself; the warning repeats on every load
+        llama_log.add_log_filters(["control-looking token"])
 
         n_ctx = max(512, int(context_size))
+        # three characters per token over-counts English, so the real request always fits the context it gets
         estimated = len(full_prompt) // 3 + len(images) * 1024 + int(max_tokens) + 512
         if estimated > n_ctx:
-            print(f"[PromptForge] context_size={n_ctx} may truncate this request (about {estimated} tokens needed).")
+            n_ctx = -(-estimated // 1024) * 1024
+            print(f"[PromptForge] this request needs about {estimated} tokens; context raised from {int(context_size)} to {n_ctx} so nothing is cut off.")
 
         kv_type = _kv_type_value(kv_cache_type)
         flash_types = {"auto": -1, "on": 1, "off": 0}
@@ -2419,6 +2425,16 @@ class PROMPTFORGE_PromptEnhancer:
             required = _gguf_memory_estimate(gguf_path, n_ctx, llama_kwargs["n_gpu_layers"], mmproj)
             if free_bytes < required:
                 _free_vram(needed=int(required))
+                try:
+                    free_bytes = torch.cuda.mem_get_info()[0]
+                except Exception:
+                    free_bytes = 0
+                if free_bytes < required:
+                    # a larger context costs KV cache: keep the whole context and move layers to the CPU instead
+                    fit = _gguf_layers_that_fit(gguf_path, n_ctx, mmproj)
+                    if llama_kwargs["n_gpu_layers"] < 0 or fit < llama_kwargs["n_gpu_layers"]:
+                        llama_kwargs["n_gpu_layers"] = fit
+                        print(f"[PromptForge] a {n_ctx}-token context does not fit the free VRAM with every layer; using {fit} GPU layers.")
 
         fallbacks = []
         if kv_type != _kv_type_value("f16"):
@@ -2502,6 +2518,10 @@ class PROMPTFORGE_PromptEnhancer:
                 enable_thinking=not disable_thinking,
             )[0][0]
             completion_kwargs["prompt"] = prompt_text
+            used = len(llm.tokenize(prompt_text.encode("utf-8"), add_bos=True, special=True))
+            if used + int(max_tokens) > n_ctx:
+                raise ValueError(f"[PromptForge] the request is {used} tokens and the reply may need {int(max_tokens)} more, but the context is {n_ctx}. "
+                                 "Raise context_size, lower max_tokens, or shorten the request; the writer must see all of it.")
             completion_kwargs["stop"] = ["<|im_end|>", "<turn|>", "<end_of_turn>", "<|eot_id|>", "<|end|>"]
         else:
             completion_kwargs["messages"] = messages

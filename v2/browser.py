@@ -15,7 +15,10 @@ import json
 import os
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+import av
 
 from aiohttp import web
 from PIL import Image, ImageOps
@@ -35,6 +38,10 @@ LIMIT = 2000
 
 routes = PromptServer.instance.routes
 _store_lock = threading.Lock()
+# thumbnails and video conversions get their own few threads: on the shared default pool a folder of hundreds
+# of pictures starved the folder listing and the file the user had just clicked
+_thumb_pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="pf-thumb")
+_convert_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pf-convert")
 
 
 def _root(name):
@@ -65,6 +72,14 @@ def _read():
 def _write(store):
     _store().parent.mkdir(parents=True, exist_ok=True)
     _store().write_text(json.dumps(store, indent=1, ensure_ascii=False), encoding="utf-8")
+
+
+def _legacy_note(legacy):
+    """The image library's tags, caption and NSFW flag in the shape the browser stores."""
+    if not legacy:
+        return {}
+    categories = [legacy[key] for key in ("subject", "style", "theme") if legacy.get(key) not in (None, "", "other")]
+    return {"tags": [*legacy.get("tags", []), *categories], "description": legacy.get("caption", ""), "nsfw": bool(legacy.get("nsfw"))}
 
 
 def _kind(path):
@@ -101,6 +116,7 @@ def _listing(name, rel, query, kind):
     if not base.is_dir():
         return None
     notes = _read()
+    legacy = image_library.tags() if name == "input" else {}
     dirs, files, total = [], [], 0
     for folder, children, names in os.walk(base, followlinks=False):
         children[:] = sorted(child for child in children if not child.startswith("."))
@@ -112,7 +128,7 @@ def _listing(name, rel, query, kind):
                 continue
             path = current / file_name
             entry = _entry(root, path)
-            note = notes.get(f"{name}:{entry['path']}", {})
+            note = notes.get(f"{name}:{entry['path']}") or _legacy_note(legacy.get(entry["path"]))
             if query and query not in entry["path"].lower() and query not in " ".join(note.get("tags", [])).lower() and query not in str(note.get("description", "")).lower():
                 continue
             if kind != "all" and entry["kind"] != kind:
@@ -177,10 +193,59 @@ async def _thumb(request):
     if not path.is_file() or path.suffix.lower() not in KINDS["image"]:
         return web.Response(status=404, text="No thumbnail for that file.")
     try:
-        cached = await asyncio.get_running_loop().run_in_executor(None, _thumbnail, path, size)
+        cached = await asyncio.get_running_loop().run_in_executor(_thumb_pool, _thumbnail, path, size)
     except OSError:
         return web.Response(status=422, text="The image could not be decoded.")
     return web.FileResponse(cached, headers={"Cache-Control": "private, max-age=86400"})
+
+
+def _playable(path):
+    """An 8-bit H.264 copy of a video for browsers that cannot decode its codec (10-bit HEVC is what H3 saves)."""
+    stat = path.stat()
+    digest = hashlib.sha1(f"{path}|{stat.st_mtime_ns}|{stat.st_size}|play".encode()).hexdigest()
+    cached = image_library.store_dir() / "browser_thumbs" / f"{digest}.mp4"
+    if cached.exists():
+        return cached
+    cached.parent.mkdir(parents=True, exist_ok=True)
+    partial = cached.with_suffix(".part.mp4")
+    with av.open(str(path)) as source, av.open(str(partial), "w", format="mp4") as target:
+        video = source.streams.video[0]
+        rate = video.average_rate or 24
+        out_video = target.add_stream("libx264", rate=rate, options={"crf": "23", "preset": "veryfast", "movflags": "+faststart"})
+        out_video.width, out_video.height, out_video.pix_fmt = video.width - video.width % 2, video.height - video.height % 2, "yuv420p"
+        audio = source.streams.audio[0] if source.streams.audio else None
+        out_audio = target.add_stream("aac", rate=audio.rate) if audio else None
+        for packet in source.demux(video, *([audio] if audio else [])):
+            for frame in packet.decode():
+                if isinstance(frame, av.VideoFrame):
+                    frame = frame.reformat(width=out_video.width, height=out_video.height, format="yuv420p")
+                    for encoded in out_video.encode(frame):
+                        target.mux(encoded)
+                else:
+                    frame.pts = None
+                    for encoded in out_audio.encode(frame):
+                        target.mux(encoded)
+        for stream in (out_video, out_audio):
+            if stream is not None:
+                for encoded in stream.encode(None):
+                    target.mux(encoded)
+    partial.replace(cached)
+    return cached
+
+
+@routes.get("/promptforge/browser/playable")
+async def _play(request):
+    try:
+        _, path = _resolve(request.query.get("root", "output"), request.query.get("path", ""))
+    except ValueError as error:
+        return web.Response(status=400, text=str(error))
+    if not path.is_file() or path.suffix.lower() not in KINDS["video"]:
+        return web.Response(status=404, text="No video at that path.")
+    try:
+        cached = await asyncio.get_running_loop().run_in_executor(_convert_pool, _playable, path)
+    except (av.error.FFmpegError, OSError, IndexError) as error:
+        return web.Response(status=422, text=f"The video could not be converted: {error}")
+    return web.FileResponse(cached, headers={"Cache-Control": "private, max-age=3600"})
 
 
 @routes.post("/promptforge/browser/rename")

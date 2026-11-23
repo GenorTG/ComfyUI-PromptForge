@@ -55,8 +55,8 @@ def action_category(label):
 
 
 CAMERAS = {
-    "POV (the viewer is B)": "STRICT POV of {B}: the camera IS {B}'s eyes, at eye height, tilted down along {B}'s own body. {B}'s chest, stomach and hips stay visible across the lower third of the frame, and {B}'s hands, forearms or thighs may enter it. {A} stays at arm's length with the whole torso and hips in frame, the contact visible, and {A}'s whole head and face fully inside the upper part of the frame, with headroom above the crown; never crop the head. {B}'s own genitals stay as they are. Never show {B}'s face (only in a mirror), never cut away from this angle. Keep it medium-wide, not a macro close-up. The viewpoint holder's belly and pubic mound stay low in the foreground and must not hide the join. The shaft is rooted in the viewpoint holder's pubic hair at the bottom edge of the frame and the whole visible length runs straight into {A}'s vulva: the labia part and wrap the shaft at the entry, the base of the shaft touches her perineum, one glans only at the far end. The shaft never floats free of a body, never bends away and never gets a second tip.",
-    "POV (the viewer is A)": "STRICT POV of {A}: the camera IS {A}'s eyes, at eye height, tilted down along {A}'s own body. {A}'s chest, stomach and hips stay visible across the lower third of the frame, and {A}'s hands, forearms or thighs may enter it. {B} stays at arm's length with the whole torso and hips in frame, the contact visible, and {B}'s whole head and face fully inside the upper part of the frame, with headroom above the crown; never crop the head. {A}'s own genitals stay as they are. Never show {A}'s face (only in a mirror), never cut away from this angle. Keep it medium-wide, not a macro close-up. The viewpoint holder's belly and pubic mound stay low in the foreground and must not hide the join. The shaft is rooted in the viewpoint holder's pubic hair at the bottom edge of the frame and the whole visible length runs straight into {B}'s vulva: the labia part and wrap the shaft at the entry, the base of the shaft touches her perineum, one glans only at the far end. The shaft never floats free of a body, never bends away and never gets a second tip.",
+    "POV (the viewer is B)": "STRICT POV of {B}: the camera IS {B}'s eyes, at eye height, tilted down along {B}'s own body. {B}'s chest, stomach and hips stay visible across the lower third of the frame, and {B}'s hands, forearms or thighs may enter it. {A} stays at arm's length with the whole torso and hips in frame, the contact visible, and {A}'s whole head and face fully inside the upper part of the frame, with headroom above the crown; never crop the head. {B}'s own genitals stay as they are. Never show {B}'s face (only in a mirror), never cut away from this angle. Keep it medium-wide, not a macro close-up. The viewpoint holder's belly and pubic mound stay low in the foreground and must not hide the join.",
+    "POV (the viewer is A)": "STRICT POV of {A}: the camera IS {A}'s eyes, at eye height, tilted down along {A}'s own body. {A}'s chest, stomach and hips stay visible across the lower third of the frame, and {A}'s hands, forearms or thighs may enter it. {B} stays at arm's length with the whole torso and hips in frame, the contact visible, and {B}'s whole head and face fully inside the upper part of the frame, with headroom above the crown; never crop the head. {A}'s own genitals stay as they are. Never show {A}'s face (only in a mirror), never cut away from this angle. Keep it medium-wide, not a macro close-up. The viewpoint holder's belly and pubic mound stay low in the foreground and must not hide the join.",
     "side view, full bodies": "A still camera at chest height, side-on to the people, framing both bodies fully with both faces visible.",
     "from behind": "The camera is behind the people, looking at the action from behind.",
     "front view": "A still camera at chest height facing the person or people from the front, the whole body in frame, the face visible.",
@@ -70,6 +70,10 @@ CAMERAS = {
     "slow orbit": "The camera moves slowly around the people.",
 }
 
+# the scrotum gets drawn with a slit or folds like a vulva when the clip never says what it is
+SCROTUM = "The scrotum is one closed sac with a centre seam and two rounded testicles inside; it has no slit, fold or opening, and a vulva exists only on a female body."
+MALE_ANCHOR = "Anatomy anchors: the base of the shaft leaves his pubic hair and the balls hang under it as two separate ovals, never a second opening. " + SCROTUM
+CONTACT_SOLO = ("touching", "masturbat", "toy", "jerking", "female,", "male,")
 SOLO_CAMERAS = ("POV (the viewer is B)", "POV (the viewer is A)")
 NO_ACTION = "(none)"
 ANY_CAMERA = "(writer's choice)"
@@ -136,6 +140,12 @@ def _role_name(genders, index):
     return "the person"
 
 
+def subject_names(label):
+    """The readable names of an action's subjects, in role order."""
+    genders = [role["gender"] for role in action_store.get(FAMILY, label)["roles"]]
+    return [_role_name(genders, index) for index in range(len(genders))]
+
+
 POV_B = "POV (the viewer is B)"
 POV_A = "POV (the viewer is A)"
 CLOSE = "close-up on the action"
@@ -152,7 +162,8 @@ def cameras(label):
     if label.startswith("Solo"):
         return [FRONT, SIDE, LOW, HIGH, CLOSE]
     if label.startswith("Oral"):
-        return [POV_A, POV_B, CLOSE, SIDE]
+        # the POV text looks down one's own body at a partner at arm's length: wrong for someone kneeling to give oral, so it is not the default
+        return [SIDE, CLOSE, POV_A, POV_B]
     if "anal" in label.lower():
         return [SIDE, CLOSE, BEHIND, POV_B, HIGH]
     if label.startswith("Hands"):
@@ -190,33 +201,52 @@ def brief(label, camera, subjects, notes="", penetration="vaginal"):
         if camera.startswith("POV"):
             lines.append("The POV viewpoint holder's face never appears; their chest, stomach and hips stay in the lower third, their belly and pubic mound stay low enough not to hide the join, the framing stays medium-wide, and the other person's whole head and face stay fully inside the upper part of the frame with clear headroom and no crop.")
         if camera.startswith("POV") and penetration_modes(label):
+            target = a if camera == POV_B else b
+            join = f"{target}'s anus" if penetration == "anal" else f"{target}'s vulva: the labia part and wrap the shaft at the entry"
+            lines.append(f"The shaft is rooted in the viewpoint holder's pubic hair at the bottom edge of the frame and its whole visible length runs straight into {join}, one glans only at the far end.")
             lines.append("In POV the shaft comes in from the bottom edge: angle the hips and lift the shaft so it enters the named hole; the other hole stays empty and beside it.")
-    lines += [
-        "This action is exactly what happens, from the first second to the last; the notes only give the setting, the looks, the nudity and the mood.",
-        "The act is already in progress in the first sentence: the genitals, hands or mouths are already in contact and moving; no setup.",
-        "The join is the sharpest, most legible point of the frame: who goes into which hole, with the surrounding skin tight around it.",
-        "Anatomy anchors: the base of the shaft leaves his pubic hair and the balls hang under it as two separate ovals, never a second opening; her vulva stays compact and the labia grip the shaft without swelling around it.",
-        f"Recommended aspect ratio: {ratio} ({shape}). Frame every body and face fully inside it and keep that framing for the whole clip.",
-        "His hips drive the shaft, they are one piece: part of the length always stays hidden in his pelvis, the stroke is short, and her body takes each push. The shaft keeps one fixed length and never floats or bends like a separate object.",
-        "Motion beats: play the clip as three clear beats in that same framing - drawn back until only the glans touches the entrance, one held beat with the glans there, then a push all the way back in to the base; the receiving body shifts toward and away with every push.",
-        "Write 650-900 words in the detailed description, one continuous shot covering the whole clip beat by beat.",
-    ]
+    # the join, anatomy and stroke lines describe penetration: only a penetrative action gets them
+    penetrative = bool(penetration_modes(label))
+    contact = counts == 2 or any(word in label.lower() for word in CONTACT_SOLO)
+    # a genital is named only when the action involves it: a listed vulva gets described even in an oral clip
+    his = "male" in genders and (penetrative or counts == 1 or any(word in label.lower() for word in ("blowjob", "deepthroat", "handjob", "titfuck", "69", "footjob", "intercrural", "mutual")))
+    lines.append("This action is exactly what happens, from the first second to the last; the notes only give the setting, the looks, the nudity and the mood.")
+    if contact:
+        lines.append("The act is already in progress in the first sentence: the genitals, hands or mouths are already in contact and moving; no setup.")
+    if penetrative:
+        lines += ["The join is the sharpest, most legible point of the frame: who goes into which hole, with the surrounding skin tight around it.",
+            "Anatomy anchors: the base of the shaft leaves his pubic hair and the balls hang under it as two separate ovals, never a second opening; her vulva stays compact and the labia grip the shaft without swelling around it."]
+    elif counts == 2:
+        lines.append("The contact is the sharpest, most legible point of the frame: who touches or takes what, with the surrounding skin tight around it.")
+    if his and not penetrative:
+        lines.append(MALE_ANCHOR)
+    elif penetrative and "male" in genders:
+        lines.append(SCROTUM)
+    lines.append(f"Recommended aspect ratio: {ratio} ({shape}). Frame every body and face fully inside it and keep that framing for the whole clip.")
+    if penetrative:
+        lines += ["His hips drive the shaft, they are one piece: part of the length always stays hidden in his pelvis, the stroke is short, and her body takes each push. The shaft keeps one fixed length and never floats or bends like a separate object.",
+            "Motion: one continuous short stroke at a steady rhythm in that same framing. The shaft never leaves the named hole: at the back of every stroke at least half of its length is still inside and the glans stays inside the opening, then it slides forward again without a pause; the hips and the receiving body move together."]
+    elif contact:
+        lines.append("Motion beats: play the clip as three clear beats in that same framing, following this action's own motion at one steady rhythm; hands, mouths and bodies stay attached to their owners.")
+    lines.append("Write 650-900 words in the detailed description, one continuous shot covering the whole clip beat by beat.")
     for index, (role, who) in enumerate(zip(entry["roles"], subjects), start=1):
         lines.append(f"Subject {index} is {names[index - 1]} ({_role_text(role['role'])}): {who}")
     lines.append("Only Subject 1 and Subject 2 appear in the video." if counts == 2 else "Only Subject 1 appears in the video.")
     if counts == 2:
         anatomy = []
+        text = label.lower()
+        her = penetrative or any(word in text for word in ("cunnilingus", "69", "face sitting", "fingering", "scissor", "mutual"))
         for index, gender in enumerate(genders, start=1):
             if gender == "female":
-                anatomy.append(f"Subject {index} is female: vulva, vagina and clitoris, never a penis")
+                anatomy.append(f"Subject {index} is female: {'vulva, vagina and clitoris, ' if her else ''}never a penis")
             elif gender == "male":
-                anatomy.append(f"Subject {index} is male: erect penis and balls, never a vulva")
+                anatomy.append(f"Subject {index} is male: {'erect penis and balls, ' if his else ''}never a vulva")
         if anatomy:
             lines.append("; ".join(anatomy) + ".")
         if "female" in genders and "male" in genders:
             woman = genders.index("female") + 1
             man = genders.index("male") + 1
-            lines.append(f"The penis is Subject {man}\'s and it goes into Subject {woman}; Subject {woman} never grows a penis and Subject {man} never gets a vagina.")
+            lines.append(f"The penis is Subject {man}\'s and it goes into Subject {woman}; Subject {woman} never grows a penis and Subject {man} never gets a vagina." if penetrative else f"Subject {woman} never grows a penis and Subject {man} never gets a vagina.")
             lines.append(f"The penis base stays attached between Subject {man}\'s hips, so the shaft emerges from his body; it is never a separate object, never floats and is never pasted over the bodies.")
     if counts == 1:
         if subjects[1]:

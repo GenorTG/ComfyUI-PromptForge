@@ -10,8 +10,8 @@
         76
       ],
       "size": [
-        400,
-        271
+        314,
+        326
       ],
       "flags": {},
       "order": 0,
@@ -80,18 +80,20 @@
         "auto",
         "balanced",
         "default"
-      ]
+      ],
+      "color": "#2b5278",
+      "bgcolor": "#1d3347"
     },
     {
       "id": 2,
       "type": "PROMPTFORGE_V2_LORA_STACK",
       "pos": [
         44,
-        403
+        458
       ],
       "size": [
         560,
-        620
+        636
       ],
       "flags": {},
       "order": 1,
@@ -177,18 +179,20 @@
         true,
         false,
         0.0
-      ]
+      ],
+      "color": "#2b5278",
+      "bgcolor": "#1d3347"
     },
     {
       "id": 3,
       "type": "PROMPTFORGE_V2_IMAGE_FORMAT",
       "pos": [
-        1694,
+        1774,
         76
       ],
       "size": [
-        400,
-        296
+        318,
+        262
       ],
       "flags": {},
       "order": 2,
@@ -249,18 +253,20 @@
         1024,
         1024,
         1
-      ]
+      ],
+      "color": "#8a6d2f",
+      "bgcolor": "#4a3b1b"
     },
     {
       "id": 4,
       "type": "PROMPTFORGE_V2_IMAGE_SAMPLING_SETTINGS",
       "pos": [
-        1694,
-        428
+        1774,
+        394
       ],
       "size": [
-        400,
-        396
+        392,
+        382
       ],
       "flags": {},
       "order": 3,
@@ -322,18 +328,20 @@
         4.0,
         2.5,
         0.25
-      ]
+      ],
+      "color": "#8a6d2f",
+      "bgcolor": "#4a3b1b"
     },
     {
       "id": 5,
       "type": "PROMPTFORGE_V2_WRITER_MODEL",
       "pos": [
         44,
-        1079
+        1150
       ],
       "size": [
-        400,
-        221
+        364,
+        190
       ],
       "flags": {},
       "order": 4,
@@ -380,7 +388,9 @@
         0,
         "",
         ""
-      ]
+      ],
+      "color": "#2b5278",
+      "bgcolor": "#1d3347"
     },
     {
       "id": 6,
@@ -390,8 +400,8 @@
         76
       ],
       "size": [
-        440,
-        376
+        520,
+        616
       ],
       "flags": {},
       "order": 5,
@@ -442,6 +452,8 @@
           "subject_2": "",
           "subject_3": "",
           "camera": "auto",
+          "shot": "auto",
+          "angle": "auto",
           "notes": "",
           "soundscape": "",
           "music": "N/A",
@@ -457,22 +469,26 @@
         "",
         "",
         "auto",
+        "auto",
+        "auto",
         "",
         "",
         "N/A",
         "image"
-      ]
+      ],
+      "color": "#2a6b5f",
+      "bgcolor": "#1b403a"
     },
     {
       "id": 7,
       "type": "PROMPTFORGE_V2_IMAGE_PROMPT_WRITER",
       "pos": [
-        1184,
+        1264,
         76
       ],
       "size": [
         420,
-        396
+        506
       ],
       "flags": {},
       "order": 6,
@@ -548,18 +564,20 @@
         "off",
         "strict",
         "1"
-      ]
+      ],
+      "color": "#4a7a35",
+      "bgcolor": "#2c4421"
     },
     {
       "id": 8,
       "type": "PROMPTFORGE_V2_PROMPT_INSPECT",
       "pos": [
-        1184,
-        528
+        1264,
+        638
       ],
       "size": [
         440,
-        260
+        518
       ],
       "flags": {},
       "order": 7,
@@ -600,18 +618,20 @@
         "promptforge_role": "prompt_review",
         "promptforge_v2_widget_values": {}
       },
-      "widgets_values": []
+      "widgets_values": [],
+      "color": "#4a7a35",
+      "bgcolor": "#2c4421"
     },
     {
       "id": 9,
       "type": "PROMPTFORGE_V2_IMAGE_ENCODE",
       "pos": [
         44,
-        1526
+        1546
       ],
       "size": [
-        400,
-        246
+        322,
+        294
       ],
       "flags": {},
       "order": 8,
@@ -708,18 +728,20 @@
         1024,
         1024,
         1
-      ]
+      ],
+      "color": "#8a3b3b",
+      "bgcolor": "#4a2222"
     },
     {
       "id": 10,
       "type": "PROMPTFORGE_V2_IMAGE_SAMPLE",
       "pos": [
         44,
-        1828
+        1896
       ],
       "size": [
-        400,
-        246
+        322,
+        294
       ],
       "flags": {},
       "order": 9,
@@ -800,18 +822,20 @@
         "euler",
         "simple",
         1.0
-      ]
+      ],
+      "color": "#8a3b3b",
+      "bgcolor": "#4a2222"
     },
     {
       "id": 11,
       "type": "PROMPTFORGE_V2_IMAGE_LATENT_UPSCALE",
       "pos": [
         674,
-        1526
+        1546
       ],
       "size": [
-        360,
-        200
+        372,
+        142
       ],
       "flags": {},
       "order": 10,
@@ -862,18 +886,20 @@
         "SesquiLSR Wan 2.1",
         1.41,
         false
-      ]
+      ],
+      "color": "#7a3b8a",
+      "bgcolor": "#3d2248"
     },
     {
       "id": 12,
       "type": "PROMPTFORGE_V2_IMAGE_DECODE",
       "pos": [
         674,
-        1782
+        1744
       ],
       "size": [
-        400,
-        190
+        264,
+        82
       ],
       "flags": {},
       "order": 11,
@@ -922,18 +948,20 @@
         "promptforge_role": "decode",
         "promptforge_v2_widget_values": {}
       },
-      "widgets_values": []
+      "widgets_values": [],
+      "color": "#7a3b8a",
+      "bgcolor": "#3d2248"
     },
     {
       "id": 13,
       "type": "PROMPTFORGE_V2_IMAGE_SAVE",
       "pos": [
-        1694,
-        1526
+        1774,
+        1546
       ],
       "size": [
         440,
-        360
+        496
       ],
       "flags": {},
       "order": 12,
@@ -978,18 +1006,20 @@
       },
       "widgets_values": [
         "PromptForge/anima_t2i"
-      ]
+      ],
+      "color": "#3b7a8a",
+      "bgcolor": "#223d48"
     },
     {
       "id": 14,
       "type": "PROMPTFORGE_V2_PRESETS",
       "pos": [
-        1694,
-        1942
+        1774,
+        2098
       ],
       "size": [
         420,
-        380
+        396
       ],
       "flags": {},
       "order": 13,
@@ -1026,18 +1056,20 @@
         "",
         "{\"schema_version\":2,\"presets\":{}}",
         false
-      ]
+      ],
+      "color": "#3b7a8a",
+      "bgcolor": "#223d48"
     },
     {
       "id": 15,
       "type": "PROMPTFORGE_V2_RUN_INSPECT",
       "pos": [
-        1694,
-        2378
+        2254,
+        1546
       ],
       "size": [
         440,
-        280
+        518
       ],
       "flags": {},
       "order": 14,
@@ -1070,7 +1102,9 @@
         "promptforge_role": "run_inspect",
         "promptforge_v2_widget_values": {}
       },
-      "widgets_values": []
+      "widgets_values": [],
+      "color": "#3b7a8a",
+      "bgcolor": "#223d48"
     }
   ],
   "links": [
@@ -1338,9 +1372,9 @@
         28,
         0,
         592,
-        1332
+        1364
       ],
-      "color": "#35566b",
+      "color": "#2a4a6b",
       "font_size": 24,
       "flags": {}
     },
@@ -1349,34 +1383,34 @@
       "bounding": [
         658,
         0,
-        472,
-        484
+        552,
+        716
       ],
-      "color": "#35566b",
+      "color": "#27564f",
       "font_size": 24,
       "flags": {}
     },
     {
       "title": "03 Prompt & Review",
       "bounding": [
-        1168,
+        1248,
         0,
         472,
-        820
+        1180
       ],
-      "color": "#35566b",
+      "color": "#3a5a2a",
       "font_size": 24,
       "flags": {}
     },
     {
       "title": "04 Format & Sampling",
       "bounding": [
-        1678,
+        1758,
         0,
-        472,
-        856
+        952,
+        800
       ],
-      "color": "#35566b",
+      "color": "#6b5527",
       "font_size": 24,
       "flags": {}
     },
@@ -1384,11 +1418,11 @@
       "title": "06 Encode & Sample",
       "bounding": [
         28,
-        1450,
+        1470,
         592,
-        656
+        744
       ],
-      "color": "#35566b",
+      "color": "#6b2f2f",
       "font_size": 24,
       "flags": {}
     },
@@ -1396,23 +1430,23 @@
       "title": "07 Refine & Decode",
       "bounding": [
         658,
-        1450,
-        472,
-        554
+        1470,
+        552,
+        380
       ],
-      "color": "#35566b",
+      "color": "#5a2f6b",
       "font_size": 24,
       "flags": {}
     },
     {
       "title": "09 Inspect & Save",
       "bounding": [
-        1678,
-        1450,
-        472,
-        1240
+        1758,
+        1470,
+        952,
+        1048
       ],
-      "color": "#35566b",
+      "color": "#2f5a6b",
       "font_size": 24,
       "flags": {}
     }

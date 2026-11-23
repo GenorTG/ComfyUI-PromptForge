@@ -22,13 +22,12 @@ from comfy_extras import nodes_minimax_h3 as core
 from comfy_extras import nodes_hunyuan, nodes_custom_sampler, nodes_audio
 from .. import minimax_decode, video_save, unified_loader as loader
 from .contracts import schema as nodes_schema, PIPE, new_pipe, ensure_pipe, evolve, require, take
-from .shared import expand_date_tokens
+from .shared import expand_tokens
 # the sequence nodes use these same encode/sample/upscale/refine/decode/join services
 from .h3_sequence import H3Parts, H3Continuity, H3Sequence
 
 Pipe = io.Custom(PIPE)
-Bank = io.Custom("PROMPTFORGE_V2_H3_REFERENCE_BANK")
-DIRTY = ("positive", "negative", "latent", "images", "audio", "video")
+DIRTY = ("positive", "negative", "latent", "images", "audio", "video", "first_pass_audio")
 OUTPUTS = ("images", "audio", "video")
 MODES = ["t2v", "i2v", "l2v", "fl2v", "ref2v", "continue"]
 
@@ -115,56 +114,6 @@ class H3Format(io.ComfyNode):
                       "downscale_ratio_spacial": ratio}
             result = evolve(result, artifacts={"latent": latent})
         return io.NodeOutput(result, latent)
-
-
-class H3ReferenceBank(io.ComfyNode):
-    @classmethod
-    def define_schema(cls):
-        return schema("REFERENCE_BANK", "Reference Bank", [io.String.Input("name", default="subject"),
-            io.Combo.Input("kind", options=["image", "video", "audio"]),
-            io.Float.Input("fps", default=24.0, min=0.01, max=1000),
-            io.String.Input("description", default="", multiline=True), Bank.Input("bank", optional=True),
-            io.Image.Input("images", optional=True), io.Audio.Input("audio", optional=True)], [Bank.Output("bank")])
-
-    @classmethod
-    def execute(cls, name, kind, fps=24.0, description="", bank=None, images=None, audio=None):
-        if kind not in ("image", "video", "audio"):
-            raise ValueError("Unknown reference kind.")
-        data = audio if kind == "audio" else images
-        if data is None or not name.strip():
-            raise ValueError("Reference Bank needs a name and media matching its kind.")
-        entries = [entry for entry in (bank or []) if entry["name"] != name]
-        entries.append({"name": name, "kind": kind, "data": data, "audio": audio if kind == "video" else None, "fps": fps, "description": description})
-        return io.NodeOutput(entries)
-
-
-class H3ReferenceSelect(io.ComfyNode):
-    @classmethod
-    def define_schema(cls):
-        return schema("REFERENCE_SELECT", "Reference Select", [Pipe.Input("pipe", optional=True), Bank.Input("bank"),
-            io.String.Input("names", default="", tooltip="Comma-separated bank names; empty selects all.")])
-
-    @classmethod
-    def execute(cls, pipe=None, bank=None, names=""):
-        checked(pipe)
-        by_name = {entry["name"]: entry for entry in bank}
-        selection = [name.strip() for name in names.split(",") if name.strip()] or list(by_name)
-        missing = [name for name in selection if name not in by_name]
-        if missing:
-            raise ValueError("Unknown bank references: " + ", ".join(missing))
-        entries = [by_name[name] for name in selection]
-        images = [e["data"] for e in entries if e["kind"] == "image"]
-        videos = [e for e in entries if e["kind"] == "video"]
-        audios = [e["data"] for e in entries if e["kind"] == "audio"]
-        refs = dict(pipe["settings"].get("references", {}), selected_names=selection,
-                    descriptions=[{"name": e["name"], "kind": e["kind"], "description": e.get("description", "")} for e in entries])
-        normalized_videos = [video_at_24(e["data"], e.get("fps", 24)) for e in videos]
-        return io.NodeOutput(evolve(pipe, section="references", settings=refs, invalidate=DIRTY + (
-            "reference_video", "reference_audio"), artifacts={"reference_images": images,
-            "reference_videos": normalized_videos, "reference_video_audios": [e["audio"] for e in videos],
-            "reference_audios": audios, "reference_video": normalized_videos[0] if videos else None,
-            "reference_video_audio": videos[0]["audio"] if videos else None,
-            "reference_audio": audios[0] if audios else None, "reference_video_fps": 24}))
 
 
 class H3References(io.ComfyNode):
@@ -272,8 +221,8 @@ def encode(pipe):
     fmt = pipe["settings"]["format"]
     refs = pipe["settings"].get("references", {})
     mode = refs.get("mode", "t2v")
-    from .prompting import _h3_repair_sections
-    text = _h3_repair_sections(text, pipe, mode)
+    from .prompting import _h3_repair_audio, _h3_repair_sections
+    text = _h3_repair_audio(_h3_repair_sections(text, pipe, mode), pipe, mode)
     check_syntax(text, mode)
     a = pipe["artifacts"]
     args = {"clip": clip, "vae": vae, "prompt": text, "width": fmt["width"], "height": fmt["height"], "length": fmt["frames"]}
@@ -391,7 +340,9 @@ def sample(pipe, seed=0, steps=30, cfg=1.0, sampler_name="euler", scheduler="sim
             if start_sigma is not None:
                 sigmas = sigmas * (start_sigma / float(sigmas[0]))
         elif scheduler == "linear from start":
-            sigmas = torch.tensor([start_sigma] + [start_sigma * 1.0486 * (steps - i) / steps for i in range(1, steps)] + [0.0])
+            # 1.0486 bows the line like the reference 3-step sigmas (0.9035, 0.6316, 0.3158); it is capped so any step count keeps decreasing
+            bow = min(1.0486, steps / max(steps - 1, 1) * 0.999)
+            sigmas = torch.tensor([start_sigma] + [start_sigma * bow * (steps - i) / steps for i in range(1, steps)] + [0.0])
         else:
             sigmas = nodes_custom_sampler.BasicScheduler.execute(model, scheduler, steps, 1.0).args[0]
             sigmas = sigmas * (start_sigma / float(sigmas[0]))
@@ -400,7 +351,8 @@ def sample(pipe, seed=0, steps=30, cfg=1.0, sampler_name="euler", scheduler="sim
     settings = dict(pipe["settings"].get("sampling", {}))
     settings["refine" if start_sigma is not None else "first"] = dict(seed=seed, steps=steps, cfg=cfg, sampler_name=sampler_name,
         scheduler=scheduler, shift_video=shift_video, shift_audio=shift_audio, **({"start_sigma": start_sigma} if start_sigma is not None else {}))
-    return evolve(pipe, section="sampling", settings=settings, artifacts={"latent": output, "positive": positive}, invalidate=OUTPUTS)
+    return evolve(pipe, section="sampling", settings=settings, artifacts={"latent": output, "positive": positive},
+                  invalidate=OUTPUTS if start_sigma is not None else (*OUTPUTS, "first_pass_audio"))
 
 
 class H3SamplingSettings(io.ComfyNode):
@@ -529,7 +481,7 @@ class H3LatentUpscale(io.ComfyNode):
         pipe = evolve(pipe, "format", dict(pipe["settings"]["format"], width=width, height=height,
             aspect=f"{width}:{height}", orientation="portrait" if height > width else "landscape",
             megapixels=round(width * height / 1e6, 2)))
-        result = evolve(pipe, artifacts={"latent": latent}, invalidate=OUTPUTS)
+        result = evolve(pipe, artifacts={"latent": latent, "first_pass_audio": source["samples"].unbind()[1]}, invalidate=OUTPUTS)
         return io.NodeOutput(result, latent)
 
 
@@ -545,7 +497,7 @@ def free_vram():
         pass
 
 
-def decode(pipe, tile_size=256, frames_per_pass=0, output_device="auto", audio_normalize=False, audio_gain_db=0.0):
+def decode(pipe, tile_size=256, frames_per_pass=0, output_device="auto", audio_normalize=False, audio_gain_db=0.0, audio_from="second pass"):
     checked(pipe)
     latent, vae, audio_vae = require(pipe, "latent", "vae", "audio_vae")
     decoder = pipe["artifacts"].get("decode_vae", vae)
@@ -567,7 +519,8 @@ def decode(pipe, tile_size=256, frames_per_pass=0, output_device="auto", audio_n
             if index == len(attempts) - 1:
                 raise
             free_vram()
-    audio = nodes_audio.vae_decode_audio(audio_vae, {"samples": latent["samples"].unbind()[1]})
+    audio_latent = pipe["artifacts"].get("first_pass_audio") if audio_from == "first pass" else None
+    audio = nodes_audio.vae_decode_audio(audio_vae, {"samples": latent["samples"].unbind()[1] if audio_latent is None else audio_latent})
     frames = pipe["settings"]["format"]["frames"]
     images = images[:frames]
     length = round(images.shape[0] / 24 * audio["sample_rate"])
@@ -583,7 +536,7 @@ def decode(pipe, tile_size=256, frames_per_pass=0, output_device="auto", audio_n
     audio = dict(audio, waveform=waveform.clamp(-1.0, 1.0))
     pipe = evolve(pipe, section="timing", settings={"fps": 24})
     return evolve(pipe, section="decode", settings={"tile_size": tile_size, "frames_per_pass": frames_per_pass,
-                  "output_device": output_device, "audio_normalize": audio_normalize, "audio_gain_db": audio_gain_db},
+                  "output_device": output_device, "audio_normalize": audio_normalize, "audio_gain_db": audio_gain_db, "audio_from": audio_from},
                   artifacts={"images": images, "audio": audio}, invalidate=("video",))
 
 
@@ -595,18 +548,32 @@ class H3Decode(io.ComfyNode):
             io.Int.Input("frames_per_pass", default=0, min=0, max=4096),
             io.Combo.Input("output_device", options=["auto", "gpu", "cpu"], default="auto"),
             io.Boolean.Input("audio_normalize", default=False, tooltip="Peak-normalise the decoded audio to -3 dBFS."),
-            io.Float.Input("audio_gain_db", default=0.0, min=-30.0, max=30.0, step=0.5)],
+            io.Float.Input("audio_gain_db", default=0.0, min=-30.0, max=30.0, step=0.5),
+            io.Combo.Input("audio_from", options=["second pass", "first pass"], default="second pass", optional=True,
+                           tooltip="Which pass the soundtrack comes from. First pass keeps the audio the first sampling made, before the refine pass reworked it; only differs when a second pass runs.")],
             [Pipe.Output("pipe"), io.Image.Output("images"), io.Audio.Output("audio")])
 
     @classmethod
     def execute(cls, pipe=None, vae=None, latent=None, tile_size=256, frames_per_pass=0, output_device="auto",
-                audio_normalize=False, audio_gain_db=0.0):
+                audio_normalize=False, audio_gain_db=0.0, audio_from="second pass"):
         result = decode(take(checked(ensure_pipe(pipe, family="minimax_h3")), vae=vae, latent=latent),
-                        tile_size, frames_per_pass, output_device, audio_normalize, audio_gain_db)
+                        tile_size, frames_per_pass, output_device, audio_normalize, audio_gain_db, audio_from)
         return io.NodeOutput(result, *require(result, "images", "audio"))
 
 
-def join(previous, current, overlap_frames=0, transition="cut"):
+def match_levels(tail, right, fade):
+    """Move the new part's per-channel level and contrast onto the previous tail, fading the correction out over `fade` frames."""
+    count = min(tail.shape[0], right.shape[0])
+    mean_t, mean_r = tail[-count:].mean((0, 1, 2)), right[:count].mean((0, 1, 2))
+    std_t, std_r = tail[-count:].std((0, 1, 2)), right[:count].std((0, 1, 2))
+    gain = torch.where(std_r > 1e-3, (std_t / std_r.clamp(min=1e-3)).clamp(.8, 1.25), torch.ones_like(std_r))
+    corrected = (right * gain + (mean_t - mean_r * gain)).clamp(0, 1)
+    weight = torch.cat((torch.ones(count), torch.linspace(1, 0, fade + 2)[1:-1])).to(right)[:right.shape[0]]
+    weight = torch.nn.functional.pad(weight, (0, right.shape[0] - weight.shape[0])).view(-1, 1, 1, 1)
+    return right + (corrected - right) * weight
+
+
+def join(previous, current, overlap_frames=0, transition="crossfade", level=True):
     checked(previous)
     checked(current)
     left, la = require(previous, "images", "audio")
@@ -617,6 +584,9 @@ def join(previous, current, overlap_frames=0, transition="cut"):
         raise ValueError("Join requires matching decoded dimensions.")
     n = min(max(0, overlap_frames), left.shape[0], right.shape[0])
     right = right.to(left)
+    if level:
+        edge = n or min(4, left.shape[0], right.shape[0])
+        right = match_levels(left[-edge:], right, max(2 * edge, 24))
     if n and transition == "crossfade":
         weight = torch.linspace(0, 1, n, device=left.device, dtype=left.dtype).view(-1, 1, 1, 1)
         images = torch.cat((left[:-n], left[-n:] * (1 - weight) + right[:n] * weight, right[n:]))
@@ -628,8 +598,11 @@ def join(previous, current, overlap_frames=0, transition="cut"):
     if ra["sample_rate"] != rate:
         rw = comfy.audio.resample(rw, ra["sample_rate"], rate)
     rw = rw.to(lw)
+    if lw.shape[1] != rw.shape[1]:
+        channels = max(lw.shape[1], rw.shape[1])
+        lw, rw = (wave.expand(-1, channels, -1) if wave.shape[1] == 1 else wave for wave in (lw, rw))
     if rw.shape[:2] != lw.shape[:2]:
-        raise ValueError("Join requires matching audio batch and channel counts.")
+        raise ValueError(f"Join requires matching audio batch and channel counts, got {tuple(lw.shape[:2])} and {tuple(rw.shape[:2])}.")
     fps = current["settings"]["format"]["fps"]
     # Align both audio tracks to their video clocks before splicing.
     def fit(wave, length):
@@ -678,17 +651,18 @@ class H3Join(io.ComfyNode):
             io.Image.Input("images", optional=True), io.Audio.Input("audio", optional=True),
             io.Boolean.Input("use_source", default=False),
             io.Int.Input("overlap_frames", default=0, min=0, max=36000),
-            io.Combo.Input("transition", options=["cut", "crossfade"], default="cut")],
+            io.Combo.Input("transition", options=["cut", "crossfade"], default="crossfade"),
+            io.Boolean.Input("match_levels", default=True, tooltip="Match the new part's brightness, colour and contrast to the end of the previous part over the overlap, fading out afterwards.")],
             [Pipe.Output("pipe"), io.Image.Output("images"), io.Audio.Output("audio")])
 
     @classmethod
-    def execute(cls, pipe=None, previous=None, images=None, audio=None, use_source=False, overlap_frames=0, transition="cut"):
+    def execute(cls, pipe=None, previous=None, images=None, audio=None, use_source=False, overlap_frames=0, transition="crossfade", match_levels=True):
         pipe = take(checked(ensure_pipe(pipe, family="minimax_h3")), images=images, audio=audio)
         if use_source:
             previous = H3SourceClip.execute(pipe).args[0]
         if previous is None:
             raise ValueError("Join needs a previous clip pipe or use_source enabled.")
-        result = join(previous, pipe, overlap_frames, transition)
+        result = join(previous, pipe, overlap_frames, transition, match_levels)
         return io.NodeOutput(result, *require(result, "images", "audio"))
 
 
@@ -698,7 +672,7 @@ class H3PreviewSave(io.ComfyNode):
         return schema("PREVIEW_SAVE", "Preview / Save", [Pipe.Input("pipe", optional=True), io.Image.Input("images", optional=True),
             io.Audio.Input("audio", optional=True), io.Boolean.Input("save", default=False),
             io.String.Input("filename_prefix", default="video/PromptForge_H3",
-                            tooltip="Prefix for the saved file. Tokens expand per run: %date:yyyy-MM-dd%, %date:yyyy-MM-dd_HH-mm-ss%, %date:yyyy%, %date:MM%, %date:dd%."),
+                            tooltip="Prefix for the saved file. Tokens expand per run: %date:yyyy-MM-dd%, %date:yyyy-MM-dd_HH-mm-ss%, %date:yyyy%, %date:MM%, %date:dd%, plus %family%, %model%, %mode%, %source%, %category%, %action% and %seed% from the run."),
             io.Combo.Input("encoder_preset", options=["high quality", "balanced", "small file", "lossless-ish"], default="high quality",
                            tooltip="Writes a coherent encoder set into the widgets below when picked. The widgets stay editable and are what actually gets used."),
             io.Combo.Input("codec", options=list(video_save.CODECS), default="h265 (cpu x265)"),
@@ -729,7 +703,7 @@ class H3PreviewSave(io.ComfyNode):
         images, audio = require(pipe, "images", "audio")
         fps = pipe["settings"].get("timing", {}).get("fps", pipe["settings"]["format"]["fps"])
         root = folder_paths.get_output_directory() if save else folder_paths.get_temp_directory()
-        filename_prefix = expand_date_tokens(filename_prefix)
+        filename_prefix = expand_tokens(filename_prefix, pipe)
         full, _, _, _, _ = folder_paths.get_save_image_path(filename_prefix, root, images.shape[2], images.shape[1])
         if os.path.commonpath((os.path.realpath(full), os.path.realpath(root))) != os.path.realpath(root):
             raise ValueError("Video filename prefix must stay within the output directory.")
@@ -763,13 +737,19 @@ class H3FirstPassPreview(io.ComfyNode):
         pipe = checked(ensure_pipe(pipe, family="minimax_h3"))
         if not enabled:
             return io.NodeOutput(pipe)
-        preview = decode(pipe, **pipe["settings"].get("decode", {}))
+        first = pipe["artifacts"].get("sequence_first_pass")
+        if first is not None:
+            preview = evolve(pipe, artifacts=first["artifacts"])
+        elif pipe["artifacts"].get("latent") is None:
+            return io.NodeOutput(pipe)
+        else:
+            preview = decode(pipe, **pipe["settings"].get("decode", {}))
         # saved without a result asset, so the workflow result stays the finished second pass
         saved = H3PreviewSave.execute(preview, save=save, filename_prefix=filename_prefix, show_preview=False)
         return io.NodeOutput(pipe, ui=saved.ui)
 
 
-NODES = [H3Model, H3Format, H3References, H3ReferenceBank, H3ReferenceSelect, H3SamplingSettings,
+NODES = [H3Model, H3Format, H3References, H3SamplingSettings,
          H3Encode, H3Sample, H3UpscaleSettings, H3LatentUpscale, H3Refine, H3Decode, H3SourceClip, H3Join, H3PreviewSave, H3FirstPassPreview,
          H3Parts, H3Continuity, H3Sequence]
 NODE_CLASS_MAPPINGS = {node.define_schema().node_id: node for node in NODES}

@@ -9,6 +9,7 @@ from comfy_api.latest import io
 from server import PromptServer
 
 from .. import lora_loader
+from . import action_store
 from .contracts import schema as nodes_schema, PIPE, ensure_pipe, evolve, metadata, require, take
 
 Pipe = io.Custom(PIPE)
@@ -30,6 +31,35 @@ def expand_date_tokens(prefix, moment=None):
         return time.strftime(pattern, stamp)
 
     return DATE_TOKEN.sub(fill, prefix)
+
+
+FILENAME_TOKENS = ("%family%", "%model%", "%mode%", "%source%", "%category%", "%action%", "%seed%")
+
+
+def expand_tokens(prefix, pipe):
+    """Date tokens plus the run's own facts, so a saved file says which model, mode, action and seed made it."""
+    prefix = expand_date_tokens(prefix)
+    if not any(token in prefix for token in FILENAME_TOKENS):
+        return prefix
+    settings = pipe["settings"]
+    prompt = settings.get("prompt", {})
+    family, _, label = (prompt.get("action", "") if prompt.get("source") == "action" else "").partition(": ")
+    known = bool(label) and action_store.has(family, label)
+    sampling = settings.get("sampling", {})
+    h3 = pipe["family"] == "minimax_h3"
+    artifacts = pipe["artifacts"]
+    values = {
+        "%family%": pipe["family"],
+        "%model%": Path(re.sub(r"^\[[^\]]+\]\s*", "", str(settings.get("models", {}).get("model", "")))).stem,
+        "%mode%": settings.get("references", {}).get("mode", "t2v") if h3 else ("edit" if artifacts.get("krea_references") or artifacts.get("reference_images") else "t2i"),
+        "%source%": prompt.get("source", ""),
+        "%category%": action_store.get(family, label)["category"] if known else prompt.get("source", ""),
+        "%action%": label if known else prompt.get("source", ""),
+        "%seed%": str(sampling.get("seed", sampling.get("first", {}).get("seed", ""))),
+    }
+    for token, value in values.items():
+        prefix = prefix.replace(token, re.sub(r"[^A-Za-z0-9 ._()-]+", "_", str(value)).strip(" ._") or "none")
+    return prefix
 
 
 @PromptServer.instance.routes.get("/promptforge/v2/loras")
@@ -103,11 +133,13 @@ class SingleLora(io.ComfyNode):
                                  io.Model.Input("model", optional=True), io.Clip.Input("clip", optional=True),
                                  io.Combo.Input("lora_name", options=["(none)"] + folder_paths.get_filename_list("loras")),
                                  io.Boolean.Input("enabled", default=True), io.Float.Input("model_strength", default=1.0, min=-20, max=20, step=0.05),
-                                 io.Float.Input("clip_strength", default=1.0, min=-20, max=20, step=0.05)],
+                                 io.Float.Input("clip_strength", default=1.0, min=-20, max=20, step=0.05),
+                                 io.Boolean.Input("mlp_only", default=False, optional=True, tooltip="Keep only the feed-forward layers of the LoRA. For a LoRA trained on a base model whose attention would damage a fine-tune."),
+                                 io.Int.Input("max_rank", default=0, min=0, max=512, optional=True, tooltip="Cut the LoRA to this many strongest directions per layer. 0 keeps its own rank.")],
                          outputs=[Pipe.Output(), io.Model.Output("model"), io.Clip.Output("clip")])
 
     @classmethod
-    def execute(cls, pipe=None, lora_name="(none)", enabled=True, model_strength=1.0, clip_strength=1.0, model=None, clip=None):
+    def execute(cls, pipe=None, lora_name="(none)", enabled=True, model_strength=1.0, clip_strength=1.0, mlp_only=False, max_rank=0, model=None, clip=None):
         pipe = take(ensure_pipe(pipe, model=model), model=model, clip=clip)
         items = list(pipe["settings"].get("single_loras", {}).get("items", []))
         items.append({"name": lora_name, "enabled": enabled, "model": model_strength, "clip": clip_strength})
@@ -115,7 +147,8 @@ class SingleLora(io.ComfyNode):
             result = evolve(pipe, "single_loras", {"items": items})
             return io.NodeOutput(result, result["artifacts"].get("model"), result["artifacts"].get("clip"))
         folder_paths.get_full_path_or_raise("loras", lora_name)
-        state = json.dumps({"items": [{"name": lora_name, "on": True, "model": model_strength, "clip": clip_strength}]})
+        patch = {**({"layers": "mlp"} if mlp_only else {}), **({"rank": max_rank} if max_rank else {})}
+        state = json.dumps({"items": [{"name": lora_name, "on": True, "model": model_strength, "clip": clip_strength, **patch}]})
         result = LoraStack.execute(pipe, state, skip_mismatched=False).args[0]
         artifacts = {key: result["artifacts"][key] for key in ("model", "clip")}
         artifacts["lora_report"] = "\n".join(filter(None, (pipe["artifacts"].get("lora_report"), result["artifacts"].get("lora_report"))))

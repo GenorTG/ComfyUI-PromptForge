@@ -60,6 +60,17 @@ class RuntimeTests(unittest.TestCase):
         self.assertFalse(any("krea2-nag" in str(path) or "comfyui-krea2edit" in str(path)
                              for path in self.runtime.nodes.LOADED_MODULE_DIRS.values()))
 
+    def test_filename_tokens_name_the_action_category_and_family(self):
+        shared, contracts, prompts = self.v2.shared, self.v2.contracts, self.v2.prompting
+        pipe = prompts.ImagePrompt.execute(contracts.new_pipe("krea2"), source="action", action="image: Sex - doggy style").args[0]
+        self.assertEqual(shared.expand_tokens("out/%family%/%category%/%action%", pipe), "out/krea2/NSFW - couple/Sex - doggy style")
+        idea = prompts.ImagePrompt.execute(contracts.new_pipe("krea2"), source="idea", text="a knight").args[0]
+        self.assertEqual(shared.expand_tokens("%category%/%action%", idea), "idea/idea")
+        pipe = contracts.evolve(pipe, section="models", settings={"model": "[unet] Krea 2/concept/krea2_turbo_anime.safetensors"})
+        pipe = contracts.evolve(pipe, section="sampling", settings={"seed": 42})
+        self.assertEqual(shared.expand_tokens("%model%_%mode%_%source%_seed%seed%", pipe), "krea2_turbo_anime_t2i_action_seed42")
+        self.assertEqual(shared.expand_tokens("plain", idea), "plain")
+
     def test_raw_writer_lazy_bypass(self):
         module = self.v2.prompting
         for prompt, writer, family in ((module.ImagePrompt, module.ImagePromptWriter, "krea2"),
@@ -70,7 +81,7 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual(writer.check_lazy_status(pipe), [])
                 with patch.object(module, "_services", side_effect=AssertionError("raw loaded a writer")):
                     output = writer.execute(pipe).args
-                self.assertEqual(output[1], text)
+                self.assertIn(text, output[1]) if family == "minimax_h3" else self.assertEqual(output[1], text)
                 self.assertEqual(output[0]["artifacts"]["writer"]["status"], "raw")
                 idea = prompt.execute(self.pipe(family), source="idea", text="a tree").args[0]
                 self.assertEqual(writer.check_lazy_status(idea), ["writer_model"])
@@ -157,6 +168,56 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(stored["settings"]["sampling"]["seed"], 17)
         self.assertEqual(connected["settings"]["sampling"]["seed"], 99)
 
+    def test_lora_rank_cut_keeps_the_strongest_directions_and_ff_filter_skips_attention(self):
+        loader = self.v2.shared.lora_loader
+        torch = loader.torch
+        generator = torch.Generator().manual_seed(1)
+        up, down = torch.randn(40, 8, generator=generator), torch.randn(8, 24, generator=generator)
+        adapter = loader.LoRAAdapter(set(), (up, down, 4.0, None, None, None))
+        cut = loader.lowrank(adapter, 3)
+        new_up, new_down, alpha = cut.weights[0], cut.weights[1], cut.weights[2]
+        self.assertEqual((new_up.shape, new_down.shape, alpha), ((40, 3), (3, 24), 4.0 * 3 / 8))
+        u, s, vh = torch.linalg.svd(up @ down)
+        best = (u[:, :3] * s[:3]) @ vh[:3]
+        self.assertTrue(torch.allclose(new_up @ new_down, best, atol=1e-3))
+        self.assertIs(loader.lowrank(adapter, 8), adapter)
+        for key, kept in (("diffusion_model.blocks.3.mlp.fc1.weight", True), ("diffusion_model.blocks.3.attn.qkv_proj.weight", False)):
+            self.assertEqual(bool(loader.MLP_KEY.search(key)), kept)
+
+    def test_model_profiles_ship_for_every_checkpoint_and_user_saves_override_them(self):
+        import asyncio, tempfile
+        profiles = self.v2.model_profiles
+        self.assertEqual(profiles.key("[unet] Krea 2/concept/krea2_turbo_anime_int8_convrot.safetensors"), profiles.key("krea2_turbo_anime.safetensors"))
+        for model, steps, sampler in (("[unet] Krea 2/concept/krea2_turbo_anime_int8_convrot.safetensors", 8, "euler"),
+                                      ("[unet] Krea 2/characters/Muse By Stable Yogi Krea2 V4.0 Extended CIV INT8-ConvRot C86.safetensors", 16, "er_sde"),
+                                      ("[unet] MOSS Image/moss/Dirty-MossV2.safetensors", 25, "er_sde")):
+            found = profiles.profile(model)
+            self.assertEqual((found["settings"]["steps"], found["settings"]["sampler_name"], found["user"]), (steps, sampler, False))
+        eros = profiles.profile("[unet] MiniMax H3/video/10Eros_Max_8stepTurbo_v1.0_hybrid_activation_learned_HQ.safetensors")
+        self.assertEqual((eros["settings"]["sampler_name"], eros["settings"]["shift_video"], eros["assumed"]), ("lcm", 12.0, True))
+        prism = profiles.profile("[unet] MiniMax H3/video/PRISM_DMAD_PDMD_w6a8_g32.safetensors")
+        self.assertEqual((prism["settings"]["scheduler"], prism["settings"]["start_sigma"]), ("beta57", 0.9035))
+        self.assertIsNone(profiles.profile("[unet] Other/never_heard_of_it.safetensors"))
+        with tempfile.TemporaryDirectory() as folder, patch.object(profiles, "USER", Path(folder) / "user.json"):
+            class Request:
+                query = {"model": "[unet] MOSS Image/moss/Dirty-MossV2.safetensors"}
+                async def json(self):
+                    return {"model": self.query["model"], "settings": {"steps": 30, "cfg": 3.0, "evil": "ignored"}}
+            saved = json.loads(asyncio.run(profiles.save_profile(Request())).text)["profile"]
+            self.assertEqual((saved["settings"], saved["user"]), ({"steps": 30, "cfg": 3.0}, True))
+            self.assertEqual(profiles.profile(Request.query["model"])["settings"]["steps"], 30)
+            forgotten = json.loads(asyncio.run(profiles.delete_profile(Request())).text)["profile"]
+            self.assertEqual((forgotten["settings"]["steps"], forgotten["user"]), (25, False))
+
+    def test_every_template_graph_supplies_every_required_input(self):
+        # a new required input on an existing node makes every older graph fail validation and silently drop its outputs
+        mappings = self.v2.NODE_CLASS_MAPPINGS
+        for path in sorted((Path(__file__).parents[1] / "example_workflows" / "v2").glob("*.api.json")):
+            for key, node in json.loads(path.read_text()).items():
+                schema = mappings[node["class_type"]].define_schema()
+                missing = [item.id for item in schema.inputs if not getattr(item, "optional", False) and item.id not in node["inputs"]]
+                self.assertEqual(missing, [], f"{path.name} node {key} {node['class_type']}")
+
     def test_disabled_lora_stack_never_opens_weights(self):
         shared = self.v2.shared
         model, clip = object(), object()
@@ -231,7 +292,7 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual(still.call_count, int(mode != "ref2v"))
                 self.assertEqual(guide.call_count, int(mode == "continue"))
                 kwargs = (refs if mode == "ref2v" else still).call_args.kwargs
-                self.assertEqual(kwargs["prompt"], "a tree")
+                self.assertIn("a tree", kwargs["prompt"])
                 self.assertIs(kwargs["vae"], vae)
                 self.assertEqual("first_frame" in kwargs, mode in ("i2v","fl2v"))
                 self.assertEqual("last_frame" in kwargs, mode in ("l2v","fl2v"))

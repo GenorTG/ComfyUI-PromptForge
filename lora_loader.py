@@ -10,6 +10,9 @@ The list is drawn by web/promptforge_lora.js; this file holds the state format, 
 * `random` draws the strength between `min` and `max`, seeded by the node seed.
 * Items sharing a non-empty `group` are alternatives: one of the enabled ones is picked per run.
 * `part` limits a LoRA to the video layers or the audio layers of an audio+video model (MiniMax H3, LTX-2).
+* `layers` "mlp" keeps only the feed-forward layers of a LoRA and `rank` (above 0) cuts every layer to its strongest
+  directions at that rank: a high-rank LoRA trained on one base then works as a soft motion or concept reinforcer on a
+  fine-tune whose attention it would otherwise damage. Both are off by default.
 * With two or more LoRAs on, the report says how much they overlap and how hard they push together; `balance`
   lowers all strengths by the same factor when together they push harder than the strongest one alone.
 """
@@ -27,6 +30,7 @@ import comfy.lora
 import comfy.lora_convert
 import comfy.utils
 import folder_paths
+from comfy.weight_adapter.lora import LoRAAdapter
 
 from . import families
 
@@ -201,6 +205,26 @@ def in_part(key, part):
     return part == "all" or (AUDIO_KEY in str(key).lower()) == (part == "audio")
 
 
+MLP_KEY = re.compile(r"\.(mlp|ffn|feed_forward)\.")
+
+
+def lowrank(adapter, rank):
+    """The adapter cut to its `rank` strongest directions, keeping the scale of the factors."""
+    if getattr(adapter, "name", "") != "lora" or adapter.weights[3] is not None:
+        return adapter
+    up, down, alpha, mid, dora, reshape = adapter.weights
+    full = up.shape[1]
+    if rank >= full:
+        return adapter
+    qu, ru = torch.linalg.qr(up.float())
+    qd, rd = torch.linalg.qr(down.flatten(1).float().T)
+    u, s, vh = torch.linalg.svd(ru @ rd.T)
+    root = s[:rank].sqrt()
+    new_up = (qu @ (u[:, :rank] * root)).to(up.dtype)
+    new_down = ((vh[:rank] * root[:, None]) @ qd.T).reshape(rank, *down.shape[1:]).to(down.dtype)
+    return LoRAAdapter(adapter.loaded_keys, (new_up, new_down, None if alpha is None else alpha * rank / full, mid, dora, reshape))
+
+
 def _factors(adapter):
     """(up, down, scale) of a plain LoRA patch, or None for other kinds of patches."""
     if getattr(adapter, "name", "") != "lora":
@@ -311,6 +335,15 @@ class PROMPTFORGE_LoraLoader:
                 if not patches:
                     report.append(f"skipped {name}: it has no {part} layers")
                     continue
+            if item.get("layers") == "mlp":
+                patches = {key: patch for key, patch in patches.items() if MLP_KEY.search(str(key))}
+                if not patches:
+                    report.append(f"skipped {name}: it has no feed-forward layers")
+                    continue
+            if int(item.get("rank") or 0) > 0:
+                patches = {key: lowrank(patch, int(item["rank"])) for key, patch in patches.items()}
+            if item.get("layers") == "mlp" or int(item.get("rank") or 0) > 0:
+                report.append(f"{name}: " + ", ".join(filter(None, ("feed-forward layers only" if item.get("layers") == "mlp" else "", f"cut to rank {int(item.get('rank') or 0)}" if int(item.get("rank") or 0) > 0 else ""))))
             stack.append((name, strength_model, strength_clip, patches, metadata, part))
             words.extend(word for word in entry["words"] if word not in words)
 

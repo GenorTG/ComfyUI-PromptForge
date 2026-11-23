@@ -80,7 +80,7 @@ class Smoke(unittest.TestCase):
             schema = node.define_schema()
             values = {}
             for item in schema.inputs:
-                name, kind = item.id, type(item).__name__
+                name = item.id
                 if name in ("pipe",):
                     values[name] = pipe_for(family)
                 elif name in ("model",):

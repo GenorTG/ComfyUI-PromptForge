@@ -10,6 +10,12 @@ function button(label, action) {
   control.addEventListener("click", action);
   return control;
 }
+const big = (control) => { control.style.cssText += ";padding:7px 14px;font:13px sans-serif;cursor:pointer;border-radius:6px"; return control; };
+function viewUrl(file, extra = "") {
+  const slash = file.lastIndexOf("/");
+  const subfolder = slash < 0 ? "" : file.slice(0, slash);
+  return api.apiURL(`/view?filename=${encodeURIComponent(file.slice(slash + 1))}&subfolder=${encodeURIComponent(subfolder)}&type=input${extra}`);
+}
 function panel(node, name, minHeight = 100) {
   const frame = element("div");
   frame.style.cssText = "position:relative;width:100%;height:100%;min-width:0;overflow:hidden;contain:layout paint";
@@ -139,18 +145,18 @@ function promptLibraryUI(node) {
 }
 
 function imagePickerUI(node) {
-  const root = panel(node, "reference_file_selector", 260);
+  const root = panel(node, "reference_file_selector", 520);
   const filename = widget(node, "filename"), description = widget(node, "description");
-  const preview = element("div"); preview.style.cssText = "display:flex;gap:8px;min-height:0;flex:1";
+  const preview = element("div"); preview.style.cssText = "display:flex;flex-direction:column;gap:6px;min-height:0;flex:1";
   const image = element("img", { alt: "Selected reference image" });
-  image.style.cssText = "width:58%;min-height:120px;object-fit:contain;background:#15191d;border-radius:5px;cursor:pointer";
+  image.style.cssText = "flex:1;min-height:340px;width:100%;object-fit:contain;background:#0d1013;border-radius:6px;cursor:pointer";
   const metadata = element("textarea", { readOnly: true });
-  metadata.style.cssText = "flex:1;min-width:0;resize:none;background:#20262b;color:#d9e2e8;border:1px solid #3e4951;border-radius:5px;padding:6px;font:11px sans-serif";
+  metadata.style.cssText = "flex:none;height:84px;resize:none;background:#20262b;color:#d9e2e8;border:1px solid #3e4951;border-radius:6px;padding:7px;font:12px sans-serif";
   preview.append(image, metadata);
   const status = element("div");
-  const row = element("div"); row.style.cssText = "display:flex;gap:5px;flex-wrap:wrap";
-  const choose = button("Choose / browse images…", () => openPicker());
-  const paste = button("Paste clipboard image", async () => {
+  const row = element("div"); row.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;align-items:center";
+  const choose = big(button("Choose / browse images…", () => openPicker()));
+  const paste = big(button("Paste clipboard image", async () => {
     try {
       const items = await navigator.clipboard.read();
       const item = items.find((entry) => entry.types.some((type) => type.startsWith("image/")));
@@ -159,36 +165,36 @@ function imagePickerUI(node) {
       const blob = await item.getType(type);
       await uploadImage(new File([blob], `clipboard-${Date.now()}.${type.split("/")[1].replace("jpeg", "jpg")}`, { type }));
     } catch (error) { status.textContent = error.message || "Clipboard read was blocked by the browser; use Ctrl+V while the picker is open."; }
-  });
+  }));
   const showNsfw = element("input", { type: "checkbox", checked: nsfwShown() });
   const nsfwLabel = element("label", { textContent: "Show NSFW", title: "NSFW images are blurred unless enabled" });
   nsfwLabel.prepend(showNsfw); nsfwLabel.style.cssText = "display:flex;align-items:center;gap:4px";
-  const saveDescription = button("Save description", async () => {
+  const saveDescription = big(button("Save description", async () => {
     try {
       if (!filename.value || !description.value.trim()) throw new Error("Choose an image and enter its description first.");
       const reply = await api.fetchApi("/promptforge/image_description", { method: "POST", body: JSON.stringify({ name: filename.value, description: description.value }) });
       if (!reply.ok) throw new Error(`Save failed (${reply.status})`);
       status.textContent = "Description saved to the image library.";
     } catch (error) { status.textContent = error.message; }
-  });
-  const analyze = button("Analyze / tag", async () => {
+  }));
+  const analyze = big(button("Analyze / tag", async () => {
     try {
       if (!filename.value) throw new Error("Choose an image first.");
       const models = await (await api.fetchApi("/promptforge/library/models")).json();
       const model = models.models?.[0];
       if (!model) throw new Error("No vision model available for tagging.");
-      const reply = await api.fetchApi("/promptforge/library/tag", { method: "POST", body: JSON.stringify({ model, names: [filename.value], retag: true }) });
+      const reply = await api.fetchApi("/promptforge/library/tag", { method: "POST", body: JSON.stringify({ model: model.id, names: [filename.value], retag: true }) });
       if (!reply.ok) throw new Error(`Analyze failed (${reply.status})`);
       status.textContent = "Analyzing in the background; details refresh shortly.";
       setTimeout(refresh, 4000);
     } catch (error) { status.textContent = error.message; }
-  });
+  }));
   row.append(choose, paste, analyze, nsfwLabel, saveDescription);
   root.append(preview, row, status);
   let info = {};
   async function refresh() {
     if (!filename.value) { image.removeAttribute("src"); metadata.value = "Choose an image from the input library, upload one, or paste from clipboard."; return; }
-    image.src = thumb(filename.value, 480);
+    image.src = thumb(filename.value, 1024);
     try {
       const [infoResponse, descriptionResponse] = await Promise.all([
         api.fetchApi(`/promptforge/library/info?name=${encodeURIComponent(filename.value)}`),
@@ -264,33 +270,63 @@ function pasteInto(node, filename, status) {
   ];
 }
 
+async function drawWave(canvas, url) {
+  const g = canvas.getContext("2d");
+  g.clearRect(0, 0, canvas.width, canvas.height);
+  try {
+    const context = new (window.AudioContext || window.webkitAudioContext)();
+    const data = await context.decodeAudioData(await (await fetch(url)).arrayBuffer());
+    context.close();
+    const samples = data.getChannelData(0), step = Math.max(1, Math.floor(samples.length / canvas.width)), mid = canvas.height / 2;
+    g.fillStyle = "#4fb3c8";
+    const peaks = Array.from({ length: canvas.width }, (_, x) => {
+      let peak = 0;
+      for (let k = 0; k < step; k++) peak = Math.max(peak, Math.abs(samples[x * step + k] || 0));
+      return peak;
+    });
+    const loudest = Math.max(...peaks, 1e-6);
+    peaks.forEach((peak, x) => g.fillRect(x, mid - (peak / loudest) * mid, 1, Math.max(1, (peak / loudest) * canvas.height)));
+  } catch { g.fillStyle = "#fff8"; g.font = "22px sans-serif"; g.fillText("Waveform unavailable for this file", 20, canvas.height / 2); }
+}
+
 function mediaUI(node, kind) {
   if (kind === "image") return imagePickerUI(node);
-  const root = panel(node, "reference_file_selector", 190);
+  const root = panel(node, "reference_file_selector", kind === "video" ? 560 : 420);
   const filename = widget(node, "filename");
-  const search = element("input", { type: "search", placeholder: `Search input ${kind} files` });
-  const select = element("select", { ariaLabel: `Reference ${kind} file` });
-  select.style.cssText = "flex:1;min-width:0;max-width:100%";
   const status = element("div");
-  const preview = element(kind === "video" ? "video" : "audio");
-  preview.controls = kind !== "video";
-  if (kind === "video") { preview.muted = true; preview.controls = true; }
-  preview.style.cssText = "width:100%;max-height:140px;background:#15191d;border-radius:5px";
+  const player = element(kind === "video" ? "video" : "audio", { controls: true, preload: "metadata" });
+  let wave = null;
+  if (kind === "video") {
+    player.muted = true; player.playsInline = true;
+    player.style.cssText = "flex:1;min-height:300px;width:100%;object-fit:contain;background:#0d1013;border-radius:6px";
+  } else {
+    wave = element("canvas", { width: 1200, height: 240 });
+    wave.style.cssText = "flex:none;width:100%;height:150px;background:#0d1013;border-radius:6px";
+    player.style.cssText = "flex:none;width:100%";
+  }
+  const search = element("input", { type: "search", placeholder: `Search input ${kind} files` });
+  search.style.cssText = "flex:none;padding:7px;font:13px sans-serif";
+  const list = element("div");
+  list.style.cssText = "flex:none;height:170px;overflow:auto;border:1px solid #3e4951;border-radius:6px;background:#161a1e";
   let files = [];
   const show = () => {
-    preview.removeAttribute("src");
-    if (filename.value) preview.src = api.apiURL(`/view?filename=${encodeURIComponent(filename.value)}&type=input&subfolder=`);
+    player.removeAttribute("src");
+    if (filename.value) {
+      player.src = viewUrl(filename.value, kind === "video" ? "#t=0.1" : "");
+      if (wave) drawWave(wave, viewUrl(filename.value));
+    } else if (wave) wave.getContext("2d").clearRect(0, 0, wave.width, wave.height);
   };
   const refresh = () => {
     const query = search.value.toLowerCase().split(/\s+/).filter(Boolean);
-    const options = files.filter((name) => query.every((word) => name.toLowerCase().includes(word)));
-    if (filename.value && !options.includes(filename.value)) options.unshift(filename.value);
-    select.replaceChildren(new Option("Choose an input file", ""), ...options.map((name) => new Option(name, name)));
-    select.value = filename.value;
-  };
-  select.onchange = () => {
-    if (!select.value) return;
-    change(node, () => { filename.value = select.value; filename.callback?.(select.value); show(); });
+    const names = files.filter((name) => query.every((word) => name.toLowerCase().includes(word)));
+    if (filename.value && !names.includes(filename.value)) names.unshift(filename.value);
+    list.replaceChildren(...names.map((name) => {
+      const row = element("div", { textContent: name, title: name });
+      row.style.cssText = `padding:7px 10px;font:13px sans-serif;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${name === filename.value ? "background:#2d5a6b;color:#fff" : ""}`;
+      row.onclick = () => change(node, () => { filename.value = name; filename.callback?.(name); show(); });
+      return row;
+    }));
+    if (!names.length) list.textContent = `No ${kind} files in the input folder yet; use Upload or Paste.`;
   };
   search.oninput = refresh;
   async function reload() {
@@ -305,9 +341,9 @@ function mediaUI(node, kind) {
     } catch (error) { status.textContent = error.message; }
   }
   const bar = element("div");
-  bar.style.cssText = "display:flex;gap:4px;flex-wrap:wrap";
-  bar.append(select, button("Refresh files", reload), ...pasteInto(node, filename, status));
-  root.append(preview, search, bar, status);
+  bar.style.cssText = "flex:none;display:flex;gap:6px;flex-wrap:wrap;align-items:center";
+  bar.append(...[button("Refresh files", reload), ...pasteInto(node, filename, status)].map(big), status);
+  root.append(...[player, wave, search, list, bar].filter(Boolean));
   show();
   const callback = filename.callback;
   filename.callback = function () {
@@ -317,7 +353,6 @@ function mediaUI(node, kind) {
     return result;
   };
   refresh();
-  show();
   reload();
   return refresh;
 }
@@ -339,21 +374,6 @@ function encoderPresetUI(node) {
       });
     }
     return callback?.apply(this, arguments);
-  };
-}
-
-function savedPreviewUI(node) {
-  const root = panel(node, "saved_preview", 240);
-  const image = element("img", { alt: "Last saved image" });
-  image.style.cssText = "width:100%;height:100%;object-fit:contain;background:#15191d;border-radius:5px";
-  const label = element("div", { textContent: "Nothing saved yet" });
-  label.style.cssText = "font-size:11px;opacity:.75;overflow-wrap:anywhere";
-  root.append(image, label);
-  node.promptforgeSaved = (items) => {
-    const first = items?.[0];
-    if (!first) return;
-    image.src = thumb(`${first.subfolder ? first.subfolder + "/" : ""}${first.filename}`, 640);
-    label.textContent = first.filename;
   };
 }
 
@@ -390,9 +410,9 @@ const SIZES = {
   PROMPTFORGE_V2_SINGLE_LORA: [400, 260],
   PROMPTFORGE_V2_PRESETS: [420, 380],
   PROMPTFORGE_V2_PROMPT_LIBRARY: [400, 320],
-  PROMPTFORGE_V2_LOAD_IMAGE: [440, 460],
-  PROMPTFORGE_V2_LOAD_VIDEO: [420, 300],
-  PROMPTFORGE_V2_LOAD_AUDIO: [420, 240],
+  PROMPTFORGE_V2_LOAD_IMAGE: [640, 860],
+  PROMPTFORGE_V2_LOAD_VIDEO: [640, 860],
+  PROMPTFORGE_V2_LOAD_AUDIO: [640, 760],
   PROMPTFORGE_V2_IMAGE_PROMPT: [460, 520],
   PROMPTFORGE_V2_H3_PROMPT: [460, 540],
   PROMPTFORGE_V2_IMAGE_PROMPT_WRITER: [420, 240],
@@ -400,7 +420,7 @@ const SIZES = {
   PROMPTFORGE_V2_PROMPT_INSPECT: [440, 260],
   PROMPTFORGE_V2_RUN_INSPECT: [440, 280],
   PROMPTFORGE_V2_PREVIEW_SETTINGS: [420, 320],
-  PROMPTFORGE_V2_SAVE: [440, 360],
+  PROMPTFORGE_V2_IMAGE_SAVE: [440, 480],
   PROMPTFORGE_V2_H3_PREVIEW_SAVE: [440, 430],
 };
 
@@ -424,7 +444,6 @@ app.registerExtension({
       if (nodeData.name === "PROMPTFORGE_V2_PROMPT_LIBRARY") node.promptforgeV2Refresh = promptLibraryUI(node);
       const media = /^PROMPTFORGE_V2_LOAD_(IMAGE|VIDEO|AUDIO)$/.exec(nodeData.name);
       if (media) node.promptforgeV2Refresh = mediaUI(node, media[1].toLowerCase());
-      if (nodeData.name === "PROMPTFORGE_V2_SAVE") savedPreviewUI(node);
       if (nodeData.name === "PROMPTFORGE_V2_H3_PREVIEW_SAVE") encoderPresetUI(node);
       if (/_(PROMPT_INSPECT|RUN_INSPECT|PROMPT_WRITER|SAVE_METADATA)$/.test(nodeData.name)) {
         const output = panel(node, "output_inspector");
@@ -466,7 +485,6 @@ app.registerExtension({
     nodeType.prototype.onExecuted = function (message) {
       const result = executed?.apply(this, arguments);
       const values = [message?.text, message?.report].flat().filter((value) => value != null);
-      if (message?.images) this.promptforgeSaved?.(message.images);
       if (this.promptforgeV2Output) this.promptforgeV2Output.textContent = values.map((value) => typeof value === "string" ? value : JSON.stringify(value, null, 2)).join("\n");
       return result;
     };

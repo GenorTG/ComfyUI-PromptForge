@@ -77,3 +77,6 @@ node.zip
 .env
 
 workflows/
+
+# saved per-model sampler profiles
+presets/model_profiles_user.json

@@ -96,6 +96,7 @@ test('frontend lifecycle preserves size, displays execution output and never app
     remove() {}
     classList = { add() {}, remove() {}, toggle() {} };
     getBoundingClientRect() { return { top: 0, bottom: 10, left: 0, right: 10, width: 10, height: 10 }; }
+    getContext() { return { clearRect() {}, fillRect() {}, fillText() {} }; }
   }
   const previous = { document: globalThis.document, app: globalThis.__pfApp, api: globalThis.__pfApi, Option: globalThis.Option };
   const extensions = [];
@@ -243,19 +244,18 @@ test('frontend lifecycle preserves size, displays execution output and never app
         assert.ok(controls.includes('Save description'));
         continue;
       }
-      const select = flatten(media.panels[0].frame).find(e => e.tag === 'select');
-      assert.ok(select.children.some(e => e.value === 'references/frame.png'));
-      assert.ok(select.children.some(e => e.value === 'references/saved.png'));
-      select.value = 'references/frame.png';
-      select.onchange();
+      const rows = flatten(media.panels[0].frame).filter(e => e.tag === 'div' && e.onclick);
+      assert.ok(rows.some(e => e.textContent === 'references/frame.png'));
+      assert.ok(rows.some(e => e.textContent === 'references/saved.png'));
+      rows.find(e => e.textContent === 'references/frame.png').onclick();
       assert.equal(filename.value, 'references/frame.png');
       assert.deepEqual(media.graph.calls, ['before', 'after']);
       const preset = capturePreset([media], false);
       filename.value = 'references/other.png';
       applyPreset(media.graph, [media], preset);
-      assert.equal(select.value, 'references/frame.png');
+      assert.equal(filename.value, 'references/frame.png');
       media.onConfigure();
-      assert.deepEqual(media.size, [500, 400]);
+      assert.deepEqual(media.size, { VIDEO: [640, 860], AUDIO: [640, 760] }[kind]);
       assert.ok(requests.some(r => r.path === `/promptforge/v2/media?kind=${kind.toLowerCase()}`));
     }
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -321,25 +321,19 @@ test('selector controls stay included; payloads stay excluded even with text ena
   assert.deepEqual(capturePreset([node], false, () => 'r').nodes[0].widgets, { prompt_mode: 'raw', text_encoder: 'encoder.safetensors', text: 'choice', audio: 'references/a.wav' });
   assert.equal(capturePreset([node], true).nodes[0].widgets.image, undefined);
 });
-test('owned writer and reference-bank sockets traverse V2 auxiliary chains and reroutes only', () => {
-  const start = make(1), writer = make(2, 'PROMPTFORGE_V2_WRITER_MODEL'), bank = make(3, 'PROMPTFORGE_V2_H3_REFERENCE_BANK');
-  const bankParent = make(4, 'PROMPTFORGE_V2_H3_REFERENCE_BANK'), outsider = make(5, 'ExternalWriter'), unrelated = make(6), reroute = make(7, 'Reroute');
-  const writerSocket = 'PROMPTFORGE_V2_WRITER_MODEL', bankSocket = 'PROMPTFORGE_V2_H3_REFERENCE_BANK';
-  start.inputs = [{ type: writerSocket, link: 1 }, { type: bankSocket, link: 2 }, { type: 'MODEL', link: 5 }, { type: writerSocket, link: 6 }];
+test('owned writer sockets traverse V2 auxiliary chains and reroutes only', () => {
+  const start = make(1), writer = make(2, 'PROMPTFORGE_V2_WRITER_MODEL'), outsider = make(3, 'ExternalWriter'), unrelated = make(4), reroute = make(5, 'Reroute');
+  const writerSocket = 'PROMPTFORGE_V2_WRITER_MODEL';
+  start.inputs = [{ type: writerSocket, link: 1 }, { type: 'MODEL', link: 3 }, { type: writerSocket, link: 4 }];
   writer.outputs = [{ type: writerSocket }];
-  bank.outputs = bankParent.outputs = [{ type: bankSocket }];
-  bank.inputs = [{ type: bankSocket, link: 3 }];
-  bankParent.inputs = [{ type: writerSocket, link: 4 }];
-  reroute.inputs = [{ type: '*', link: 7 }];
-  outsider.inputs = [{ type: writerSocket, link: 8 }];
-  const origins = [writer, bank, bankParent, outsider, unrelated, reroute, writer, unrelated];
+  reroute.inputs = [{ type: '*', link: 5 }];
+  outsider.inputs = [{ type: writerSocket, link: 6 }];
+  const origins = [writer, outsider, unrelated, reroute, writer, unrelated];
   const links = Object.fromEntries(origins.map((node, i) => [i + 1, { origin_id: node.id, origin_slot: 0 }]));
-  graphFor([start, writer, bank, bankParent, outsider, unrelated, reroute], links);
-  assert.deepEqual(upstreamNodes(start), [writer, bank, bankParent]);
+  graphFor([start, writer, outsider, unrelated, reroute], links);
+  assert.deepEqual(upstreamNodes(start), [writer]);
   writer.widgets = [{ name: 'model', value: 'local.gguf' }];
-  bank.widgets = [{ name: 'name', value: 'subject' }, { name: 'kind', value: 'image' }, { name: 'payload', value: new Uint8Array([1]) }];
   const preset = capturePreset(upstreamNodes(start), false, () => globalThis.crypto.randomUUID());
-  assert.deepEqual(preset.nodes[1].widgets, { name: 'subject', kind: 'image' });
   assert.equal(preset.nodes[0].widgets.model, 'local.gguf');
 });
 test('IMAGE/MASK dependencies follow only allowed V2 media sources', () => {

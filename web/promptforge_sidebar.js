@@ -1,8 +1,10 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import { createLibraryTools } from "./promptforge_library.js";
 
 const TAB_ID = "promptforge-browser";
 const NSFW_KEY = "promptforge.browser.nsfw";
+const TOOLS_KEY = "promptforge.browser.tools";
 const FIELD = { padding: "4px 6px", borderRadius: "4px", border: "1px solid var(--border-color, #555)", background: "var(--comfy-input-bg, #333)", color: "var(--input-text, #ddd)", font: "12px sans-serif" };
 const BUTTON = { ...FIELD, cursor: "pointer", whiteSpace: "nowrap" };
 const KIND_LABEL = { all: "Everything", image: "Images", video: "Videos", audio: "Audio", other: "Other" };
@@ -20,6 +22,7 @@ const post = async (path, body) => {
   return data;
 };
 const fileUrl = (root, path) => api.apiURL(`/promptforge/browser/file?root=${root}&path=${encodeURIComponent(path)}`);
+const playableUrl = (root, path) => api.apiURL(`/promptforge/browser/playable?root=${root}&path=${encodeURIComponent(path)}`);
 const thumbUrl = (root, path, size = 256) => api.apiURL(`/promptforge/browser/thumb?root=${root}&path=${encodeURIComponent(path)}&size=${size}`);
 const size = (bytes) => bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 const date = (time) => new Date(time * 1000).toLocaleString();
@@ -73,16 +76,35 @@ function preview(root, files, start) {
     const file = files[index];
     media?.pause?.();
     holder.replaceChildren();
+    // the clicked file must not wait behind hundreds of lazy thumbnails, and a browser that cannot decode a file
+    // (10-bit HEVC is what H3 saves) has to say so instead of showing an empty player
+    const note = el("div", { position: "absolute", maxWidth: "80%", color: "#ddd", font: "13px sans-serif", textAlign: "center", pointerEvents: "none", textShadow: "0 0 4px #000" }, { textContent: "Loading…" });
+    holder.style.position = "relative";
+    const loaded = () => { note.textContent = ""; };
+    const failed = (text) => { note.textContent = text; };
     if (file.kind === "video") {
-      media = el("video", { maxWidth: "100%", maxHeight: "100%", display: "block" }, { src: fileUrl(root, file.path), controls: true, autoplay: true, loop: true });
+      media = el("video", { maxWidth: "100%", maxHeight: "100%", display: "block" }, { src: fileUrl(root, file.path), controls: true, autoplay: true, loop: true, fetchPriority: "high" });
+      let converted = false;
+      media.addEventListener("loadeddata", loaded);
+      media.addEventListener("error", () => {
+        if (converted) return failed("This video could not be played.");
+        converted = true;
+        note.textContent = "Your browser cannot decode this video, converting it to H.264…";
+        media.src = playableUrl(root, file.path);
+      });
     } else if (file.kind === "audio") {
-      media = el("audio", { width: "min(560px, 80vw)", maxWidth: "100%" }, { src: fileUrl(root, file.path), controls: true, autoplay: true });
+      media = el("audio", { width: "min(560px, 80vw)", maxWidth: "100%" }, { src: fileUrl(root, file.path), controls: true, autoplay: true, fetchPriority: "high" });
+      media.addEventListener("loadeddata", loaded);
+      media.addEventListener("error", () => failed("This audio could not be played."));
     } else if (file.kind === "image") {
-      media = el("img", { maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" }, { src: fileUrl(root, file.path), alt: file.name });
+      media = el("img", { maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" }, { src: fileUrl(root, file.path), alt: file.name, fetchPriority: "high" });
+      media.addEventListener("load", loaded);
+      media.addEventListener("error", () => failed("This picture could not be loaded."));
     } else {
       media = el("div", { fontSize: "64px" }, { textContent: "📄" });
+      note.textContent = "";
     }
-    holder.append(media);
+    holder.append(media, note);
     caption.textContent = `${file.path} · ${size(file.size)} · ${date(file.mtime)}${file.meta?.nsfw ? " · NSFW" : ""} · ${index + 1} / ${files.length}`;
   }
 
@@ -151,12 +173,14 @@ export function createPanel() {
     inputs: { root: "input", path: "", search: "", kind: "all", nsfw: localStorage.getItem(NSFW_KEY) === "1" },
     templates: { groups: [] },
     tab: "outputs",
+    toolsOpen: localStorage.getItem(TOOLS_KEY) === "1",
   };
   const panel = el("div", { display: "flex", flexDirection: "column", height: "100%", minHeight: "0", color: "var(--input-text, #ddd)", font: "12px sans-serif", background: "var(--comfy-menu-bg, #202020)" });
   const tabs = el("div", { display: "flex", gap: "2px", padding: "8px 8px 0" });
   const body = el("div", { flex: "1", minHeight: "0", overflow: "auto", padding: "8px", display: "flex", flexDirection: "column", gap: "8px" });
   const views = {};
-
+  const holder = el("div");
+  const libraryTools = createLibraryTools(holder, { getShown: () => state.inputs.shown || [], onChange: () => load("inputs") });
   const show = (name) => {
     viewerClose?.();
     state.tab = name;
@@ -209,8 +233,11 @@ export function createPanel() {
       });
       nsfwLabel.append(nsfw, "Show NSFW");
       bar.append(nsfwLabel);
+      bar.append(button(state.toolsOpen ? "Library tools ▴" : "Library tools ▾", () => { state.toolsOpen = !state.toolsOpen; localStorage.setItem(TOOLS_KEY, state.toolsOpen ? "1" : "0"); load(name); }));
+      statePart.shown = data.files.filter((file) => file.kind === "image").map((file) => file.path);
     }
     view.append(bar);
+    if (inputs && state.toolsOpen) { libraryTools.refresh(); view.append(libraryTools.element); }
 
     const crumbs = el("div", { display: "flex", gap: "4px", flexWrap: "wrap", alignItems: "center", opacity: ".9" });
     crumbs.append(button(statePart.root === "output" ? "output" : "input", () => { statePart.path = ""; load(name); }));
@@ -245,10 +272,13 @@ export function createPanel() {
     const thumbBox = el("div", { position: "relative", height: "96px", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderRadius: "3px", background: "#111", cursor: "pointer" });
     let thumb;
     if (file.kind === "image") {
-      thumb = el("img", { width: "100%", height: "100%", objectFit: "cover", display: "block" }, { src: thumbUrl(root, file.path), loading: "lazy", decoding: "async", alt: file.name });
+      thumb = el("img", { width: "100%", height: "100%", objectFit: "cover", display: "block" }, { src: thumbUrl(root, file.path), loading: "lazy", decoding: "async", fetchPriority: "low", alt: file.name });
       thumb.addEventListener("error", () => { if (!thumb.dataset.fallback) { thumb.dataset.fallback = "1"; thumb.src = fileUrl(root, file.path); } });
-    } else if (file.kind === "video") thumb = el("video", { width: "100%", height: "100%", objectFit: "cover", display: "block" }, { src: `${fileUrl(root, file.path)}#t=0.1`, preload: "metadata", muted: true, playsInline: true });
-    else thumb = el("div", { fontSize: "26px" }, { textContent: file.kind === "audio" ? "🎵" : "📄" });
+    } else if (file.kind === "video") {
+      // a video tile that fetched its file on load made a folder of large clips fill every browser connection; the first frame is fetched when the pointer reaches the tile
+      thumb = el("video", { width: "100%", height: "100%", objectFit: "cover", display: "block" }, { preload: "none", muted: true, playsInline: true });
+      thumbBox.addEventListener("mouseenter", () => { if (!thumb.src) { thumb.preload = "metadata"; thumb.src = `${fileUrl(root, file.path)}#t=0.1`; } }, { once: true });
+    } else thumb = el("div", { fontSize: "26px" }, { textContent: file.kind === "audio" ? "🎵" : "📄" });
     if (file.meta?.nsfw) thumb.dataset.nsfw = "1";
     blur(thumb, file.meta, state[name]);
     thumbBox.append(thumb);

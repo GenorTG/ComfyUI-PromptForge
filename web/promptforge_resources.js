@@ -51,44 +51,64 @@ bar.hidden = true;
 const content = element("div", "pf-content");
 bar.append(content);
 
-function meter(labelText) {
+// widest text each meter can show, in characters: a fixed width keeps the bar from shifting as the numbers change
+const WIDTH = { cpu: 4, gpu: 12, ram: 14, swap: 14, vram: 14, disk: 14, cores: 8 };
+const views = new Map();
+
+function meter(labelText, width) {
   const wrap = element("span", "pf-meter");
   const value = element("span", "pf-value");
+  value.style.cssText = `flex:0 0 ${width}ch;width:${width}ch;min-width:${width}ch`;
   const track = element("span", "pf-track");
   const fill = element("span", "pf-fill");
   wrap.append(element("span", "pf-label", labelText), value, track);
   track.append(fill);
-  return { wrap, fill, value };
+  return { wrap, fill, value, width };
 }
 
-function paint(view, load, text, title) {
-  view.fill.style.width = `${load}%`;
-  view.fill.style.background = TONE(load);
-  view.value.textContent = text;
-  if (title) view.wrap.title = title;
+function view(key, labelText, id) {
+  if (!views.has(key)) views.set(key, meter(labelText, WIDTH[id]));
+  return views.get(key);
+}
+
+function paint(target, load, text, title) {
+  target.fill.style.width = `${load}%`;
+  target.fill.style.background = TONE(load);
+  target.value.textContent = text.padStart(target.width, "\u00a0");
+  if (title) target.wrap.title = title;
 }
 
 function drawCores(cores) {
-  const wrap = element("span", "pf-meter pf-cores");
-  const value = element("span", "pf-value");
-  const track = element("span", "pf-track");
+  if (!views.has("cores")) {
+    const wrap = element("span", "pf-meter pf-cores");
+    const value = element("span", "pf-value");
+    value.style.cssText = `flex:0 0 ${WIDTH.cores}ch;width:${WIDTH.cores}ch;min-width:${WIDTH.cores}ch`;
+    const track = element("span", "pf-track");
+    wrap.append(element("span", "pf-label", "Cores"), value, track);
+    views.set("cores", { wrap, value, track, fills: [] });
+  }
+  const target = views.get("cores");
+  if (target.fills.length !== cores.length) {
+    target.track.replaceChildren();
+    target.fills = cores.map(() => {
+      const core = element("span", "pf-core");
+      const fill = element("span", "pf-fill");
+      core.append(fill);
+      target.track.append(core);
+      return fill;
+    });
+  }
   let sum = 0;
   let peak = 0;
-  for (const load of cores) {
+  cores.forEach((load, index) => {
     sum += load;
     peak = Math.max(peak, load);
-    const core = element("span", "pf-core");
-    const fill = element("span", "pf-fill");
-    fill.style.width = `${load}%`;
-    fill.style.background = TONE(load);
-    core.title = `${load.toFixed(0)}%`;
-    core.append(fill);
-    track.append(core);
-  }
-  value.textContent = `${Math.round(sum / cores.length)}% avg`;
-  wrap.title = `${cores.length} cores, ${peak.toFixed(0)}% peak`;
-  wrap.append(element("span", "pf-label", "Cores"), value, track);
-  return wrap;
+    target.fills[index].style.width = `${load}%`;
+    target.fills[index].style.background = TONE(load);
+  });
+  target.value.textContent = `${Math.round(sum / cores.length)}% avg`.padStart(WIDTH.cores, "\u00a0");
+  target.wrap.title = `${cores.length} cores, ${peak.toFixed(0)}% peak`;
+  return target.wrap;
 }
 
 function meterNodes() {
@@ -99,42 +119,42 @@ function meterNodes() {
     if (id === "cores" && cpu?.cores?.length) {
       nodes.push(drawCores(cpu.cores));
     } else if (id === "cpu" && cpu) {
-      const view = meter("CPU");
-      paint(view, cpu.percent, `${cpu.percent.toFixed(0)}%`);
-      nodes.push(view.wrap);
+      const target = view("cpu", "CPU", "cpu");
+      paint(target, cpu.percent, `${cpu.percent.toFixed(0)}%`);
+      nodes.push(target.wrap);
     } else if (id === "ram" && ram) {
-      const view = meter("RAM");
-      paint(view, percent(ram.used, ram.total), `${gib(ram.used)}/${gib(ram.total)} GB`, `${gib(ram.used)} GB of ${gib(ram.total)} GB in use`);
-      nodes.push(view.wrap);
+      const target = view("ram", "RAM", "ram");
+      paint(target, percent(ram.used, ram.total), `${gib(ram.used)}/${gib(ram.total)} GB`, `${gib(ram.used)} GB of ${gib(ram.total)} GB in use`);
+      nodes.push(target.wrap);
     } else if (id === "swap" && swap) {
-      const view = meter("Swap");
-      paint(view, percent(swap.used, swap.total), `${gib(swap.used)}/${gib(swap.total)} GB`);
-      nodes.push(view.wrap);
+      const target = view("swap", "Swap", "swap");
+      paint(target, percent(swap.used, swap.total), `${gib(swap.used)}/${gib(swap.total)} GB`);
+      nodes.push(target.wrap);
     } else if (id === "gpu" && gpus.length) {
       gpus.forEach((gpu, index) => {
-        const view = meter(`GPU${gpus.length > 1 ? index : ""}`);
-        paint(view, gpu.utilisation, `${gpu.utilisation}% · ${gpu.temperature}°C`, gpu.name);
-        nodes.push(view.wrap);
+        const target = view(`gpu${index}`, `GPU${gpus.length > 1 ? index : ""}`, "gpu");
+        paint(target, gpu.utilisation, `${gpu.utilisation}% · ${gpu.temperature}°C`, gpu.name);
+        nodes.push(target.wrap);
       });
     } else if (id === "vram" && gpus.length) {
       gpus.forEach((gpu, index) => {
-        const view = meter(`VRAM${gpus.length > 1 ? index : ""}`);
-        paint(view, percent(gpu.used, gpu.total), `${gib(gpu.used)}/${gib(gpu.total)} GB`, gpu.name);
-        nodes.push(view.wrap);
+        const target = view(`vram${index}`, `VRAM${gpus.length > 1 ? index : ""}`, "vram");
+        paint(target, percent(gpu.used, gpu.total), `${gib(gpu.used)}/${gib(gpu.total)} GB`, gpu.name);
+        nodes.push(target.wrap);
       });
     } else if (id === "disk" && disk) {
-      const view = meter("Disk");
-      paint(view, percent(disk.total - disk.free, disk.total), `${gib(disk.total - disk.free)}/${gib(disk.total)} GB`,
-            `${gib(disk.free)} GB free`);
-      nodes.push(view.wrap);
+      const target = view("disk", "Disk", "disk");
+      paint(target, percent(disk.total - disk.free, disk.total), `${gib(disk.total - disk.free)}/${gib(disk.total)} GB`, `${gib(disk.free)} GB free`);
+      nodes.push(target.wrap);
     }
   }
   return nodes;
 }
 
 function draw() {
-  content.replaceChildren();
-  if (state.enabled) content.append(...meterNodes());
+  const nodes = state.enabled ? meterNodes() : [];
+  const same = nodes.length === content.children.length && nodes.every((node, index) => content.children[index] === node);
+  if (!same) content.replaceChildren(...nodes);
 }
 
 function stop() {
@@ -175,7 +195,7 @@ function setting(id) {
 
 function apply() {
   state.enabled = setting("Enabled") !== false;
-  state.meters = Object.fromEntries(IDS.map((id) => [id, setting(`meter.${id}`) !== false]));
+  state.meters = Object.fromEntries(IDS.map((id) => [id, setting(`meter.${id}`) ?? id !== "cores"]));
   state.order = normaliseOrder(setting("Order"));
   bar.hidden = !state.enabled;
   draw();
@@ -216,7 +236,7 @@ app.registerExtension({
                       type: "boolean", defaultValue: true, tooltip: "CPU, memory, GPU and disk meters in the top bar." });
     for (const [id, label] of METERS) {
       registerSetting({ id: `${NS}.meter.${id}`, category: ["PromptForge", "Resource readout"], name: `Show ${label} meter`,
-                        type: "boolean", defaultValue: true });
+                        type: "boolean", defaultValue: id !== "cores", tooltip: id === "cores" ? "One bar per CPU core; off by default." : undefined });
     }
     registerSetting({ id: `${NS}.Order`, category: ["PromptForge", "Resource readout"], name: "Meter order",
                       type: "text", defaultValue: DEFAULT_ORDER, tooltip: `Comma separated: ${IDS.join(", ")}` });

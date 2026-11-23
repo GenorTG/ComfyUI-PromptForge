@@ -165,6 +165,8 @@
       "subject_2": "",
       "subject_3": "",
       "camera": "auto",
+      "shot": "auto",
+      "angle": "auto",
       "notes": "",
       "soundscape": "",
       "music": "N/A",
@@ -272,8 +274,9 @@
     "inputs": {
       "mode": "continue",
       "carried_frames": 22,
-      "transition": "cut",
+      "transition": "crossfade",
       "overlap_frames": 0,
+      "match_levels": true,
       "pipe": [
         "14",
         0
@@ -352,7 +355,7 @@
     "inputs": {
       "enabled": true,
       "save": true,
-      "filename_prefix": "video/PromptForge_H3_first_pass",
+      "filename_prefix": "video/PromptForge/h3_continue_existing_first_pass",
       "pipe": [
         "17",
         0
@@ -430,7 +433,8 @@
     "inputs": {
       "use_source": false,
       "overlap_frames": 22,
-      "transition": "cut",
+      "transition": "crossfade",
+      "match_levels": true,
       "pipe": [
         "21",
         0
@@ -495,7 +499,7 @@
     "class_type": "PROMPTFORGE_V2_H3_PREVIEW_SAVE",
     "inputs": {
       "save": true,
-      "filename_prefix": "video/PromptForge/h3_continue_existing",
+      "filename_prefix": "video/PromptForge/h3_continue_existing_second_pass",
       "encoder_preset": "high quality",
       "codec": "h265 (cpu x265)",
       "speed": "slow",

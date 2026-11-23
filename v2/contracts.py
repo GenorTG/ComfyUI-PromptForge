@@ -13,8 +13,8 @@ FAMILIES = {"IMAGE": "Image", "H3": "MiniMax H3", "KREA": "Krea 2", "ACE": "ACE-
 def schema(family, key, title, inputs, outputs=None, output=False, **extra):
     """One node schema shape: keyed id, consistent display name and category."""
     label = FAMILIES.get(family, "Shared")
-    suffix = f"_{key}" if key else ""
-    return io.Schema(node_id=f"PROMPTFORGE_V2_{family}{suffix}", display_name=f"PromptForge V2 · {label} · {title}",
+    node_id = "_".join(part for part in ("PROMPTFORGE_V2", family, key) if part)
+    return io.Schema(node_id=node_id, display_name=f"PromptForge V2 · {label} · {title}",
                      category=f"PromptForge V2/{label}", inputs=inputs,
                      outputs=outputs or [io.Custom(PIPE).Output()], is_output_node=output, **extra)
 

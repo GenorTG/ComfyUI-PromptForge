@@ -112,6 +112,8 @@
       "subject_2": "",
       "subject_3": "",
       "camera": "auto",
+      "shot": "auto",
+      "angle": "auto",
       "notes": "",
       "soundscape": "",
       "music": "N/A",

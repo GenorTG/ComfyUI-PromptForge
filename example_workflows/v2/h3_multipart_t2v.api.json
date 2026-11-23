@@ -135,6 +135,8 @@
       "subject_2": "",
       "subject_3": "",
       "camera": "auto",
+      "shot": "auto",
+      "angle": "auto",
       "notes": "",
       "soundscape": "",
       "music": "N/A",
@@ -256,8 +258,9 @@
     "inputs": {
       "mode": "continue",
       "carried_frames": 22,
-      "transition": "cut",
+      "transition": "crossfade",
       "overlap_frames": 0,
+      "match_levels": true,
       "pipe": [
         "13",
         0
@@ -271,6 +274,7 @@
     "class_type": "PROMPTFORGE_V2_H3_SEQUENCE",
     "inputs": {
       "max_parts": 0,
+      "save_first_pass": true,
       "pipe": [
         "14",
         0
@@ -285,6 +289,21 @@
     }
   },
   "16": {
+    "class_type": "PROMPTFORGE_V2_H3_FIRST_PASS_PREVIEW",
+    "inputs": {
+      "enabled": true,
+      "save": true,
+      "filename_prefix": "video/PromptForge/h3_multipart_t2v_first_pass",
+      "pipe": [
+        "15",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "First Pass Preview"
+    }
+  },
+  "17": {
     "class_type": "PROMPTFORGE_V2_FRAME_INTERPOLATE",
     "inputs": {
       "enabled": false,
@@ -294,7 +313,7 @@
       "overlap": 2,
       "scale": 1.0,
       "pipe": [
-        "15",
+        "16",
         0
       ]
     },
@@ -302,7 +321,7 @@
       "title": "Optional Rife"
     }
   },
-  "17": {
+  "18": {
     "class_type": "PROMPTFORGE_V2_VIDEO_CLEANUP",
     "inputs": {
       "enabled": false,
@@ -311,11 +330,11 @@
       "deblur": false,
       "deblur_quality": "Low",
       "pipe": [
-        "16",
+        "17",
         0
       ],
       "images": [
-        "16",
+        "17",
         1
       ]
     },
@@ -323,11 +342,11 @@
       "title": "Optional Cleanup"
     }
   },
-  "18": {
+  "19": {
     "class_type": "PROMPTFORGE_V2_H3_PREVIEW_SAVE",
     "inputs": {
       "save": true,
-      "filename_prefix": "video/PromptForge/h3_multipart_t2v",
+      "filename_prefix": "video/PromptForge/h3_multipart_t2v_second_pass",
       "encoder_preset": "high quality",
       "codec": "h265 (cpu x265)",
       "speed": "slow",
@@ -343,11 +362,11 @@
       "loop_preview": true,
       "autoplay_preview": true,
       "pipe": [
-        "17",
+        "18",
         0
       ],
       "images": [
-        "17",
+        "18",
         1
       ]
     },
@@ -355,14 +374,14 @@
       "title": "Save Video"
     }
   },
-  "19": {
+  "20": {
     "class_type": "PROMPTFORGE_V2_PRESETS",
     "inputs": {
       "preset_name": "",
       "presets": "{\"schema_version\":2,\"presets\":{}}",
       "include_text": false,
       "pipe": [
-        "18",
+        "19",
         0
       ]
     },
@@ -370,11 +389,11 @@
       "title": "Presets"
     }
   },
-  "20": {
+  "21": {
     "class_type": "PROMPTFORGE_V2_RUN_INSPECT",
     "inputs": {
       "pipe": [
-        "19",
+        "20",
         0
       ]
     },

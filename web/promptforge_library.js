@@ -65,6 +65,85 @@ async function editImage(image, onChange) {
  * The image library: browse, search, tag and organise the input folder.
  * `onPick(name)` makes a tile click choose that image (the Load Image picker); without it, clicking opens the editor.
  */
+// The legacy image library's tagging and organizing tools as a standalone block (the sidebar's Inputs tab hosts it).
+// getShown() returns the input-relative names the user is looking at; onChange() runs after a job moved or tagged files.
+export function createLibraryTools(container, { getShown = () => [], onChange = () => {} } = {}) {
+  let polling = null;
+  const root = el("div", { display: "flex", flexDirection: "column", gap: "8px", padding: "8px", border: "1px solid var(--border-color, #555)", borderRadius: "6px", fontSize: "12px", color: "var(--input-text, #ddd)" });
+  const modelRow = el("div", { display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" });
+  const modelBox = el("select", { ...FIELD, flex: "1", minWidth: "160px" });
+  const tagUntagged = el("button", BUTTON, { textContent: "Tag untagged", title: "Tag every image that has no tags yet (or changed)" });
+  const tagShown = el("button", BUTTON, { textContent: "Tag shown", title: "Tag (again) the images in the current folder and search" });
+  const retagAll = el("button", BUTTON, { textContent: "Re-tag all" });
+  modelRow.append("Vision model", modelBox);
+  const tagRow = el("div", { display: "flex", gap: "6px", flexWrap: "wrap" });
+  tagRow.append(tagUntagged, tagShown, retagAll);
+  const folderRow = el("div", { display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" });
+  const subfolders = el("input", {}, { type: "checkbox" });
+  const subLabel = el("label", { display: "flex", gap: "4px", alignItems: "center" });
+  subLabel.append(subfolders, "include images already in subfolders");
+  const organize = el("button", BUTTON, { textContent: "Organize all into theme folders…", title: "Moves tagged images into female / male / group / nsfw / ... folders. Shows what will move first." });
+  const organizeShown = el("button", BUTTON, { textContent: "Organize shown…" });
+  const undo = el("button", BUTTON, { textContent: "Undo last organize" });
+  folderRow.append(organize, organizeShown, undo);
+  const progress = el("div", { display: "none", flexDirection: "column", gap: "3px" });
+  const progressBar = el("div", { height: "8px", borderRadius: "4px", background: "rgba(255,255,255,.12)", overflow: "hidden" });
+  const progressFill = el("div", { height: "100%", width: "0%", background: "#4a90e2" });
+  progressBar.append(progressFill);
+  const progressText = el("div", { opacity: ".85", whiteSpace: "pre-wrap" });
+  const cancel = el("button", { ...BUTTON, alignSelf: "flex-start" }, { textContent: "Cancel job" });
+  progress.append(progressBar, progressText, cancel);
+  const note = el("div", { fontSize: "11px", opacity: ".6" }, { textContent: "Tagging runs a local vision model on this machine and unloads ComfyUI's models while it runs; avoid generating at the same time. Organizing moves files, so workflows that point at the old path need the image picked again (Undo restores them)." });
+  root.append(modelRow, tagRow, subLabel, folderRow, progress, note);
+  container.append(root);
+
+  async function loadModels() {
+    const models = (await get("/promptforge/library/models")).models;
+    const saved = localStorage.getItem("promptforge.visionModel");
+    modelBox.replaceChildren(...(models.length ? models.map((model) => new Option(model.label, model.id)) : [new Option("No vision GGUF with an mmproj found", "")]));
+    if (models.some((model) => model.id === saved)) modelBox.value = saved;
+  }
+  async function status() {
+    const job = await get("/promptforge/library/status");
+    progress.style.display = job.running || job.message ? "flex" : "none";
+    progressFill.style.width = `${Math.round((job.total ? job.done / job.total : 0) * 100)}%`;
+    progressText.textContent = `${job.message}${job.total ? ` · ${job.done}/${job.total}` : ""}${job.current ? ` · ${job.current}` : ""}${job.failed?.length ? `\n${job.failed.length} failed: ${job.failed.slice(-3).join("; ")}` : ""}`;
+    cancel.style.display = job.running ? "" : "none";
+    for (const control of [tagUntagged, tagShown, retagAll, organize, organizeShown, undo]) control.disabled = job.running;
+    if (job.running && !polling) polling = setInterval(status, 1000);
+    if (!job.running && polling) { clearInterval(polling); polling = null; onChange(); }
+  }
+  async function startTag(names, retag) {
+    if (!modelBox.value) return alert("No vision model is available. A vision model is a GGUF with an mmproj file next to it, in a text_encoders or LLM folder.");
+    if (Array.isArray(names) && !names.length) return alert("No images are shown. Change the folder or search first.");
+    localStorage.setItem("promptforge.visionModel", modelBox.value);
+    const answer = await post("/promptforge/library/tag", { model: modelBox.value, names, retag });
+    if (!answer.started) alert(answer.message || "Could not start.");
+    await status();
+  }
+  async function startOrganize(names) {
+    const body = { names, include_subfolders: subfolders.checked };
+    const plan = await post("/promptforge/library/organize", { ...body, dry_run: true });
+    if (!plan.total) return alert("Nothing to move. Tag the images first, or tick \"include images already in subfolders\".");
+    const lines = Object.entries(plan.counts).map(([theme, number]) => `${number} → ${theme}/`).join("\n");
+    if (!confirm(`Move ${plan.total} images into theme folders inside the input folder?\n\n${lines}\n\nWorkflows pointing at the old paths will need the image picked again. "Undo last organize" restores everything.`)) return;
+    const done = await post("/promptforge/library/organize", { ...body, dry_run: false });
+    progress.style.display = "flex";
+    progressText.textContent = `Moved ${done.moved} images.`;
+    onChange();
+  }
+  tagUntagged.addEventListener("click", () => startTag("all", false));
+  tagShown.addEventListener("click", () => startTag(getShown(), true));
+  retagAll.addEventListener("click", () => confirm("Tag every image again? This can take a while.") && startTag("all", true));
+  organize.addEventListener("click", () => startOrganize("all"));
+  organizeShown.addEventListener("click", () => (getShown().length ? startOrganize(getShown()) : alert("No images are shown. Change the folder or search first.")));
+  undo.addEventListener("click", async () => { const answer = await post("/promptforge/library/undo"); progress.style.display = "flex"; progressText.textContent = `Restored ${answer.restored} images.`; onChange(); });
+  cancel.addEventListener("click", () => post("/promptforge/library/cancel"));
+  loadModels();
+  status();
+  return { element: root, refresh: () => { loadModels(); status(); }, destroy: () => { clearInterval(polling); root.remove(); } };
+}
+
 export function createLibrary(container, { onPick = null, current = "", extraControls = [] } = {}) {
   const state = { images: [], search: "", folder: "*", theme: "*", select: false, selected: new Set(), models: [], tools: false };
   let timer = null;
