@@ -396,7 +396,7 @@ class PromptTests(unittest.TestCase):
         self.assertFalse(search("His scrotum slaps against her vulva with every stroke."))
         self.assertFalse(search("His balls swing between her thighs, her vulva spread."))
 
-    def test_a_long_idea_keeps_its_facts_limits_scale_and_dropped_facts_trigger_a_retry(self):
+    def test_a_long_idea_gets_scaled_limits_a_clear_request_frame_and_a_dropped_facts_report(self):
         idea = ("the same exact girl from the provided image but now fully naked, petite uni student young adult girl that is cute with small breasts bent over a desk in a classroom "
                 "full of students, she is naked and being taken from behind by her teacher while panting and blushing from embarrassment, her toes barely reaching the ground and curling, "
                 "other students staring at the girl and the teacher having sex, class in session, realistic size difference between the girl and the professor with him being older")
@@ -416,12 +416,13 @@ class PromptTests(unittest.TestCase):
         full = short + " The classroom of students stares, she is blushing and panting, her toes curling, her teacher behind her."
         self.assertEqual([w for w in self.prompts._dropped_facts(idea, full) if w in ("classroom", "students", "blushing", "toes", "panting", "teacher")], [])
         pipe = self.prompts.ImagePrompt.execute(self.contracts.new_pipe("krea2"), source="idea", text=idea).args[0]
-        outputs = iter([short, full])
-        with patch.object(self.service.PROMPTFORGE_PromptEnhancer, "_generate", side_effect=lambda **kw: next(outputs)) as generate:
+        with patch.object(self.service.PROMPTFORGE_PromptEnhancer, "_generate", return_value=short) as generate:
             result = self.prompts.ImagePromptWriter.execute(pipe, writer_model={}, retries="1").args[0]
-        self.assertEqual(generate.call_count, 2)
-        self.assertEqual(result["artifacts"]["text"], full)
-        self.assertIn("facts from the request", generate.call_args_list[1].kwargs["system_prompt"])
+        self.assertEqual(generate.call_count, 1)                      # measured, never retried
+        self.assertIn("classroom", result["artifacts"]["writer"]["attempts"][0]["dropped_facts"])
+        user = generate.call_args_list[0].kwargs["user_prompt"]
+        self.assertTrue(user.startswith("Write the prompt for this request."))
+        self.assertIn("Request:\n" + idea, user)
 
     def test_unused_camera_rules_are_dropped_and_a_long_idea_gets_a_facts_first_block(self):
         edit = self.service.PROMPTFORGE_PRESETS["Krea 2 Edit"]["text"]
@@ -444,6 +445,7 @@ class PromptTests(unittest.TestCase):
         self.assertNotIn("POV means the camera IS", system)
         self.assertIn("100-280", self.service.PROMPTFORGE_PRESETS["Krea 2 Edit"]["text"])
         self.assertEqual(self.service.OUTPUT_CAPS["krea 2 edit"], 340)
+
 
 
 if __name__ == "__main__":

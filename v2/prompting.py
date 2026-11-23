@@ -810,6 +810,7 @@ def _system_text(service, preset, context, style_prefix="", sections=None, negat
                  "Add nothing that covers a face or body (helmet, mask, hood, shadow) unless the request names it.")
     if idea.strip():
         parts.append("# Priority\nEvery fact the request states appears in the prompt: each person and how many, the place, body state, expression, posture and each detail it names. "
+                     "Nudity is stated in plain words: when the request says naked, nude, topless or bare, the prompt says so and names the bare skin; clothing is never invented, and a photo's clothes are replaced. "
                      "The rules above for size, camera and anatomy shape how those facts are written; they never replace one. When words run short, shorten the rule-driven detail, never the request.")
     if explicit and context["family"] != "minimax_h3":
         parts.append("Describe only the anatomy the pose and camera show: a part the pose hides or turns away from the lens is left out, and nothing is shown twice.")
@@ -905,8 +906,13 @@ class ImagePromptWriter(io.ComfyNode):
             user_text = ("Condense this brief into affirmative scene description. Keep every position, contact and camera "
                          "fact. Lines with NOT, never, without or no are constraints: describe the state they ask for and "
                          "leave those words out. Write a camera only when the brief gives one." + ("" if explicit else " Name what each person wears, with colour and material.") + "\n\n" + user_text)
-        elif prompt.get("source") == "idea" and not explicit:
-            user_text += "\n\nName what each person wears, with colour and material." if pipe["family"] != "anima" else "\n\nTag every garment each person wears."
+        elif prompt.get("source") == "idea":
+            if not cls.H3:
+                what = "tags" if pipe["family"] == "anima" else "prompt"
+                user_text = (f"Write the {what} for this request. Every fact it states belongs in the {what}, in plain words, and nothing it does not state is added. "
+                             "Where it says to keep something unchanged, keep it.\n\nRequest:\n" + user_text)
+            if not explicit:
+                user_text += "\n\nName what each person wears, with colour and material." if pipe["family"] != "anima" else "\n\nTag every garment each person wears."
         records = []
         feedback = ""
         for index in range(attempts):
@@ -945,14 +951,14 @@ class ImagePromptWriter(io.ComfyNode):
                     issues.append("the shaft leaves the body during the stroke: keep it inside through the whole stroke")
             records.append({"seed": attempt_seed, "text": text, "validation": issues, "request": request, "thinking": thought})
             if prompt.get("source") == "idea" and checks != "off":
+                # measured, never enforced: the report lists what the prompt left out so a weak template shows up instead of costing retries
                 dropped = _dropped_facts(prompt.get("text", ""), text)
-                if len(dropped) >= 3 and len(dropped) >= 0.2 * len(set(re.findall(r"[a-z]{4,}", prompt.get("text", "").lower()))):
-                    issues.append("facts from the request are missing from the prompt: " + ", ".join(dropped[:8]) + ". Write every one of them in")
-                    records[-1]["validation"] = issues
+                if len(dropped) >= 3:
+                    records[-1]["dropped_facts"] = dropped
             conflict = _shot_conflict(text) if pipe["family"] == "anima" and checks != "off" else ""
             # negative wording alone is a blemish, not a failure: after the last retry the text is used and the warning stays in the report
             last = index == attempts - 1
-            blemish = all(issue.startswith(("negative wording", "description too long", "the shaft leaves", "female anatomy written", "facts from the request")) for issue in issues)
+            blemish = all(issue.startswith(("negative wording", "description too long", "the shaft leaves", "female anatomy written")) for issue in issues)
             if (not issues or last and blemish) and (not conflict or last):
                 result = evolve(pipe, artifacts={"text": text, "writer": {
                     "status": "valid", "validation": issues, "attempts": records, "max_tokens": max_tokens,
