@@ -533,6 +533,9 @@ def _h3_section_names(mode):
     return table[short.get(mode, "t2va")]
 
 
+_SHOT_LABEL = re.compile(r"(?i)\[\s*shot\s*#?\s*\d+[^\]\n]{0,40}\]")
+
+
 def _number_shots(body):
     """Shot labels belong to the description alone: drop repeats, number the rest from 1, and add [Shot 1] when the writer wrote none."""
     seen, count = set(), [0]
@@ -544,7 +547,7 @@ def _number_shots(body):
         count[0] += 1
         return f"[Shot {count[0]}]"
 
-    body = re.sub(r"[ \t]{2,}", " ", re.sub(r"\[Shot \d+\]", renumber, body))
+    body = re.sub(r"[ \t]{2,}", " ", _SHOT_LABEL.sub(renumber, body))
     return body if count[0] else "[Shot 1] " + body
 
 
@@ -567,7 +570,7 @@ def _h3_repair_sections(text, pipe, mode):
         if name in ("integrated_multimodal_description", "detailed_description"):
             blocks[name] = _number_shots(body) if body else body
         else:
-            blocks[name] = re.sub(r"[ \t]{2,}", " ", re.sub(r"\[Shot \d+\]\s*", "", body))
+            blocks[name] = re.sub(r"[ \t]{2,}", " ", _SHOT_LABEL.sub("", body)).strip()
     fallback = (pipe["settings"].get("prompt", {}).get("text") or "").strip() if blocks else text.strip()
     rebuilt = []
     for name in sections:

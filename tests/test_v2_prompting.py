@@ -326,6 +326,9 @@ class PromptTests(unittest.TestCase):
         self.assertTrue(fixed_ref.index("[Shot 1]") > fixed_ref.index("detailed_description:"))
         doubled = self.prompts._h3_repair_sections("integrated_multimodal_description:\n[Shot 1] [Shot 1] She walks.\n\noverall_soundscape:\nsurf", pipe, "t2v")
         self.assertEqual(doubled.count("[Shot 1]"), 1)
+        odd = self.prompts._h3_repair_sections("integrated_multimodal_description:\n[SHOT 2: close] She walks. [Shot  3 ] She stops.\n\noverall_soundscape:\n[Shot 1] surf", pipe, "t2v")
+        self.assertEqual(re.findall(r"\[Shot \d+\]", odd), ["[Shot 1]", "[Shot 2]"])
+        self.assertNotIn("[Shot 1] surf", odd)
         self.assertEqual(self.prompts._H3_AGE_ECHO.sub("", "A woman aged exactly as specified in the request walks."), "A woman walks.")
         self.assertEqual(self.prompts._H3_AGE_ECHO.sub("", "A man, aged as specified in the request, sits."), "A man sits.")
 
