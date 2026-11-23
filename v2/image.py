@@ -150,7 +150,7 @@ class ImageFormat(io.ComfyNode):
         settings = {"aspect": aspect, "megapixels": megapixels, "orientation": orientation,
                     "width": width, "height": height, "batch_size": batch_size}
         result = evolve(pipe, section="format", settings=settings,
-                        invalidate=("positive", "negative", "latent", "images", "krea_source_latents", "krea_references", "krea_mask"))
+                        invalidate=("positive", "negative", "latent", "images", "krea_source_latents", "krea_references", "krea_text_references", "krea_mask"))
         model_obj = result["artifacts"].get("model")
         latent = None
         if model_obj is not None:
@@ -256,7 +256,7 @@ class ImageEncode(io.ComfyNode):
         if task == "edit" and pipe["family"] == "krea2":
             if not refs:
                 raise ValueError("Run Krea Edit Prepare before Krea edit encoding.")
-            pos, neg = (encode_grounded(clip, text, refs) for text in (positive, negative))
+            pos, neg = (encode_grounded(clip, text, artifacts["krea_text_references"]) for text in (positive, negative))
         elif task == "edit":
             raise ValueError("Edit encoding is supported for Krea 2 only.")
         else:

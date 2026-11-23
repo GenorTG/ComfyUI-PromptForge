@@ -139,7 +139,7 @@
         1
       ],
       "checkpoint": "<SELECT_SAM3_CHECKPOINT>",
-      "subject": "person",
+      "subject": "face, hair and neck",
       "threshold": 0.5,
       "refine_iterations": 2,
       "pipe": [
@@ -159,8 +159,8 @@
         1
       ],
       "invert": false,
-      "grow": 0,
-      "feather": 0
+      "grow": 8,
+      "feather": 4
     },
     "_meta": {
       "title": "Edit Mask"
@@ -176,10 +176,14 @@
       "fit_mode": "fit",
       "position": "aligned",
       "position_a": "aligned",
-      "ref_boost": 1.0,
+      "ref_boost": 4.0,
       "ref_boost_a": 1.0,
       "pipe": [
         "7",
+        0
+      ],
+      "mask": [
+        "8",
         0
       ]
     },

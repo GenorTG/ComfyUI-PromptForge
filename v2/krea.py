@@ -279,10 +279,7 @@ def _place_refs(ref_ids, modes, h_, w_):
         out.append(ids)
     return out
 
-def _fit_encode_image(image, vae, H, W, cache, key, fit_mode="crop"):
-    key = key + (fit_mode,)
-    if key in cache:
-        return cache[key]
+def _fit_reference(image, H, W, fit_mode="crop"):
     px_h, px_w = H * 8, W * 8
     img = image.movedim(-1, 1)  # B,H,W,C -> B,C,H,W
     ih, iw = img.shape[-2:]
@@ -301,18 +298,20 @@ def _fit_encode_image(image, vae, H, W, cache, key, fit_mode="crop"):
             ch2, cw2 = min(ih, max(1, int(round(nh / sc)))), min(iw, max(1, int(round(nw / sc))))
             y0, x0 = (ih - ch2) // 2, (iw - cw2) // 2
             img = img[..., y0:y0 + ch2, x0:x0 + cw2]
-        img = F.interpolate(img.float(), size=(nh, nw), mode="bicubic", antialias=True)
-        lat = vae.encode(img.movedim(1, -1)[..., :3].clamp(0, 1))
-        cache[key] = lat
-        return lat
+        return F.interpolate(img.float(), size=(nh, nw), mode="bicubic", antialias=True).movedim(1, -1)
     s = max(px_h / ih, px_w / iw)
     ch, cw = min(ih, int(round(px_h / s))), min(iw, int(round(px_w / s)))
     y0, x0 = (ih - ch) // 2, (iw - cw) // 2
     img = img[..., y0:y0 + ch, x0:x0 + cw]
-    img = F.interpolate(img.float(), size=(px_h, px_w), mode="bicubic", antialias=True)
-    lat = vae.encode(img.movedim(1, -1)[..., :3].clamp(0, 1))
-    cache[key] = lat
-    return lat
+    return F.interpolate(img.float(), size=(px_h, px_w), mode="bicubic", antialias=True).movedim(1, -1)
+
+
+def _fit_encode_image(image, vae, H, W, cache, key, fit_mode="crop"):
+    key = key + (fit_mode,)
+    if key not in cache:
+        cache[key] = vae.encode(_fit_reference(image, H, W, fit_mode)[..., :3].clamp(0, 1))
+    return cache[key]
+
 
 def _ref_attn_bias(boosts, boost_mask, txtlen, slens, tgtlen, mask_hw, device, dtype):
     nsrc = len(slens)
@@ -524,7 +523,7 @@ class KreaEditPrepare(io.ComfyNode):
     @classmethod
     def define_schema(cls):
         return nodes_schema("KREA", "EDIT_PREPARE", "Edit Prepare", inputs=[Pipe.Input("pipe", optional=True), io.Image.Input("image"),
-                io.Image.Input("image_b", optional=True), io.Mask.Input("mask", optional=True),
+                io.Image.Input("image_b", optional=True), io.Mask.Input("mask", optional=True, tooltip="Identity area of the last reference (for example face, hair and neck). The text encoder then sees only this area on grey, so clothes and room do not carry over; ref_boost applies to it alone."),
                 io.Combo.Input("fit_mode", options=["fit", "crop"], default="fit", tooltip="How the reference is fitted to the format. fit keeps the whole photo, crop fills the frame."),
                 io.Combo.Input("position", options=["aligned", "beside", "bag"], default="aligned", tooltip="Where the main reference sits in the token grid. aligned is the trained position."),
                 io.Combo.Input("position_a", options=["aligned", "beside", "bag"], default="aligned", tooltip="Where the second reference sits. aligned is the trained position."),
@@ -545,7 +544,12 @@ class KreaEditPrepare(io.ComfyNode):
                                             {}, (), fit_mode) for ref in references]
         settings = {"fit_mode": fit_mode, "position": position, "position_a": position_a,
                         "ref_boost": ref_boost, "ref_boost_a": ref_boost_a}
-        artifacts = {"krea_references": references, "krea_source_latents": source_latents, "krea_mask": mask}
+        text_references = references
+        if mask is not None:
+            keep = F.interpolate(mask.reshape(-1, 1, *mask.shape[-2:])[:1].float(), size=references[-1].shape[1:3], mode="bilinear").movedim(1, -1).clamp(0, 1)
+            text_references = references[:-1] + [references[-1][..., :3] * keep + .5 * (1 - keep)]
+            mask = _fit_reference(mask.reshape(-1, *mask.shape[-2:], 1), fmt["height"] // 8, fmt["width"] // 8, fit_mode)[..., 0]
+        artifacts = {"krea_references": references, "krea_text_references": text_references, "krea_source_latents": source_latents, "krea_mask": mask}
         return io.NodeOutput(evolve(pipe, section="krea_edit", settings=settings, artifacts=artifacts,
                                     invalidate=("positive", "negative", "latent", "images")))
 

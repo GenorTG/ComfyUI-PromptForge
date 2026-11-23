@@ -591,6 +591,23 @@ def deflicker(images, count):
     return corrected
 
 
+def repair_stalls(images, count):
+    """The frames a continued clip pins to the source arrive almost without motion (measured: 0.4x the usual step at frames 17 and 22), then the
+    motion jumps: two stutters about 0.2 s apart. A frame that arrives with under half the surrounding motion becomes the midpoint of its neighbours."""
+    count = min(count, images.shape[0])
+    if count < 14:
+        return images
+    gray = images[:count, ..., :3].mean(-1)
+    step = (gray[1:] - gray[:-1]).abs().mean((1, 2))
+    local = torch.nn.functional.pad(step[None, None], (6, 6), mode="replicate")[0, 0].unfold(0, 13, 1).median(-1).values
+    repaired = images.clone()
+    for index in (step < .5 * local).nonzero().flatten().tolist():
+        held = index + 1
+        if 0 < held < count - 1:
+            repaired[held] = (repaired[index] + repaired[held + 1]) / 2
+    return repaired
+
+
 def join(previous, current, overlap_frames=0, transition="crossfade", level=True):
     checked(previous)
     checked(current)
@@ -603,7 +620,7 @@ def join(previous, current, overlap_frames=0, transition="crossfade", level=True
     n = min(max(0, overlap_frames), left.shape[0], right.shape[0])
     right = right.to(left)
     if level:
-        right = deflicker(right, n + 36)
+        right = repair_stalls(deflicker(right, n + 36), n + 36)
         edge = n or min(4, left.shape[0], right.shape[0])
         right = match_levels(left[-edge:], right, max(2 * edge, 24))
     if n and transition == "crossfade":

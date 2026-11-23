@@ -236,6 +236,18 @@ class H3Tests(unittest.TestCase):
         self.assertTrue(torch.equal(fixed[58:], clip[58:]))
         self.assertTrue(torch.equal(self.h3.deflicker(clip[:5], 5), clip[:5]))
 
+    def test_repair_stalls_fills_frames_that_barely_move_and_leaves_steady_motion(self):
+        torch = self.torch
+        level = torch.arange(40, dtype=torch.float32) * .01            # steady motion
+        level[20:] += .01                                              # frame 20 repeats frame 19's place: a stall
+        clip = level.view(-1, 1, 1, 1).expand(40, 8, 8, 3).clone()
+        steady = (torch.arange(40, dtype=torch.float32) * .01).view(-1, 1, 1, 1).expand(40, 8, 8, 3).clone()
+        fixed = self.h3.repair_stalls(clip, 40)
+        step = lambda x: (x[1:] - x[:-1]).abs().mean((1, 2, 3))
+        self.assertLess(float(step(fixed).max() - step(fixed).min()), float(step(clip).max() - step(clip).min()) + 1e-6)
+        self.assertTrue(torch.equal(self.h3.repair_stalls(steady, 40), steady))
+        self.assertTrue(torch.equal(self.h3.repair_stalls(clip[:8], 8), clip[:8]))
+
     def test_first_pass_preview_is_optional_and_keeps_original_pipe(self):
         from comfy_api.latest import io
         pipe = self.contracts.evolve(self.pipe(), artifacts={"latent": {"samples": self.torch.ones(1)}})

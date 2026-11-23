@@ -327,13 +327,13 @@ def image_graph(catalogue, name, family, task="t2i"):
             wires = {"image": (scale, 0), "image_b": (scale, 0)}
             mask_image = (scale, 0)
         subject = graph.add("SUBJECT_MASK", "subject_mask", GROUPS[1],
-                            {"checkpoint": "<SELECT_SAM3_CHECKPOINT>", "subject": "person"},
+                            {"checkpoint": "<SELECT_SAM3_CHECKPOINT>", "subject": "face, hair and neck" if task == "edit" else "person"},
                             {"image": mask_image})
-        mask = graph.add("MASK_PREPARE", "edit_mask", GROUPS[1],
+        mask = graph.add("MASK_PREPARE", "edit_mask", GROUPS[1], {"grow": 8, "feather": 4} if task == "edit" else None,
                          connections={"mask": (subject, 1)}, chain=False)
-        if task == "transfer":
+        if task in ("edit", "transfer"):
             wires["mask"] = (mask, 0)
-        graph.add("KREA_EDIT_PREPARE", "edit_prepare", GROUPS[4], {"fit_mode": "fit"}, connections=wires)
+        graph.add("KREA_EDIT_PREPARE", "edit_prepare", GROUPS[4], {"fit_mode": "fit", "ref_boost": 4.0} if task == "edit" else {"fit_mode": "fit"}, connections=wires)
     _, prompt = add_writer(graph)
     encode = graph.add("IMAGE_ENCODE", "encode", GROUPS[4], {"task": "edit" if loaded else "t2i"},
                        connections={"clip": clip_out, "vae": (model, 3), "model": model_out, "text": (prompt, 1),
