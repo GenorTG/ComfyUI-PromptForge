@@ -527,6 +527,7 @@ OUTPUT_CAPS = {  # preset -> hard cap, in words (tags for Anima); MiniMax scales
     "enhance": 300,
     "krea 2 t2i": 320,
     "krea 2 edit": 340,
+    "krea 2 edit - two people": 340,
     "moss image t2i": 440,
     "moss image edit": 180,
     "qwen image t2i": 440,

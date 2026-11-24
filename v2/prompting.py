@@ -356,10 +356,15 @@ H3_PRESETS = {"t2va": "MiniMax H3 T2VA", "i2va": "MiniMax H3 I2VA",
               "l2va": "MiniMax H3 L2VA", "fl2va": "MiniMax H3 FL2VA", "ref2va": "MiniMax H3 Ref2VA"}
 
 
+KREA_TWO_PEOPLE = "Krea 2 Edit - Two People"
+
+
 def _preset_family(preset):
     """Family a named template belongs to; the shared style presets belong to none."""
     if preset in H3_PRESETS.values():
         return "minimax_h3"
+    if preset == KREA_TWO_PEOPLE:
+        return "krea2"
     for family, names in _services().FAMILY_PRESETS.items():
         if preset in names:
             return family
@@ -399,7 +404,8 @@ def _writer_context(pipe, h3):
             roles = {"i2va": ("first_frame",), "l2va": ("last_frame",), "fl2va": ("first_frame", "last_frame")}.get(mode_key, ())
             inputs = [(key, artifacts[key]) for key in roles if artifacts.get(key) is not None]
     else:
-        key = "krea_references" if artifacts.get("krea_references") else "reference_images"
+        # the writer sees what the image model's text encoder sees: the masked identity on grey, so a photo's room, water and clothes cannot reach the prompt
+        key = "krea_text_references" if artifacts.get("krea_text_references") else "krea_references" if artifacts.get("krea_references") else "reference_images"
         inputs = [(f"{key}[{i}]", image) for i, image in enumerate(artifacts.get(key, []))]
         if not inputs and artifacts.get("source_image") is not None:
             inputs = [("source_image", artifacts["source_image"])]
@@ -760,6 +766,24 @@ def _fit_to_idea(text, idea):
     return text
 
 
+_PENETRATION_CUES = re.compile(r"(?i)\b(?:sex|fuck\w*|penetrat\w*|inside|enters?|vagina|anal|anus|pussy|thrust\w*|rides?|riding|missionary|doggy|cowgirl|intercourse|from behind)\b")
+_ORAL_HAND_CUES = re.compile(r"(?i)\b(?:blowjob|oral|suck\w*|lick\w*|cunnilingus|handjob|hand job|titfuck|fingering|masturbat\w*|jerk\w*)\b")
+
+
+def _drop_unused_acts(text, request):
+    """The two-people template lists a penetration rule and an oral/hand rule; a small writer applies whichever it sees, so each stays only when the request names such an act."""
+    penetration = bool(_PENETRATION_CUES.search(request))
+    oral_hand = bool(_ORAL_HAND_CUES.search(request))
+    keep = []
+    for line in text.split("\n"):
+        if line.startswith("- Penetration:") and not penetration:
+            continue
+        if line.startswith("- Oral and hand acts:") and not oral_hand:
+            continue
+        keep.append(line)
+    return "\n".join(keep)
+
+
 def _system_text(service, preset, context, style_prefix="", sections=None, negative="", explicit=True, male=True, sized=True, brief=False, idea="", request=None):
     """The writer's system prompt: the family template, then only the facts of this request."""
     seconds = float(context.get("duration") or 5)
@@ -768,6 +792,8 @@ def _system_text(service, preset, context, style_prefix="", sections=None, negat
     text = _fit_to_idea(text, idea)
     if request is not None:
         text = _drop_unused_camera_rules(text, request)
+        if preset == KREA_TWO_PEOPLE:
+            text = _drop_unused_acts(text, request)
     text = text.replace("and only the two or three props actually in frame", "and only the props the request names").replace("5. Place and the props in the frame.", "5. Place and only the props the request names.")
     if not explicit:
         text = _EXPLICIT_SECTIONS.sub("", text).replace("Start with: nsfw, anime style, 2d, flat colors.", "Start with: anime style, 2d, flat colors.").replace(_RATING, 'Rating: "safe".')
@@ -878,6 +904,7 @@ class ImagePromptWriter(io.ComfyNode):
         service = _services()
         override = bool(writer_preset) and writer_preset != "auto"
         preset = writer_preset if override else (H3_PRESETS[mode] if cls.H3 else
+                  KREA_TWO_PEOPLE if pipe["family"] == "krea2" and len(pipe["artifacts"].get("krea_references") or ()) == 2 else
                   service._family_preset(pipe["family"], bool(images), video is not None))
         if preset not in service.PROMPTFORGE_PRESETS:
             raise ValueError(f"Writer template is unavailable: {preset}")
@@ -897,9 +924,6 @@ class ImagePromptWriter(io.ComfyNode):
         system_base = _system_text(service, preset, context, style_prefix, picture_sections if cls.H3 else None, negative, explicit, male, sized,
                                    brief=prompt.get("source") == "action", idea=prompt.get("text", "") if prompt.get("source") == "idea" else "",
                                    request=" ".join(str(prompt.get(key, "")) for key in ("text", "camera", "shot", "angle")) if prompt.get("source") == "idea" and not cls.H3 else None)
-        if not cls.H3 and len(images) == 2 and pipe["artifacts"].get("krea_references"):
-            # two photos are two people: the template line that opens every description names the photo, so no line can be copied for both
-            system_base = system_base.replace('"The same person as the photo: <build> build', '"The person in the first photo: <man or woman>, <build> build')
         sound_base = _system_text(service, preset, context, "", sound_sections, negative, explicit, male, sized) if sound_sections else ""
         user_text = prompt["text"]
         if prompt.get("source") == "action" and cls.H3:

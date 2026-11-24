@@ -57,6 +57,38 @@ class PromptTests(unittest.TestCase):
         self.assertIn("anima template", report["preset_mismatch"])
         self.assertEqual(result["settings"]["prompt"], pipe["settings"]["prompt"])
 
+    def test_two_krea_references_use_the_two_people_template_and_one_reference_does_not(self):
+        torch = self.torch
+        base = self.prompts.ImagePrompt.execute(self.contracts.new_pipe("krea2"), source="idea", text="the man and the woman are in a kitchen").args[0]
+        photos = [torch.zeros(1, 8, 8, 3), torch.zeros(1, 8, 8, 3)]
+        seen = []
+
+        def generate(**kwargs):
+            seen.append(kwargs["system_prompt"])
+            return "The man from the first photo: short grey hair. The woman from the second photo: long dark hair. They stand in a kitchen."
+        for count in (2, 1):
+            pipe = self.contracts.evolve(base, artifacts={"krea_references": photos[:count]})
+            with patch.object(self.service.PROMPTFORGE_PromptEnhancer, "_generate", side_effect=generate):
+                result = self.prompts.ImagePromptWriter.execute(pipe, writer_model={}).args[0]
+            self.assertEqual(result["artifacts"]["writer"]["preset"], "Krea 2 Edit - Two People" if count == 2 else "Krea 2 Edit")
+            self.assertNotIn("preset_mismatch", result["artifacts"]["writer"])
+        self.assertIn("TWO reference photos", seen[0])
+        self.assertNotIn("TWO reference photos", seen[1])
+
+    def test_two_people_template_keeps_only_the_act_rules_the_request_needs(self):
+        service = self.service
+        base = lambda request: self.prompts._system_text(service, "Krea 2 Edit - Two People", {"family": "krea2", "picture_count": 0, "video_count": 0, "audio": [], "references": [], "descriptions": []},
+                                                          request=request, idea=request)
+        oral = base("she kneels and gives him a blowjob in a greenhouse")
+        self.assertIn("- Oral and hand acts:", oral)
+        self.assertNotIn("- Penetration:", oral)
+        sex = base("he fucks her from behind on a sofa")
+        self.assertIn("- Penetration:", sex)
+        self.assertNotIn("- Oral and hand acts:", sex)
+        kiss = base("they kiss on a balcony")
+        self.assertNotIn("- Penetration:", kiss)
+        self.assertNotIn("- Oral and hand acts:", kiss)
+
     def test_writer_auto_preset_stays_silent(self):
         pipe = self.prompts.ImagePrompt.execute(self.contracts.new_pipe("anima"), source="idea", text="garden").args[0]
         with patch.object(self.service.PROMPTFORGE_PromptEnhancer, "_generate", return_value="sunlit garden, flowering plants"):
