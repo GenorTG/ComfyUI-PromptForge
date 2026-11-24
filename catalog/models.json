@@ -399,6 +399,25 @@
       "avail_match": ["Defiant"]
     },
     {
+      "key": "gguf_qwen35_9b_hauhau",
+      "name": "Qwen3.5-9B Uncensored HauhauCS Aggressive GGUF (llama.cpp)",
+      "label": "Qwen3.5-9B Uncensored HauhauCS Aggressive GGUF [9B]",
+      "family": "Qwen3.5",
+      "repo_id": "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
+      "author": "HauhauCS",
+      "params_b": 9,
+      "vl_capable": true,
+      "image_capable": true,
+      "base_dir": "LLM/GGUF",
+      "mmproj_file": "mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf",
+      "quant_files": {
+        "q4": "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+        "q6": "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q6_K.gguf",
+        "q8": "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf"
+      },
+      "avail_match": ["HauhauCS"]
+    },
+    {
       "key": "gguf_qwen36_27b_fusion",
       "name": "Qwen3.6-27B Fable Fusion GGUF (llama.cpp)",
       "label": "Qwen3.6-27B Fable Fusion GGUF [27B]",
