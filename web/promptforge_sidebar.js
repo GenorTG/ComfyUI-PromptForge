@@ -45,7 +45,18 @@ function blur(element, meta, state) {
 
 let viewerClose = null;
 
-function preview(root, files, start) {
+async function remove(root, file) {
+  if (!confirm(`Delete ${file.path} from the ${root} folder? This cannot be undone.`)) return false;
+  try {
+    await post("/promptforge/browser/delete", { root, path: file.path });
+    return true;
+  } catch (error) {
+    alert(error.message);
+    return false;
+  }
+}
+
+function preview(root, files, start, onDeleted) {
   viewerClose?.();
   const backdrop = el("div", { position: "fixed", inset: "0", zIndex: 10050, background: "rgba(0,0,0,.82)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", padding: "16px", boxSizing: "border-box", overflow: "hidden" });
   const stage = el("div", { flex: "1", minHeight: "0", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", overflow: "hidden" });
@@ -117,7 +128,16 @@ function preview(root, files, start) {
     stage.append(next);
   }
   const footer = el("div", { display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", maxWidth: "100%" });
-  footer.append(caption, button("Close", close));
+  const del = button("Delete", async () => {
+    if (!(await remove(root, files[index]))) return;
+    files.splice(index, 1);
+    onDeleted?.();
+    if (!files.length) return close();
+    index = Math.min(index, files.length - 1);
+    render();
+  });
+  del.style.background = "#7a2a2a";
+  footer.append(caption, del, button("Close", close));
   backdrop.append(stage, footer);
   backdrop.addEventListener("click", (event) => { if (event.target === backdrop || event.target === stage) close(); });
   document.addEventListener("keydown", onKey, true);
@@ -282,7 +302,7 @@ export function createPanel() {
     if (file.meta?.nsfw) thumb.dataset.nsfw = "1";
     blur(thumb, file.meta, state[name]);
     thumbBox.append(thumb);
-    thumbBox.addEventListener("click", () => preview(root, files, index));
+    thumbBox.addEventListener("click", () => preview(root, files, index, () => refresh(name)));
     if (file.kind === "video") thumbBox.append(el("span", { position: "absolute", inset: "0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "26px", pointerEvents: "none", textShadow: "0 1px 4px #000" }, { textContent: "▶" }));
     if (file.meta?.nsfw) thumbBox.append(el("span", { position: "absolute", left: "3px", top: "3px", padding: "1px 4px", borderRadius: "3px", background: "#a33", color: "#fff", fontSize: "10px" }, { textContent: "NSFW" }));
     card.append(thumbBox, el("div", { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: "600" }, { textContent: file.name, title: file.path }));
@@ -292,6 +312,9 @@ export function createPanel() {
       const note = el("div", { opacity: ".75", fontSize: "10px", maxHeight: "40px", overflow: "hidden" }, { textContent: file.meta.description || "", title: file.meta.description || "" });
       card.append(note);
     }
+    const del = button("Delete", async () => { if (await remove(root, file)) refresh(name); });
+    del.style.background = "#7a2a2a";
+    if (!inputs) card.append(del);
     if (inputs) {
       const status = el("div", { fontSize: "10px", opacity: ".75", overflowWrap: "anywhere" });
       const tools = el("div", { display: "flex", gap: "3px", flexWrap: "wrap" });
@@ -303,6 +326,7 @@ export function createPanel() {
       }));
       tools.append(button("Classify", () => tagEditor(root, file, state[name], () => refresh(name))));
       if (file.kind === "image") tools.append(button("Analyse", () => analyse(root, file, status, () => refresh(name))));
+      tools.append(del);
       card.append(tools, status);
     }
     return card;

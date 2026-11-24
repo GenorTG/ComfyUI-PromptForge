@@ -19,6 +19,16 @@ function el(tag, style = {}, props = {}) {
 const post = async (path, body = {}) => (await api.fetchApi(path, { method: "POST", body: JSON.stringify(body) })).json();
 const get = async (path) => (await api.fetchApi(path)).json();
 
+// deletes input-folder files one by one and returns the error text of every file that could not be deleted
+async function deleteInputs(names) {
+  const failed = [];
+  for (const name of names) {
+    const response = await api.fetchApi("/promptforge/browser/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ root: "input", path: name }) });
+    if (!response.ok) failed.push(`${name}: ${(await response.json().catch(() => ({}))).error || response.status}`);
+  }
+  return failed;
+}
+
 async function editImage(image, onChange) {
   const info = await get("/promptforge/library/info?name=" + encodeURIComponent(image.name));
   const note = (await get("/promptforge/image_description?name=" + encodeURIComponent(image.name))).description;
@@ -157,10 +167,11 @@ export function createLibrary(container, { onPick = null, current = "", extraCon
   const nsfwLabel = el("label", { display: "flex", gap: "4px", alignItems: "center", whiteSpace: "nowrap" }, { title: "NSFW images are blurred unless this is on" });
   const nsfwBox = el("input", {}, { type: "checkbox", checked: nsfwShown() });
   nsfwLabel.append(nsfwBox, "Show NSFW");
-  const selectButton = el("button", BUTTON, { textContent: "Select", title: "Pick several images for tagging or organising" });
+  const selectButton = el("button", BUTTON, { textContent: "Select", title: "Pick several images for tagging, organising or deleting" });
+  const deleteSelected = el("button", { ...BUTTON, display: "none", background: "#7a2a2a" }, { textContent: "Delete selected", title: "Delete the selected files from the input folder" });
   const toolsButton = el("button", BUTTON, { textContent: "Tools ▾" });
   const count = el("span", { opacity: ".7", whiteSpace: "nowrap" });
-  bar.append(searchBox, folderBox, themeBox, nsfwLabel, selectButton, toolsButton, count, ...extraControls);
+  bar.append(searchBox, folderBox, themeBox, nsfwLabel, selectButton, deleteSelected, toolsButton, count, ...extraControls);
 
   const tools = el("div", { display: "none", flexDirection: "column", gap: "6px", padding: "8px", border: "1px solid var(--border-color, #555)", borderRadius: "6px" });
   const modelRow = el("div", { display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" });
@@ -219,6 +230,7 @@ export function createLibrary(container, { onPick = null, current = "", extraCon
     const shown = matches();
     count.textContent = `${shown.length} images` + (state.select ? ` · ${state.selected.size} selected` : "");
     selectButton.style.background = state.select ? "#2a5d9a" : BUTTON.background;
+    deleteSelected.style.display = state.select && state.selected.size ? "" : "none";
     grid.replaceChildren(...shown.map((image) => {
       const hidden = image.nsfw && !nsfwBox.checked;
       const selected = state.selected.has(image.name);
@@ -233,7 +245,15 @@ export function createLibrary(container, { onPick = null, current = "", extraCon
       tile.append(badges);
       const edit = el("button", { ...BUTTON, position: "absolute", top: "6px", right: "6px", padding: "0 6px", borderRadius: "50%", fontStyle: "italic", fontWeight: "bold" }, { textContent: "i", title: "Edit tags, theme and description" });
       edit.addEventListener("click", (event) => { event.stopPropagation(); editImage(image, reload); });
-      tile.append(edit);
+      const remove = el("button", { ...BUTTON, position: "absolute", top: "6px", right: "30px", padding: "0 6px", borderRadius: "50%", background: "#7a2a2a" }, { textContent: "✕", title: "Delete this file from the input folder" });
+      remove.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        if (!confirm(`Delete ${image.name} from the input folder? This cannot be undone.`)) return;
+        const failed = await deleteInputs([image.name]);
+        if (failed.length) alert(failed.join("\n"));
+        reload();
+      });
+      tile.append(edit, remove);
       tile.addEventListener("click", () => {
         if (state.select) {
           state.selected.has(image.name) ? state.selected.delete(image.name) : state.selected.add(image.name);
@@ -296,6 +316,14 @@ export function createLibrary(container, { onPick = null, current = "", extraCon
   folderBox.addEventListener("change", () => { state.folder = folderBox.value; render(); });
   themeBox.addEventListener("change", () => { state.theme = themeBox.value; render(); });
   nsfwBox.addEventListener("change", () => { setNsfwShown(nsfwBox.checked); render(); });
+  deleteSelected.addEventListener("click", async () => {
+    const names = [...state.selected];
+    if (!names.length || !confirm(`Delete ${names.length} files from the input folder? This cannot be undone.`)) return;
+    const failed = await deleteInputs(names);
+    if (failed.length) alert(failed.join("\n"));
+    state.selected.clear();
+    reload();
+  });
   selectButton.addEventListener("click", () => { state.select = !state.select; if (!state.select) state.selected.clear(); render(); });
   toolsButton.addEventListener("click", () => { state.tools = !state.tools; tools.style.display = state.tools ? "flex" : "none"; toolsButton.textContent = state.tools ? "Tools ▴" : "Tools ▾"; if (state.tools) { loadModels(); status(); } });
   tagUntagged.addEventListener("click", () => startTag("all", false));

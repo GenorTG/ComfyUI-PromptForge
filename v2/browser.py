@@ -1,6 +1,6 @@
 """Sidebar browser: the output and input folders, per-file notes, and dry workflow templates.
 
-The output folder is read only. Files in the input folder can be renamed, tagged and described;
+Files in either folder can be deleted; files in the input folder can also be renamed, tagged and described;
 the vision analysis reuses the pack's local vision GGUF loader, so it runs on the machine and
 never blocks the request that starts it. Notes live in `promptforge/browser_meta.json` in the
 user directory, keyed by root and relative path.
@@ -276,6 +276,30 @@ async def _rename(request):
             store[new_key] = store.pop(key)
             _write(store)
     return web.json_response({"path": new_rel, "name": new_name})
+
+
+@routes.post("/promptforge/browser/delete")
+async def _delete(request):
+    body = await request.json()
+    name = str(body.get("root", ""))
+    try:
+        root, path = _resolve(name, str(body.get("path", "")))
+    except ValueError as error:
+        return web.json_response({"error": str(error)}, status=400)
+    if not path.is_file() or _kind(path) == "other":
+        return web.json_response({"error": "Only picture, video and audio files can be deleted."}, status=404)
+    rel = path.relative_to(root).as_posix()
+    path.unlink()
+    with _store_lock:
+        store = _read()
+        if store.pop(f"{name}:{rel}", None) is not None:
+            _write(store)
+    if name == "input":
+        for load, save in ((image_library.tags, image_library.save_tags), (image_library.descriptions, image_library.save_descriptions)):
+            data = load()
+            if data.pop(rel, None) is not None:
+                save(data)
+    return web.json_response({"deleted": rel})
 
 
 @routes.post("/promptforge/browser/meta")
