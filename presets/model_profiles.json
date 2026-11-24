@@ -125,5 +125,23 @@
    "refine_scheduler": "linear_quadratic",
    "start_sigma": 0.9035
   }
+ },
+ "dasiwa minimax h3 ref2va v5xs pruned graviton turbo runtime mixed": {
+  "label": "DaSiWa MiniMax H3 Turbo (distilled)",
+  "source": "the maker's page: Turbo uses euler/simple or LCM/simple, shift video 6-12, shift audio 3-5, 8 steps for quality (4 is a degraded-audio preview); second-pass values are an assumption",
+  "assumed": true,
+  "settings": {
+   "steps": 8,
+   "cfg": 1.0,
+   "sampler_name": "euler",
+   "scheduler": "simple",
+   "shift_video": 10.0,
+   "shift_audio": 4.0,
+   "refine_steps": 3,
+   "refine_cfg": 1.0,
+   "refine_sampler": "euler",
+   "refine_scheduler": "linear from start",
+   "start_sigma": 0.9035
+  }
  }
 }
