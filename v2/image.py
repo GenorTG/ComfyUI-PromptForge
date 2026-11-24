@@ -256,7 +256,7 @@ class ImageEncode(io.ComfyNode):
         if task == "edit" and pipe["family"] == "krea2":
             if not refs:
                 raise ValueError("Run Krea Edit Prepare before Krea edit encoding.")
-            pos, neg = (encode_grounded(clip, text, artifacts["krea_text_references"]) for text in (positive, negative))
+            pos, neg = (encode_grounded(clip, text, artifacts["krea_text_references"], pipe["settings"]["krea_edit"]["grounding_px"]) for text in (positive, negative))
         elif task == "edit":
             raise ValueError("Edit encoding is supported for Krea 2 only.")
         else:

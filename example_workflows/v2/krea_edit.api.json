@@ -173,6 +173,7 @@
         "6",
         1
       ],
+      "grounding_px": 768,
       "crop_to_mask": false,
       "fit_mode": "fit",
       "position": "aligned",

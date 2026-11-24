@@ -842,7 +842,8 @@
         "Node name for S&R": "PROMPTFORGE_V2_KREA_EDIT_PREPARE",
         "promptforge_role": "edit_prepare",
         "promptforge_v2_widget_values": {
-          "crop_to_mask": false,
+          "grounding_px": 768,
+          "crop_to_mask": true,
           "fit_mode": "fit",
           "position": "beside",
           "position_a": "beside",
@@ -851,7 +852,8 @@
         }
       },
       "widgets_values": [
-        false,
+        768,
+        true,
         "fit",
         "beside",
         "beside",

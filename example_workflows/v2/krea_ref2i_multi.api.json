@@ -225,7 +225,8 @@
         "6",
         1
       ],
-      "crop_to_mask": false,
+      "grounding_px": 768,
+      "crop_to_mask": true,
       "fit_mode": "fit",
       "position": "beside",
       "position_a": "beside",

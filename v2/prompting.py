@@ -899,7 +899,7 @@ class ImagePromptWriter(io.ComfyNode):
                                    request=" ".join(str(prompt.get(key, "")) for key in ("text", "camera", "shot", "angle")) if prompt.get("source") == "idea" and not cls.H3 else None)
         if not cls.H3 and len(images) == 2 and pipe["artifacts"].get("krea_references"):
             # two photos are two people: the template line that opens every description names the photo, so no line can be copied for both
-            system_base = system_base.replace('"The same person as the photo: <build>', '"The person in the first photo: <build>')
+            system_base = system_base.replace('"The same person as the photo: <build> build', '"The person in the first photo: <man or woman>, <build> build')
         sound_base = _system_text(service, preset, context, "", sound_sections, negative, explicit, male, sized) if sound_sections else ""
         user_text = prompt["text"]
         if prompt.get("source") == "action" and cls.H3:

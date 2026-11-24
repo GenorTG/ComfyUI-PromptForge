@@ -378,7 +378,7 @@ def normalized_attention_guidance(
     refined = float(alpha) * normalized + (1.0 - float(alpha)) * z_pos
     return refined.to(dtype=dtype)
 
-def encode_grounded(clip, text, images):
+def encode_grounded(clip, text, images, grounding_px=768):
     vision = "<|vision_start|><|image_pad|><|vision_end|>" * len(images)
     template = ("<|im_start|>system\nDescribe the image by detailing the color, shape, size, "
                 "texture, quantity, text, spatial relationships of the objects and background:"
@@ -386,7 +386,7 @@ def encode_grounded(clip, text, images):
     prepared = []
     for image in images:
         h, w = image.shape[1:3]
-        scale = min(1.0, 768 / max(h, w))
+        scale = min(1.0, grounding_px / max(h, w))
         prepared.append(comfy.utils.common_upscale(image.movedim(-1, 1), round(w * scale), round(h * scale),
                                                   "area", "disabled").movedim(1, -1)[..., :3])
     return clip.encode_from_tokens_scheduled(clip.tokenize(text, images=prepared, llama_template=template))
@@ -536,6 +536,7 @@ class KreaEditPrepare(io.ComfyNode):
     def define_schema(cls):
         return nodes_schema("KREA", "EDIT_PREPARE", "Edit Prepare", inputs=[Pipe.Input("pipe", optional=True), io.Image.Input("image"),
                 io.Image.Input("image_b", optional=True), io.Mask.Input("mask", optional=True, tooltip="Identity area of the first reference (for example face, hair and neck). The text encoder then sees only this area on grey, so clothes and room do not carry over; the reference weight applies to it alone."), io.Mask.Input("mask_b", optional=True, tooltip="The same for the second reference."),
+                io.Int.Input("grounding_px", default=768, min=256, max=2048, step=64, tooltip="Size the text encoder sees each reference at. Higher keeps more of the likeness (try 1024 for people); lower follows the prompt more."),
                 io.Boolean.Input("crop_to_mask", default=False, tooltip="Crop each masked reference to its mask with a margin before use: the face gets the whole reference grid and nothing else of the photo (clothes, room, arms) is left to copy."),
                 io.Combo.Input("fit_mode", options=["fit", "crop"], default="fit", tooltip="How the reference is fitted to the format. fit keeps the whole photo, crop fills the frame."),
                 io.Combo.Input("position", options=["aligned", "beside", "bag"], default="aligned", tooltip="Where the main reference sits in the token grid. aligned is the trained position."),
@@ -544,7 +545,7 @@ class KreaEditPrepare(io.ComfyNode):
                 io.Float.Input("ref_boost_a", default=1.0, min=0.0, max=1000.0, tooltip="Strength of the FIRST reference when two are connected. With a mask it acts on the masked area only. 1 is neutral; lower it when that photo should only hint at the outfit or angle.")], outputs=[Pipe.Output("pipe")])
 
     @classmethod
-    def execute(cls, pipe=None, image=None, image_b=None, mask=None, mask_b=None, crop_to_mask=False, fit_mode="fit", position="aligned", position_a="aligned", ref_boost=1.0, ref_boost_a=1.0):
+    def execute(cls, pipe=None, image=None, image_b=None, mask=None, mask_b=None, grounding_px=768, crop_to_mask=False, fit_mode="fit", position="aligned", position_a="aligned", ref_boost=1.0, ref_boost_a=1.0):
         pipe = ensure_pipe(pipe, family="krea2")
         if pipe["family"] != "krea2":
             raise ValueError("Krea Edit Prepare requires a krea2 pipe and an identity edit LoRA on the model.")
@@ -561,7 +562,7 @@ class KreaEditPrepare(io.ComfyNode):
         source_latents = [_fit_encode_image(ref, pipe["artifacts"]["vae"], fmt["height"] // 8, fmt["width"] // 8,
                                             {}, (), fit_mode) for ref in references]
         settings = {"fit_mode": fit_mode, "position": position, "position_a": position_a,
-                        "ref_boost": ref_boost, "ref_boost_a": ref_boost_a}
+                        "ref_boost": ref_boost, "ref_boost_a": ref_boost_a, "grounding_px": grounding_px}
         text_references = []
         for reference, reference_mask in zip(references, masks):
             if reference_mask is None:
