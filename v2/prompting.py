@@ -579,7 +579,7 @@ def _h3_repair_sections(text, pipe, mode):
         elif name in ("overall_soundscape", "non_diegetic_music"):
             continue  # the audio repair adds those
         elif name in ("detailed_description", "integrated_multimodal_description"):
-            body = "[Shot 1] " + (fallback or "the requested action plays out.")
+            body = _number_shots(fallback or "the requested action plays out.")
         elif name == "summary":
             body = "The clip shows the requested action."
         elif name == "subject_definitions":
