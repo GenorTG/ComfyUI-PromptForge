@@ -306,6 +306,18 @@ def _fit_reference(image, H, W, fit_mode="crop"):
     return F.interpolate(img.float(), size=(px_h, px_w), mode="bicubic", antialias=True).movedim(1, -1)
 
 
+def _crop_to_mask(image, mask):
+    """The masked area with a margin: the identity gets the whole reference grid and the rest of the photo is gone."""
+    mask = mask.reshape(-1, *mask.shape[-2:])[0]
+    rows, cols = (mask > .5).any(1).nonzero().flatten(), (mask > .5).any(0).nonzero().flatten()
+    if not len(rows):
+        return image, mask
+    height, width = rows[-1] - rows[0] + 1, cols[-1] - cols[0] + 1
+    top, bottom = max(0, int(rows[0] - .35 * height)), min(mask.shape[0], int(rows[-1] + 1 + .35 * height))
+    left, right = max(0, int(cols[0] - .35 * width)), min(mask.shape[1], int(cols[-1] + 1 + .35 * width))
+    return image[:, top:bottom, left:right], mask[None, top:bottom, left:right]
+
+
 def _fit_encode_image(image, vae, H, W, cache, key, fit_mode="crop"):
     key = key + (fit_mode,)
     if key not in cache:
@@ -524,6 +536,7 @@ class KreaEditPrepare(io.ComfyNode):
     def define_schema(cls):
         return nodes_schema("KREA", "EDIT_PREPARE", "Edit Prepare", inputs=[Pipe.Input("pipe", optional=True), io.Image.Input("image"),
                 io.Image.Input("image_b", optional=True), io.Mask.Input("mask", optional=True, tooltip="Identity area of the first reference (for example face, hair and neck). The text encoder then sees only this area on grey, so clothes and room do not carry over; the reference weight applies to it alone."), io.Mask.Input("mask_b", optional=True, tooltip="The same for the second reference."),
+                io.Boolean.Input("crop_to_mask", default=False, tooltip="Crop each masked reference to its mask with a margin before use: the face gets the whole reference grid and nothing else of the photo (clothes, room, arms) is left to copy."),
                 io.Combo.Input("fit_mode", options=["fit", "crop"], default="fit", tooltip="How the reference is fitted to the format. fit keeps the whole photo, crop fills the frame."),
                 io.Combo.Input("position", options=["aligned", "beside", "bag"], default="aligned", tooltip="Where the main reference sits in the token grid. aligned is the trained position."),
                 io.Combo.Input("position_a", options=["aligned", "beside", "bag"], default="aligned", tooltip="Where the second reference sits. aligned is the trained position."),
@@ -531,7 +544,7 @@ class KreaEditPrepare(io.ComfyNode):
                 io.Float.Input("ref_boost_a", default=1.0, min=0.0, max=1000.0, tooltip="Strength of the FIRST reference when two are connected. With a mask it acts on the masked area only. 1 is neutral; lower it when that photo should only hint at the outfit or angle.")], outputs=[Pipe.Output("pipe")])
 
     @classmethod
-    def execute(cls, pipe=None, image=None, image_b=None, mask=None, mask_b=None, fit_mode="fit", position="aligned", position_a="aligned", ref_boost=1.0, ref_boost_a=1.0):
+    def execute(cls, pipe=None, image=None, image_b=None, mask=None, mask_b=None, crop_to_mask=False, fit_mode="fit", position="aligned", position_a="aligned", ref_boost=1.0, ref_boost_a=1.0):
         pipe = ensure_pipe(pipe, family="krea2")
         if pipe["family"] != "krea2":
             raise ValueError("Krea Edit Prepare requires a krea2 pipe and an identity edit LoRA on the model.")
@@ -540,11 +553,15 @@ class KreaEditPrepare(io.ComfyNode):
         if fmt is None:
             raise ValueError("Set Image Format before Krea Edit Prepare.")
         references = [image] + ([image_b] if image_b is not None else [])
+        masks = [mask, mask_b][:len(references)]
+        if crop_to_mask:
+            cropped = [reference if reference_mask is None else _crop_to_mask(reference, reference_mask) for reference, reference_mask in zip(references, masks)]
+            references = [reference for reference, _ in cropped]
+            masks = [None if reference_mask is None else crop_mask for reference_mask, (_, crop_mask) in zip(masks, cropped)]
         source_latents = [_fit_encode_image(ref, pipe["artifacts"]["vae"], fmt["height"] // 8, fmt["width"] // 8,
                                             {}, (), fit_mode) for ref in references]
         settings = {"fit_mode": fit_mode, "position": position, "position_a": position_a,
                         "ref_boost": ref_boost, "ref_boost_a": ref_boost_a}
-        masks = [mask, mask_b][:len(references)]
         text_references = []
         for reference, reference_mask in zip(references, masks):
             if reference_mask is None:

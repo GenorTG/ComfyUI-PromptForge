@@ -210,6 +210,7 @@
         "8",
         0
       ],
+      "crop_to_mask": false,
       "fit_mode": "fit",
       "position": "aligned",
       "position_a": "aligned",

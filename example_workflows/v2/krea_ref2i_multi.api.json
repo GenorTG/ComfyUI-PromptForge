@@ -225,9 +225,10 @@
         "6",
         1
       ],
+      "crop_to_mask": false,
       "fit_mode": "fit",
-      "position": "bag",
-      "position_a": "bag",
+      "position": "beside",
+      "position_a": "beside",
       "ref_boost": 2.0,
       "ref_boost_a": 2.0,
       "pipe": [
