@@ -313,7 +313,7 @@ def _fit_encode_image(image, vae, H, W, cache, key, fit_mode="crop"):
     return cache[key]
 
 
-def _ref_attn_bias(boosts, boost_mask, txtlen, slens, tgtlen, mask_hw, device, dtype):
+def _ref_attn_bias(boosts, boost_masks, txtlen, slens, tgtlen, mask_hw, device, dtype):
     nsrc = len(slens)
     offs = [txtlen]
     for sl in slens:
@@ -325,8 +325,8 @@ def _ref_attn_bias(boosts, boost_mask, txtlen, slens, tgtlen, mask_hw, device, d
         if b == 1.0:
             continue
         off, sl = offs[i], slens[i]
-        if boost_mask is not None and i == nsrc - 1 and mask_hw is not None:
-            mask = boost_mask[:1]
+        if boost_masks[i] is not None and mask_hw is not None:
+            mask = boost_masks[i][:1]
             if mask.ndim == 2:
                 mask = mask[None]
             mask = F.interpolate(mask[None].float(), size=mask_hw[i], mode="area")[0, 0]
@@ -434,7 +434,7 @@ def _forward(model, x, timesteps, context, sources, negative, edit, sampling, op
         ids = torch.cat((torch.zeros(batch, length, 3, device=x.device, dtype=torch.float32), image_ids), dim=1)
         mask = None
         if sources and any(boost != 1.0 for boost in boosts):
-            mask = _ref_attn_bias(boosts, edit.get("mask"), length, source_lengths, target.shape[1],
+            mask = _ref_attn_bias(boosts, edit.get("masks") or [None] * len(sources), length, source_lengths, target.shape[1],
                                   source_grids, image.device, image.dtype)
         return model.pe_embedder(ids), mask
 
@@ -500,7 +500,7 @@ def patch_model(model, negative, sources, edit, sampling):
     sources = [model.model.process_latent_in(source) for source in sources]
     negative_context = negative[0][0] if sampling.get("use_nag") else None
 
-    boosted = any(boost != 1.0 for boost in (edit.get("ref_boost", 1.0), edit.get("ref_boost_a", 1.0))) or edit.get("mask") is not None
+    boosted = any(boost != 1.0 for boost in (edit.get("ref_boost", 1.0), edit.get("ref_boost_a", 1.0))) or any(mask is not None for mask in edit.get("masks") or ())
 
     def wrapper(executor, x, timesteps, context, attention_mask=None, ref_latents=None, transformer_options=None, **kwargs):
         options = transformer_options or {}
@@ -523,7 +523,7 @@ class KreaEditPrepare(io.ComfyNode):
     @classmethod
     def define_schema(cls):
         return nodes_schema("KREA", "EDIT_PREPARE", "Edit Prepare", inputs=[Pipe.Input("pipe", optional=True), io.Image.Input("image"),
-                io.Image.Input("image_b", optional=True), io.Mask.Input("mask", optional=True, tooltip="Identity area of the last reference (for example face, hair and neck). The text encoder then sees only this area on grey, so clothes and room do not carry over; ref_boost applies to it alone."),
+                io.Image.Input("image_b", optional=True), io.Mask.Input("mask", optional=True, tooltip="Identity area of the first reference (for example face, hair and neck). The text encoder then sees only this area on grey, so clothes and room do not carry over; the reference weight applies to it alone."), io.Mask.Input("mask_b", optional=True, tooltip="The same for the second reference."),
                 io.Combo.Input("fit_mode", options=["fit", "crop"], default="fit", tooltip="How the reference is fitted to the format. fit keeps the whole photo, crop fills the frame."),
                 io.Combo.Input("position", options=["aligned", "beside", "bag"], default="aligned", tooltip="Where the main reference sits in the token grid. aligned is the trained position."),
                 io.Combo.Input("position_a", options=["aligned", "beside", "bag"], default="aligned", tooltip="Where the second reference sits. aligned is the trained position."),
@@ -531,7 +531,7 @@ class KreaEditPrepare(io.ComfyNode):
                 io.Float.Input("ref_boost_a", default=1.0, min=0.0, max=1000.0, tooltip="Attention weight of the second reference. Lower it when the second photo should only hint at the outfit or angle.")], outputs=[Pipe.Output("pipe")])
 
     @classmethod
-    def execute(cls, pipe=None, image=None, image_b=None, mask=None, fit_mode="fit", position="aligned", position_a="aligned", ref_boost=1.0, ref_boost_a=1.0):
+    def execute(cls, pipe=None, image=None, image_b=None, mask=None, mask_b=None, fit_mode="fit", position="aligned", position_a="aligned", ref_boost=1.0, ref_boost_a=1.0):
         pipe = ensure_pipe(pipe, family="krea2")
         if pipe["family"] != "krea2":
             raise ValueError("Krea Edit Prepare requires a krea2 pipe and an identity edit LoRA on the model.")
@@ -544,12 +544,17 @@ class KreaEditPrepare(io.ComfyNode):
                                             {}, (), fit_mode) for ref in references]
         settings = {"fit_mode": fit_mode, "position": position, "position_a": position_a,
                         "ref_boost": ref_boost, "ref_boost_a": ref_boost_a}
-        text_references = references
-        if mask is not None:
-            keep = F.interpolate(mask.reshape(-1, 1, *mask.shape[-2:])[:1].float(), size=references[-1].shape[1:3], mode="bilinear").movedim(1, -1).clamp(0, 1)
-            text_references = references[:-1] + [references[-1][..., :3] * keep + .5 * (1 - keep)]
-            mask = _fit_reference(mask.reshape(-1, *mask.shape[-2:], 1), fmt["height"] // 8, fmt["width"] // 8, fit_mode)[..., 0]
-        artifacts = {"krea_references": references, "krea_text_references": text_references, "krea_source_latents": source_latents, "krea_mask": mask}
+        masks = [mask, mask_b][:len(references)]
+        text_references = []
+        for reference, reference_mask in zip(references, masks):
+            if reference_mask is None:
+                text_references.append(reference)
+                continue
+            keep = F.interpolate(reference_mask.reshape(-1, 1, *reference_mask.shape[-2:])[:1].float(), size=reference.shape[1:3], mode="bilinear").movedim(1, -1).clamp(0, 1)
+            text_references.append(reference[..., :3] * keep + .5 * (1 - keep))
+        masks = [None if reference_mask is None else _fit_reference(reference_mask.reshape(-1, *reference_mask.shape[-2:], 1), fmt["height"] // 8, fmt["width"] // 8, fit_mode)[..., 0]
+                 for reference_mask in masks]
+        artifacts = {"krea_references": references, "krea_text_references": text_references, "krea_source_latents": source_latents, "krea_masks": masks}
         return io.NodeOutput(evolve(pipe, section="krea_edit", settings=settings, artifacts=artifacts,
                                     invalidate=("positive", "negative", "latent", "images")))
 

@@ -394,7 +394,7 @@ class PromptTests(unittest.TestCase):
         library = self.prompts._library("h3_actions")
         for label in ("Oral - blowjob, from the side", "Hands - handjob", "Solo - male, jerking off", "Position - doggy style"):
             text = library.brief(label, library.ANY_CAMERA, ("a woman", "a man", ""), "")
-            self.assertIn("one closed sac with a centre seam", text, label)
+            self.assertIn("loose rounded pouch of wrinkled skin", text, label)
         search = self.prompts._SCROTUM_AS_VULVA.search
         self.assertTrue(search("His scrotum has a slit down the middle like a vulva."))
         self.assertTrue(search("the balls parted into labia"))

@@ -530,10 +530,10 @@
           "slot_index": 1
         }
       ],
-      "title": "Subject Mask",
+      "title": "Subject Mask 1",
       "properties": {
         "Node name for S&R": "PROMPTFORGE_V2_SUBJECT_MASK",
-        "promptforge_role": "subject_mask",
+        "promptforge_role": "subject_mask_1",
         "promptforge_v2_widget_values": {
           "checkpoint": "<SELECT_SAM3_CHECKPOINT>",
           "subject": "face, hair and neck",
@@ -581,10 +581,10 @@
           "slot_index": 0
         }
       ],
-      "title": "Edit Mask",
+      "title": "Edit Mask 1",
       "properties": {
         "Node name for S&R": "PROMPTFORGE_V2_MASK_PREPARE",
-        "promptforge_role": "edit_mask",
+        "promptforge_role": "edit_mask_1",
         "promptforge_v2_widget_values": {
           "invert": false,
           "grow": 8,
@@ -635,6 +635,12 @@
           "name": "mask",
           "type": "MASK",
           "link": 16,
+          "shape": 7
+        },
+        {
+          "name": "mask_b",
+          "type": "MASK",
+          "link": null,
           "shape": 7
         }
       ],
@@ -713,7 +719,7 @@
         "Node name for S&R": "PROMPTFORGE_V2_WRITER_MODEL",
         "promptforge_role": "writer_model",
         "promptforge_v2_widget_values": {
-          "model": "[gguf] [LOCAL] [VISION] text_encoders/Huihui-Qwen3-VL-4B-Instruct-abliterated/Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0.gguf",
+          "model": "[gguf] [LOCAL Q4] [VISION] Qwen3.8-9B Heretic GGUF [9B, vision]",
           "quantization": "auto",
           "context_size": 0,
           "local_model_path": "",
@@ -721,7 +727,7 @@
         }
       },
       "widgets_values": [
-        "[gguf] [LOCAL] [VISION] text_encoders/Huihui-Qwen3-VL-4B-Instruct-abliterated/Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0.gguf",
+        "[gguf] [LOCAL Q4] [VISION] Qwen3.8-9B Heretic GGUF [9B, vision]",
         "auto",
         0,
         "",

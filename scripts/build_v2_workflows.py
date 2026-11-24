@@ -326,14 +326,20 @@ def image_graph(catalogue, name, family, task="t2i"):
                               {"image": (loaded[0], 1)})
             wires = {"image": (scale, 0), "image_b": (scale, 0)}
             mask_image = (scale, 0)
-        subject = graph.add("SUBJECT_MASK", "subject_mask", GROUPS[1],
-                            {"checkpoint": "<SELECT_SAM3_CHECKPOINT>", "subject": "face, hair and neck" if task == "edit" else "person"},
-                            {"image": mask_image})
-        mask = graph.add("MASK_PREPARE", "edit_mask", GROUPS[1], {"grow": 8, "feather": 4} if task == "edit" else None,
-                         connections={"mask": (subject, 1)}, chain=False)
-        if task in ("edit", "transfer"):
-            wires["mask"] = (mask, 0)
-        graph.add("KREA_EDIT_PREPARE", "edit_prepare", GROUPS[4], {"fit_mode": "fit", "ref_boost": 4.0} if task == "edit" else {"fit_mode": "fit"}, connections=wires)
+        # one identity mask per reference; transfer masks its single picture for both slots
+        mask_images = [(loaded[0], 1), (loaded[1], 1)] if task == "multi" else [mask_image]
+        masks = []
+        for index, image in enumerate(mask_images, start=1):
+            subject = graph.add("SUBJECT_MASK", f"subject_mask_{index}", GROUPS[1],
+                                {"checkpoint": "<SELECT_SAM3_CHECKPOINT>", "subject": "person" if task == "transfer" else "face, hair and neck"},
+                                {"image": image})
+            masks.append(graph.add("MASK_PREPARE", f"edit_mask_{index}", GROUPS[1], {"grow": 8, "feather": 4} if task != "transfer" else None,
+                                   connections={"mask": (subject, 1)}, chain=False))
+        wires["mask"] = (masks[0], 0)
+        if task in ("multi", "transfer"):
+            wires["mask_b"] = (masks[-1], 0)
+        boosts = {"edit": {"ref_boost": 4.0}, "multi": {"ref_boost": 2.0, "ref_boost_a": 2.0}}.get(task, {})
+        graph.add("KREA_EDIT_PREPARE", "edit_prepare", GROUPS[4], {"fit_mode": "fit", **boosts}, connections=wires)
     _, prompt = add_writer(graph)
     encode = graph.add("IMAGE_ENCODE", "encode", GROUPS[4], {"task": "edit" if loaded else "t2i"},
                        connections={"clip": clip_out, "vae": (model, 3), "model": model_out, "text": (prompt, 1),
@@ -348,7 +354,7 @@ def image_graph(catalogue, name, family, task="t2i"):
                         connections={"vae": (model, 3), "latent": (upscaled, 1)})
     if task == "transfer":
         composite = graph.add("IMAGE_COMPOSITE", "transfer_composite", GROUPS[5], connections={
-            "destination": (loaded[1], 1), "source": (decoded, 1), "mask": (mask, 0)}, chain=False)
+            "destination": (loaded[1], 1), "source": (decoded, 1), "mask": (masks[0], 0)}, chain=False)
         composited = graph.add("IMAGE_RESULT", "composite_result", GROUPS[5], connections={"images": (composite, 0)})
         return add_end(graph, images=(composited, 1))
     add_end(graph, images=(decoded, 1))

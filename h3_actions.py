@@ -57,7 +57,7 @@ def action_category(label):
 CAMERAS = {
     "POV (the viewer is B)": "STRICT POV of {B}: the camera IS {B}'s eyes, at eye height, tilted down along {B}'s own body. {B}'s chest, stomach and hips stay visible across the lower third of the frame, and {B}'s hands, forearms or thighs may enter it. {A} stays at arm's length with the whole torso and hips in frame, the contact visible, and {A}'s whole head and face fully inside the upper part of the frame, with headroom above the crown; never crop the head. {B}'s own genitals stay as they are. Never show {B}'s face (only in a mirror), never cut away from this angle. Keep it medium-wide, not a macro close-up. The viewpoint holder's belly and pubic mound stay low in the foreground and must not hide the join.",
     "POV (the viewer is A)": "STRICT POV of {A}: the camera IS {A}'s eyes, at eye height, tilted down along {A}'s own body. {A}'s chest, stomach and hips stay visible across the lower third of the frame, and {A}'s hands, forearms or thighs may enter it. {B} stays at arm's length with the whole torso and hips in frame, the contact visible, and {B}'s whole head and face fully inside the upper part of the frame, with headroom above the crown; never crop the head. {A}'s own genitals stay as they are. Never show {A}'s face (only in a mirror), never cut away from this angle. Keep it medium-wide, not a macro close-up. The viewpoint holder's belly and pubic mound stay low in the foreground and must not hide the join.",
-    "side view, full bodies": "A still camera at chest height, side-on to the people, framing both bodies fully with both faces visible.",
+    "side view, full bodies": "A still camera at chest height, side-on to the people, both bodies in frame.",
     "from behind": "The camera is behind the people, looking at the action from behind.",
     "side view, close on the hips": "A still camera at hip height, side-on to the people and close: the joined hips fill the lower half of the frame so the shaft is seen in profile going into the body, and both faces stay in the upper half.",
     "front view": "A still camera at chest height facing the person or people from the front, the whole body in frame, the face visible.",
@@ -72,8 +72,8 @@ CAMERAS = {
 }
 
 # the scrotum gets drawn with a slit or folds like a vulva when the clip never says what it is
-SCROTUM = "The scrotum is one closed sac with a centre seam and two rounded testicles inside; it has no slit, fold or opening, and a vulva exists only on a female body."
-MALE_ANCHOR = "Anatomy anchors: the base of the shaft leaves his pubic hair and the balls hang under it as two separate ovals, never a second opening. " + SCROTUM
+SCROTUM = "His scrotum is a loose rounded pouch of wrinkled skin hanging below the base of the shaft with two testicles inside; it swings back and forth under the shaft with every stroke."
+MALE_ANCHOR = "Anatomy anchors: the shaft grows out of his pubic hair at the base of his belly, thick and firm, and moves with his hips. " + SCROTUM
 CONTACT_SOLO = ("touching", "masturbat", "toy", "jerking", "female,", "male,")
 SOLO_CAMERAS = ("POV (the viewer is B)", "POV (the viewer is A)")
 NO_ACTION = "(none)"
@@ -224,10 +224,10 @@ def brief(label, camera, subjects, notes="", penetration="vaginal"):
         lines.append(MALE_ANCHOR)
     elif penetrative and "male" in genders:
         lines.append(SCROTUM)
-    lines.append(f"Recommended aspect ratio: {ratio} ({shape}). Frame every body and face fully inside it and keep that framing for the whole clip.")
+    lines.append(f"Recommended aspect ratio: {ratio} ({shape}). Keep the framing steady for the whole clip.")
     if penetrative:
         lines += ["His hips drive the shaft, they are one piece: the penis is of average length, in proportion to his body, and most of it stays inside her; the stroke is short and her body takes each push. The shaft keeps one fixed length and never floats or bends like a separate object. His scrotum hangs under the shaft against her body, never over her belly. The clip opens with the penis already inside her: there is no approach and no insertion.",
-            "Motion: one continuous short stroke at a steady rhythm in that same framing. The shaft never leaves the named hole: at the front of every stroke his pelvis presses against her vulva and almost no shaft shows, at the back at least two thirds of it is still inside and the glans stays inside the opening, then it slides forward again without a pause; the hips and the receiving body move together."]
+            "Motion: one continuous short stroke at a steady rhythm in that same framing. The shaft never leaves the named hole: on every pull-back about a third of the shaft shows outside her while the glans stays inside, and on every push his pelvis meets hers; the visible shaft slides out and in with the stroke and never stays still; the hips and the receiving body move together."]
     elif contact:
         lines.append("Motion beats: play the clip as three clear beats in that same framing, following this action's own motion at one steady rhythm; hands, mouths and bodies stay attached to their owners.")
     lines.append("Write 650-900 words in the detailed description, one continuous shot covering the whole clip beat by beat.")
@@ -240,15 +240,16 @@ def brief(label, camera, subjects, notes="", penetration="vaginal"):
         her = penetrative or any(word in text for word in ("cunnilingus", "69", "face sitting", "fingering", "scissor", "mutual"))
         for index, gender in enumerate(genders, start=1):
             if gender == "female":
-                anatomy.append(f"Subject {index} is female: {'vulva, vagina and clitoris, ' if her else ''}never a penis")
+                anatomy.append(f"Subject {index} is female{': vulva, vagina and clitoris' if her else ''}")
             elif gender == "male":
-                anatomy.append(f"Subject {index} is male: {'erect penis and balls, ' if his else ''}never a vulva")
+                anatomy.append(f"Subject {index} is male{': erect penis and balls' if his else ''}")
         if anatomy:
             lines.append("; ".join(anatomy) + ".")
         if "female" in genders and "male" in genders:
             woman = genders.index("female") + 1
             man = genders.index("male") + 1
-            lines.append(f"The penis is Subject {man}\'s and it goes into Subject {woman}; Subject {woman} never grows a penis and Subject {man} never gets a vagina." if penetrative else f"Subject {woman} never grows a penis and Subject {man} never gets a vagina.")
+            if penetrative:
+                lines.append(f"The penis is Subject {man}\'s and it goes into Subject {woman}.")
             lines.append(f"The penis base stays attached between Subject {man}\'s hips, so the shaft emerges from his body; it is never a separate object, never floats and is never pasted over the bodies.")
     if counts == 1:
         if subjects[1]:
@@ -257,9 +258,9 @@ def brief(label, camera, subjects, notes="", penetration="vaginal"):
             lines.append(subjects[2] if subjects[2].startswith("The other attached") else f"Attached reference only, not in the video: Subject 3 ({subjects[2]}).")
         lines.append("Subject 1 is the only body in the scene; only Subject 1's genitals are described. The extra reference pictures are anatomy examples, never a second body.")
         if genders[0] == "male":
-            lines.append("Subject 1 is male: use his penis and balls, never a vulva. If the reference picture shows a woman, describe her with a penis.")
+            lines.append("Subject 1 is male: use his penis and balls. If the reference picture shows a woman, describe her with a penis.")
         else:
-            lines.append("Subject 1 is female in the reference: use her vulva, labia, clitoris and vagina, never a penis.")
+            lines.append("Subject 1 is female in the reference: use her vulva, labia, clitoris and vagina.")
     elif counts == 2 and subjects[2]:
         if subjects[2].startswith("The other attached"):
             lines.append(subjects[2])

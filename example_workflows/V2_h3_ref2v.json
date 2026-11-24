@@ -553,7 +553,7 @@
         "Node name for S&R": "PROMPTFORGE_V2_WRITER_MODEL",
         "promptforge_role": "writer_model",
         "promptforge_v2_widget_values": {
-          "model": "[gguf] [LOCAL] [VISION] text_encoders/Huihui-Qwen3-VL-4B-Instruct-abliterated/Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0.gguf",
+          "model": "[gguf] [LOCAL Q4] [VISION] Qwen3.8-9B Heretic GGUF [9B, vision]",
           "quantization": "auto",
           "context_size": 0,
           "local_model_path": "",
@@ -561,7 +561,7 @@
         }
       },
       "widgets_values": [
-        "[gguf] [LOCAL] [VISION] text_encoders/Huihui-Qwen3-VL-4B-Instruct-abliterated/Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0.gguf",
+        "[gguf] [LOCAL Q4] [VISION] Qwen3.8-9B Heretic GGUF [9B, vision]",
         "auto",
         0,
         "",

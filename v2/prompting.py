@@ -953,7 +953,7 @@ class ImagePromptWriter(io.ComfyNode):
                 if cls.H3 and checks != "off":
                     issues.extend(_h3_issues(text, mode, context))
                     if _SCROTUM_AS_VULVA.search(text):
-                        issues.append("female anatomy written onto the man's scrotum: it is one closed sac with a centre seam")
+                        issues.append("female anatomy written onto the man's scrotum: write it as a loose rounded pouch hanging below the shaft")
                     if prompt.get("source") == "action" and _LEAVES_THE_BODY.search(text) and _library("h3_actions").penetration_modes(str(prompt.get("action", "")).split(": ", 1)[-1]):
                         issues.append("the shaft leaves the body during the stroke: keep it inside through the whole stroke")
                 records.append({"seed": attempt_seed, "text": text, "validation": issues, "request": request, "thinking": thought})

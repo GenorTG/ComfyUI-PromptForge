@@ -3,7 +3,9 @@ from pathlib import Path
 from threading import RLock
 
 import comfy.sd
+import comfy.utils
 import folder_paths
+import torch.nn.functional as F
 from comfy_api.latest import io
 from comfy_extras.nodes_sam3 import SAM3_Detect
 
@@ -11,6 +13,8 @@ from .contracts import schema as nodes_schema, PIPE, ensure_pipe, evolve
 
 Pipe = io.Custom(PIPE)
 _SAM3_ATTENTION_LOCK = RLock()
+# SAM3 upsamples every candidate mask to the picture size: a 16 MP photo needs 6 GB for that step
+SAM3_MAX_SIDE = 1536
 
 
 def sam3_checkpoints():
@@ -55,14 +59,19 @@ class SubjectMask(io.ComfyNode):
         # including the current Blackwell kernels. Use ComfyUI's PyTorch path.
         import comfy.ldm.sam3.detector as detector
         from comfy.ldm.modules.attention import attention_pytorch
+        height, width = image.shape[1:3]
+        scale = min(1.0, SAM3_MAX_SIDE / max(height, width))
+        small = image if scale == 1.0 else comfy.utils.common_upscale(image.movedim(-1, 1), round(width * scale), round(height * scale), "area", "disabled").movedim(1, -1)
         with _SAM3_ATTENTION_LOCK:
             previous = detector.optimized_attention
             detector.optimized_attention = attention_pytorch
             try:
-                mask = SAM3_Detect.execute(model, image, conditioning=conditioning, threshold=threshold,
+                mask = SAM3_Detect.execute(model, small, conditioning=conditioning, threshold=threshold,
                                           refine_iterations=refine_iterations, individual_masks=False).args[0]
             finally:
                 detector.optimized_attention = previous
+        if scale != 1.0:
+            mask = F.interpolate(mask.reshape(-1, 1, *mask.shape[-2:]).float(), size=(height, width), mode="bilinear")[:, 0]
         out = evolve(pipe, "mask", {"checkpoint": checkpoint, "subject": subject, "threshold": threshold,
                                        "refine_iterations": refine_iterations}, {"source_mask": mask})
         return io.NodeOutput(out, mask)

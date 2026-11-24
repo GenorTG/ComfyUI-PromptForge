@@ -150,7 +150,7 @@ class ImageFormat(io.ComfyNode):
         settings = {"aspect": aspect, "megapixels": megapixels, "orientation": orientation,
                     "width": width, "height": height, "batch_size": batch_size}
         result = evolve(pipe, section="format", settings=settings,
-                        invalidate=("positive", "negative", "latent", "images", "krea_source_latents", "krea_references", "krea_text_references", "krea_mask"))
+                        invalidate=("positive", "negative", "latent", "images", "krea_source_latents", "krea_references", "krea_text_references", "krea_masks"))
         model_obj = result["artifacts"].get("model")
         latent = None
         if model_obj is not None:
@@ -204,7 +204,7 @@ def refine(pipe, latent):
     latent = upscale_latent(pipe, latent, settings.get("method", "bicubic"), settings.get("scale", 1.41))
     if pipe["family"] == "krea2" and (pipe["artifacts"].get("krea_source_latents") or sampling.get("use_nag")):
         model = patch_model(model, pipe["artifacts"]["negative"], pipe["artifacts"].get("krea_source_latents", []),
-                            {**pipe["settings"].get("krea_edit", {}), "mask": pipe["artifacts"].get("krea_mask")}, sampling)
+                            {**pipe["settings"].get("krea_edit", {}), "masks": pipe["artifacts"].get("krea_masks")}, sampling)
     latent = nodes.common_ksampler(model, (sampling.get("seed", 0) + 1) % 2**64, sampling.get("refine_steps", 4),
                                    sampling.get("cfg", 1.0), sampling.get("sampler_name", "euler"),
                                    sampling.get("scheduler", "simple"), positive, negative, latent,
@@ -308,7 +308,7 @@ class ImageSample(io.ComfyNode):
         model = a["model"]
         if pipe["family"] == "krea2" and (a.get("krea_source_latents") or s.get("use_nag")):
             model = patch_model(model, a["negative"], a.get("krea_source_latents", []),
-                                {**pipe["settings"].get("krea_edit", {}), "mask": a.get("krea_mask")}, s)
+                                {**pipe["settings"].get("krea_edit", {}), "masks": a.get("krea_masks")}, s)
         latent = nodes.common_ksampler(model, s["seed"], s["steps"], s["cfg"], s["sampler_name"],
                                       s["scheduler"], a["positive"], a["negative"], a["latent"], denoise=s["denoise"])[0]
         return io.NodeOutput(evolve(pipe, artifacts={"latent": latent}, invalidate=("images",)), latent)

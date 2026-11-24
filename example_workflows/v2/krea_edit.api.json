@@ -148,7 +148,7 @@
       ]
     },
     "_meta": {
-      "title": "Subject Mask"
+      "title": "Subject Mask 1"
     }
   },
   "8": {
@@ -163,7 +163,7 @@
       "feather": 4
     },
     "_meta": {
-      "title": "Edit Mask"
+      "title": "Edit Mask 1"
     }
   },
   "9": {
@@ -194,7 +194,7 @@
   "10": {
     "class_type": "PROMPTFORGE_V2_WRITER_MODEL",
     "inputs": {
-      "model": "[gguf] [LOCAL] [VISION] text_encoders/Huihui-Qwen3-VL-4B-Instruct-abliterated/Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0.gguf",
+      "model": "[gguf] [LOCAL Q4] [VISION] Qwen3.8-9B Heretic GGUF [9B, vision]",
       "quantization": "auto",
       "context_size": 0,
       "local_model_path": "",

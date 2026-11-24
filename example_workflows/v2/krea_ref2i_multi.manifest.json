@@ -42,20 +42,22 @@
     "sampling_first": "5",
     "reference_1": "6",
     "reference_2": "7",
-    "subject_mask": "8",
-    "edit_mask": "9",
-    "edit_prepare": "10",
-    "writer_model": "11",
-    "prompt": "12",
-    "prompt_writer": "13",
-    "prompt_review": "14",
-    "encode": "15",
-    "sample_first": "16",
-    "latent_upscale": "17",
-    "decode": "18",
-    "save_image": "19",
-    "presets": "20",
-    "run_inspect": "21"
+    "subject_mask_1": "8",
+    "edit_mask_1": "9",
+    "subject_mask_2": "10",
+    "edit_mask_2": "11",
+    "edit_prepare": "12",
+    "writer_model": "13",
+    "prompt": "14",
+    "prompt_writer": "15",
+    "prompt_review": "16",
+    "encode": "17",
+    "sample_first": "18",
+    "latent_upscale": "19",
+    "decode": "20",
+    "save_image": "21",
+    "presets": "22",
+    "run_inspect": "23"
   },
   "placeholders": [
     {
@@ -90,7 +92,13 @@
     },
     {
       "node": "8",
-      "role": "subject_mask",
+      "role": "subject_mask_1",
+      "input": "checkpoint",
+      "value": "<SELECT_SAM3_CHECKPOINT>"
+    },
+    {
+      "node": "10",
+      "role": "subject_mask_2",
       "input": "checkpoint",
       "value": "<SELECT_SAM3_CHECKPOINT>"
     }
@@ -131,7 +139,12 @@
       "placeholder": "<INPUT_REFERENCE_2.png>"
     },
     {
-      "role": "subject_mask",
+      "role": "subject_mask_1",
+      "input": "checkpoint",
+      "placeholder": "<SELECT_SAM3_CHECKPOINT>"
+    },
+    {
+      "role": "subject_mask_2",
       "input": "checkpoint",
       "placeholder": "<SELECT_SAM3_CHECKPOINT>"
     }
@@ -146,13 +159,13 @@
     "PROMPTFORGE_V2_IMAGE_ENCODE": "24016358a66701c7256dcd6cce6e3858eb102d123186e9b08480f96a2c773e5a",
     "PROMPTFORGE_V2_IMAGE_FORMAT": "a9ef7dfede9a51d0284c9ebaaf2b2b4a985bb1ae43e3b1139c136b364531804d",
     "PROMPTFORGE_V2_IMAGE_LATENT_UPSCALE": "0ecb35bf945c290cbdb349ddc6c38a0acc5f550e6872dc47ad731bac40f7b02b",
-    "PROMPTFORGE_V2_IMAGE_MODEL": "e254fe852d553801f2cb5ffa1c06da541a8daa092dda1e250ee747957991c1de",
+    "PROMPTFORGE_V2_IMAGE_MODEL": "f9c09ea091b4d2c49ae6e9eb6a928dff59ddd998559084311d4b103823587989",
     "PROMPTFORGE_V2_IMAGE_PROMPT": "ed2caec73615fb10ab03ced1f16efcfc76498dd849cd444a141b4293c6eb395c",
     "PROMPTFORGE_V2_IMAGE_PROMPT_WRITER": "ae3a8b148c14cc8f83d7872ad5403b3245921c5ae9d0b1764e044b172385575d",
     "PROMPTFORGE_V2_IMAGE_SAMPLE": "c240a61dd76ff508869d8bf0bd32961bd6054769fcad20a2d82d9614a522139c",
     "PROMPTFORGE_V2_IMAGE_SAMPLING_SETTINGS": "92951425a669f1949ae1a84c15d2f6b2f6b4a7e309a4af8127a9bd322e2438aa",
     "PROMPTFORGE_V2_IMAGE_SAVE": "2c1128c6f086465062d6b22924b0b4bbf22aac634f807d38600f2e41762ce8f9",
-    "PROMPTFORGE_V2_KREA_EDIT_PREPARE": "aeff23313fbb74a4e70498479903989209dd5abd5e7d07d15a7fc08d01ebcffc",
+    "PROMPTFORGE_V2_KREA_EDIT_PREPARE": "a4aa889bea5f5809b9638398164b606f111f7468ad0879d524d73266858c53eb",
     "PROMPTFORGE_V2_LOAD_IMAGE": "477f9fb5771a0b7bd3c697bac1d52ac9ef51f626e317f547e91a72d822f6a4f3",
     "PROMPTFORGE_V2_LORA_STACK": "c86a879a8b4d75178908c8cb6c817240420484dd50dc29ba5560806ac0113875",
     "PROMPTFORGE_V2_MASK_PREPARE": "f581374d479b1a6730979103db4318ce472bed9edc9b69c2223c6e9f789c5a69",
@@ -161,6 +174,6 @@
     "PROMPTFORGE_V2_RUN_INSPECT": "dda1f256fd4e5fa2f14122a10b52bc5532c5fb1ecd24ca1e8fef147034e686d5",
     "PROMPTFORGE_V2_SINGLE_LORA": "3e5594a03838c4eab54bd02e71b94ae8b2c656e38ea40f720e6031b9a8bb1ab8",
     "PROMPTFORGE_V2_SUBJECT_MASK": "1ace5b2da4f67e06e7899bb82080156981fee4a672662979100f05ba4c508891",
-    "PROMPTFORGE_V2_WRITER_MODEL": "31a848da3b02e2c165d8572059fcc0d2b0415a4bdd2a7010f89a42bad65fdbef"
+    "PROMPTFORGE_V2_WRITER_MODEL": "2e6b2d5392692e8ec5ad86a1f95c6f450612e956641904e68de9c316c55a3c0b"
   }
 }

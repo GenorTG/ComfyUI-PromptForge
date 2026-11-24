@@ -156,7 +156,7 @@
         1
       ],
       "checkpoint": "<SELECT_SAM3_CHECKPOINT>",
-      "subject": "person",
+      "subject": "face, hair and neck",
       "threshold": 0.5,
       "refine_iterations": 2,
       "pipe": [
@@ -165,7 +165,7 @@
       ]
     },
     "_meta": {
-      "title": "Subject Mask"
+      "title": "Subject Mask 1"
     }
   },
   "9": {
@@ -176,14 +176,49 @@
         1
       ],
       "invert": false,
-      "grow": 0,
-      "feather": 0
+      "grow": 8,
+      "feather": 4
     },
     "_meta": {
-      "title": "Edit Mask"
+      "title": "Edit Mask 1"
     }
   },
   "10": {
+    "class_type": "PROMPTFORGE_V2_SUBJECT_MASK",
+    "inputs": {
+      "image": [
+        "7",
+        1
+      ],
+      "checkpoint": "<SELECT_SAM3_CHECKPOINT>",
+      "subject": "face, hair and neck",
+      "threshold": 0.5,
+      "refine_iterations": 2,
+      "pipe": [
+        "8",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Subject Mask 2"
+    }
+  },
+  "11": {
+    "class_type": "PROMPTFORGE_V2_MASK_PREPARE",
+    "inputs": {
+      "mask": [
+        "10",
+        1
+      ],
+      "invert": false,
+      "grow": 8,
+      "feather": 4
+    },
+    "_meta": {
+      "title": "Edit Mask 2"
+    }
+  },
+  "12": {
     "class_type": "PROMPTFORGE_V2_KREA_EDIT_PREPARE",
     "inputs": {
       "image": [
@@ -193,25 +228,33 @@
       "fit_mode": "fit",
       "position": "aligned",
       "position_a": "aligned",
-      "ref_boost": 1.0,
-      "ref_boost_a": 1.0,
+      "ref_boost": 2.0,
+      "ref_boost_a": 2.0,
       "pipe": [
-        "8",
+        "10",
         0
       ],
       "image_b": [
         "7",
         1
+      ],
+      "mask": [
+        "9",
+        0
+      ],
+      "mask_b": [
+        "11",
+        0
       ]
     },
     "_meta": {
       "title": "Edit Prepare"
     }
   },
-  "11": {
+  "13": {
     "class_type": "PROMPTFORGE_V2_WRITER_MODEL",
     "inputs": {
-      "model": "[gguf] [LOCAL] [VISION] text_encoders/Huihui-Qwen3-VL-4B-Instruct-abliterated/Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0.gguf",
+      "model": "[gguf] [LOCAL Q4] [VISION] Qwen3.8-9B Heretic GGUF [9B, vision]",
       "quantization": "auto",
       "context_size": 0,
       "local_model_path": "",
@@ -221,7 +264,7 @@
       "title": "Writer Model"
     }
   },
-  "12": {
+  "14": {
     "class_type": "PROMPTFORGE_V2_IMAGE_PROMPT",
     "inputs": {
       "source": "raw",
@@ -239,7 +282,7 @@
       "music": "N/A",
       "generation": "image",
       "pipe": [
-        "10",
+        "12",
         0
       ]
     },
@@ -247,7 +290,7 @@
       "title": "Prompt"
     }
   },
-  "13": {
+  "15": {
     "class_type": "PROMPTFORGE_V2_IMAGE_PROMPT_WRITER",
     "inputs": {
       "writer_preset": "auto",
@@ -263,15 +306,15 @@
       "checks": "strict",
       "retries": "1",
       "pipe": [
-        "12",
+        "14",
         0
       ],
       "writer_model": [
-        "11",
+        "13",
         0
       ],
       "text": [
-        "12",
+        "14",
         1
       ]
     },
@@ -279,15 +322,15 @@
       "title": "Prompt Writer"
     }
   },
-  "14": {
+  "16": {
     "class_type": "PROMPTFORGE_V2_PROMPT_INSPECT",
     "inputs": {
       "pipe": [
-        "13",
+        "15",
         0
       ],
       "text": [
-        "13",
+        "15",
         1
       ]
     },
@@ -295,7 +338,7 @@
       "title": "Prompt Review"
     }
   },
-  "15": {
+  "17": {
     "class_type": "PROMPTFORGE_V2_IMAGE_ENCODE",
     "inputs": {
       "task": "edit",
@@ -305,7 +348,7 @@
       "height": 1024,
       "batch_size": 1,
       "pipe": [
-        "14",
+        "16",
         0
       ],
       "model": [
@@ -313,7 +356,7 @@
         1
       ],
       "text": [
-        "12",
+        "14",
         1
       ],
       "clip": [
@@ -333,7 +376,7 @@
       "title": "Encode"
     }
   },
-  "16": {
+  "18": {
     "class_type": "PROMPTFORGE_V2_IMAGE_SAMPLE",
     "inputs": {
       "pipe_settings": true,
@@ -343,19 +386,19 @@
       "scheduler": "simple",
       "denoise": 1.0,
       "pipe": [
-        "15",
+        "17",
         0
       ],
       "positive": [
-        "15",
+        "17",
         1
       ],
       "negative": [
-        "15",
+        "17",
         2
       ],
       "latent": [
-        "15",
+        "17",
         3
       ],
       "model": [
@@ -367,18 +410,18 @@
       "title": "Sample First"
     }
   },
-  "17": {
+  "19": {
     "class_type": "PROMPTFORGE_V2_IMAGE_LATENT_UPSCALE",
     "inputs": {
       "method": "SesquiLSR Wan 2.1",
       "scale": 1.41,
       "enabled": false,
       "pipe": [
-        "16",
+        "18",
         0
       ],
       "latent": [
-        "16",
+        "18",
         1
       ]
     },
@@ -386,11 +429,11 @@
       "title": "Latent Upscale"
     }
   },
-  "18": {
+  "20": {
     "class_type": "PROMPTFORGE_V2_IMAGE_DECODE",
     "inputs": {
       "pipe": [
-        "17",
+        "19",
         0
       ],
       "vae": [
@@ -398,7 +441,7 @@
         3
       ],
       "latent": [
-        "17",
+        "19",
         1
       ]
     },
@@ -406,16 +449,16 @@
       "title": "Decode"
     }
   },
-  "19": {
+  "21": {
     "class_type": "PROMPTFORGE_V2_IMAGE_SAVE",
     "inputs": {
       "filename_prefix": "PromptForge/krea_ref2i_multi",
       "pipe": [
-        "18",
+        "20",
         0
       ],
       "images": [
-        "18",
+        "20",
         1
       ]
     },
@@ -423,14 +466,14 @@
       "title": "Save Image"
     }
   },
-  "20": {
+  "22": {
     "class_type": "PROMPTFORGE_V2_PRESETS",
     "inputs": {
       "preset_name": "",
       "presets": "{\"schema_version\":2,\"presets\":{}}",
       "include_text": false,
       "pipe": [
-        "19",
+        "21",
         0
       ]
     },
@@ -438,11 +481,11 @@
       "title": "Presets"
     }
   },
-  "21": {
+  "23": {
     "class_type": "PROMPTFORGE_V2_RUN_INSPECT",
     "inputs": {
       "pipe": [
-        "20",
+        "22",
         0
       ]
     },
