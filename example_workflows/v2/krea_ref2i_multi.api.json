@@ -226,8 +226,8 @@
         1
       ],
       "fit_mode": "fit",
-      "position": "aligned",
-      "position_a": "aligned",
+      "position": "bag",
+      "position_a": "bag",
       "ref_boost": 2.0,
       "ref_boost_a": 2.0,
       "pipe": [

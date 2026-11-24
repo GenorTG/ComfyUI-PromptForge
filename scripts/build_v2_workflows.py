@@ -338,7 +338,8 @@ def image_graph(catalogue, name, family, task="t2i"):
         wires["mask"] = (masks[0], 0)
         if task in ("multi", "transfer"):
             wires["mask_b"] = (masks[-1], 0)
-        boosts = {"edit": {"ref_boost": 4.0}, "multi": {"ref_boost": 2.0, "ref_boost_a": 2.0}}.get(task, {})
+        # two references laid over the picture force their own scene and arms into it; "bag" keeps them out of the layout (tested: clean room, both identities)
+        boosts = {"edit": {"ref_boost": 4.0}, "multi": {"position": "bag", "position_a": "bag", "ref_boost": 2.0, "ref_boost_a": 2.0}}.get(task, {})
         graph.add("KREA_EDIT_PREPARE", "edit_prepare", GROUPS[4], {"fit_mode": "fit", **boosts}, connections=wires)
     _, prompt = add_writer(graph)
     encode = graph.add("IMAGE_ENCODE", "encode", GROUPS[4], {"task": "edit" if loaded else "t2i"},

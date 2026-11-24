@@ -360,6 +360,25 @@
       "avail_match": ["Qwen3.8-9B", "heretic"]
     },
     {
+      "key": "gguf_qwen38_9b_distill_heretic",
+      "name": "Qwen3.8-9B Distill Uncensored Heretic GGUF (vision)",
+      "label": "Qwen3.8-9B Distill Heretic GGUF [9B, vision]",
+      "family": "Qwen3.8",
+      "repo_id": "mradermacher/Qwen3.8-9B-Distill-uncensored-heretic-GGUF",
+      "author": "mradermacher",
+      "params_b": 9,
+      "vl_capable": true,
+      "image_capable": true,
+      "base_dir": "LLM/GGUF",
+      "mmproj_file": "Qwen3.8-9B-Distill-uncensored-heretic.mmproj-Q8_0.gguf",
+      "quant_files": {
+        "q4": "Qwen3.8-9B-Distill-uncensored-heretic.Q4_K_M.gguf",
+        "q5": "Qwen3.8-9B-Distill-uncensored-heretic.Q5_K_M.gguf",
+        "q6": "Qwen3.8-9B-Distill-uncensored-heretic.Q6_K.gguf"
+      },
+      "avail_match": ["Distill-uncensored-heretic"]
+    },
+    {
       "key": "gguf_qwen35_4b_hauhau",
       "name": "Qwen3.5-4B Uncensored HauhauCS GGUF (vision)",
       "label": "Qwen3.5-4B Uncensored GGUF [4B, vision]",

@@ -527,8 +527,8 @@ class KreaEditPrepare(io.ComfyNode):
                 io.Combo.Input("fit_mode", options=["fit", "crop"], default="fit", tooltip="How the reference is fitted to the format. fit keeps the whole photo, crop fills the frame."),
                 io.Combo.Input("position", options=["aligned", "beside", "bag"], default="aligned", tooltip="Where the main reference sits in the token grid. aligned is the trained position."),
                 io.Combo.Input("position_a", options=["aligned", "beside", "bag"], default="aligned", tooltip="Where the second reference sits. aligned is the trained position."),
-                io.Float.Input("ref_boost", default=1.0, min=0.0, max=1000.0, tooltip="Attention weight of the main reference. 1 is neutral, higher copies it harder."),
-                io.Float.Input("ref_boost_a", default=1.0, min=0.0, max=1000.0, tooltip="Attention weight of the second reference. Lower it when the second photo should only hint at the outfit or angle.")], outputs=[Pipe.Output("pipe")])
+                io.Float.Input("ref_boost", default=1.0, min=0.0, max=1000.0, tooltip="Strength of the LAST reference (the second one when two are connected, the only one otherwise). With a mask it acts on the masked area only. 1 is neutral, 2 is a good start, higher copies it harder and above about 4 can hide the person."),
+                io.Float.Input("ref_boost_a", default=1.0, min=0.0, max=1000.0, tooltip="Strength of the FIRST reference when two are connected. With a mask it acts on the masked area only. 1 is neutral; lower it when that photo should only hint at the outfit or angle.")], outputs=[Pipe.Output("pipe")])
 
     @classmethod
     def execute(cls, pipe=None, image=None, image_b=None, mask=None, mask_b=None, fit_mode="fit", position="aligned", position_a="aligned", ref_boost=1.0, ref_boost_a=1.0):
