@@ -171,10 +171,10 @@ def cameras(label):
     if label.startswith("Hands"):
         return [CLOSE, POV_B, SIDE, FRONT]
     if "from behind" in label.lower() or "doggy" in label.lower() or "spooning" in label.lower():
-        return [SIDE, HIPS, CLOSE, BEHIND, POV_B]
+        return [SIDE, CLOSE, BEHIND, POV_B]
     if "on top" in label.lower() or "cowgirl" in label.lower():
-        return [SIDE, HIPS, LOW, POV_A, POV_B, FRONT]
-    return [SIDE, HIPS, CLOSE, POV_A, POV_B, FRONT]
+        return [SIDE, LOW, POV_A, POV_B, FRONT]
+    return [SIDE, CLOSE, POV_A, POV_B, FRONT]
 
 
 def default_camera(label):
@@ -226,8 +226,8 @@ def brief(label, camera, subjects, notes="", penetration="vaginal"):
         lines.append(SCROTUM)
     lines.append(f"Recommended aspect ratio: {ratio} ({shape}). Frame every body and face fully inside it and keep that framing for the whole clip.")
     if penetrative:
-        lines += ["His hips drive the shaft, they are one piece: part of the length always stays hidden in his pelvis, the stroke is short, and her body takes each push. The shaft keeps one fixed length and never floats or bends like a separate object.",
-            "Motion: one continuous short stroke at a steady rhythm in that same framing. The shaft never leaves the named hole: at the back of every stroke at least half of its length is still inside and the glans stays inside the opening, then it slides forward again without a pause; the hips and the receiving body move together."]
+        lines += ["His hips drive the shaft, they are one piece: the penis is of average length, in proportion to his body, and most of it stays inside her; the stroke is short and her body takes each push. The shaft keeps one fixed length and never floats or bends like a separate object. His scrotum hangs under the shaft against her body, never over her belly. The clip opens with the penis already inside her: there is no approach and no insertion.",
+            "Motion: one continuous short stroke at a steady rhythm in that same framing. The shaft never leaves the named hole: at the front of every stroke his pelvis presses against her vulva and almost no shaft shows, at the back at least two thirds of it is still inside and the glans stays inside the opening, then it slides forward again without a pause; the hips and the receiving body move together."]
     elif contact:
         lines.append("Motion beats: play the clip as three clear beats in that same framing, following this action's own motion at one steady rhythm; hands, mouths and bodies stay attached to their owners.")
     lines.append("Write 650-900 words in the detailed description, one continuous shot covering the whole clip beat by beat.")
