@@ -6,8 +6,7 @@ never blocks the request that starts it. Notes live in `promptforge/browser_meta
 user directory, keyed by root and relative path.
 
 Every route takes `root=output|input` plus a path relative to that root and refuses anything
-that resolves outside it. Templates are read from `example_workflows/manual`, one folder per
-model family.
+that resolves outside it. Templates are the blank workflows in `example_workflows/v2`.
 """
 import asyncio
 import hashlib
@@ -30,7 +29,15 @@ import node_helpers
 from .. import image_library
 
 ROOT_NAMES = {"output": folder_paths.get_output_directory, "input": folder_paths.get_input_directory}
-MANUAL = Path(__file__).resolve().parents[1] / "example_workflows" / "manual"
+TEMPLATES = Path(__file__).resolve().parents[1] / "example_workflows" / "v2"
+TEMPLATE_TITLES = {
+    "Anima": {"anima_t2i": "Text to Image"},
+    "Krea 2": {"krea_t2i": "Text to Image", "krea_edit": "Edit (single reference)", "krea_ref2i_multi": "Ref2I (multi reference)", "krea_transfer": "Transfer"},
+    "MOSS": {"moss_t2i": "Text to Image"},
+    "MiniMax H3": {"h3_t2v": "Text to Video", "h3_i2v": "Image to Video", "h3_l2v": "Last Frame to Video", "h3_fl2v": "First and Last Frame to Video",
+                   "h3_ref2v": "Reference to Video", "h3_continue_existing": "Continue Existing", "h3_multipart_t2v": "Multipart Text to Video",
+                   "h3_multipart_references": "Multipart References"},
+}
 KINDS = {"image": image_library.EXTENSIONS,
          "video": {".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v"},
          "audio": {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac", ".opus"}}
@@ -395,25 +402,17 @@ async def _analyse_status(request):
 
 @routes.get("/promptforge/browser/templates")
 async def _templates(request):
-    groups = {}
-    if MANUAL.is_dir():
-        for family in sorted(MANUAL.iterdir(), key=lambda item: item.name.lower()):
-            if not family.is_dir():
-                continue
-            items = []
-            for path in sorted(family.rglob("*.json")):
-                items.append({"name": path.relative_to(MANUAL).as_posix(), "title": path.stem.replace("_", " ")})
-            if items:
-                groups[family.name] = items
-    return web.json_response({"groups": [{"family": family, "templates": items} for family, items in groups.items()]})
+    groups = [{"family": family, "templates": [{"name": f"{stem}.json", "title": title} for stem, title in titles.items() if (TEMPLATES / f"{stem}.json").is_file()]}
+              for family, titles in TEMPLATE_TITLES.items()]
+    return web.json_response({"groups": [group for group in groups if group["templates"]]})
 
 
 @routes.get("/promptforge/browser/template")
 async def _template(request):
     name = request.query.get("name", "")
-    root = MANUAL.resolve()
+    root = TEMPLATES.resolve()
     path = (root / name).resolve()
-    if root not in path.parents or path.suffix.lower() != ".json" or not path.is_file():
+    if root not in path.parents or path.suffix.lower() != ".json" or path.name.endswith((".api.json", ".manifest.json")) or not path.is_file():
         return web.Response(status=404, text="Template not found.")
     return web.json_response(json.loads(path.read_text(encoding="utf-8")))
 
