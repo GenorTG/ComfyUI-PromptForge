@@ -1943,6 +1943,9 @@ except Exception:
 
 
 class PROMPTFORGE_PromptEnhancer:
+    # a dict keeps the loaded writer between calls (one writer run makes several); None unloads it after every call
+    resident = None
+
     CATEGORY = "🔮 PromptForge/Prompts"
     RETURN_TYPES = ("STRING", "STRING", "STRING")
     RETURN_NAMES = ("ENHANCED_PROMPT", "THINKING", "REQUEST")
@@ -2765,12 +2768,16 @@ class PROMPTFORGE_PromptEnhancer:
                 del model, processor, tokenizer
 
         import comfy.sd
-        if torch.cuda.is_available() and src_path.stat().st_size > torch.cuda.mem_get_info()[0] - 1.5 * 1024 ** 3:
+        clip_obj = None if self.resident is None else self.resident.get(src)
+        if clip_obj is None and torch.cuda.is_available() and src_path.stat().st_size > torch.cuda.mem_get_info()[0] - 1.5 * 1024 ** 3:
             print(f"[PromptForge] this writer file is {src_path.stat().st_size / 1024 ** 3:.1f} GB and only {torch.cuda.mem_get_info()[0] / 1024 ** 3:.1f} GB of VRAM is free: it streams from RAM and writes slowly. A smaller file (NVFP4, about 9 GB) or a GGUF is much faster.")
-        try:
-            clip_obj = comfy.sd.load_clip(ckpt_paths=[src])
-        except Exception as exc:
-            raise ValueError(f"[PromptForge] ComfyUI could not load this text encoder: {exc}") from exc
+        if clip_obj is None:
+            try:
+                clip_obj = comfy.sd.load_clip(ckpt_paths=[src])
+            except Exception as exc:
+                raise ValueError(f"[PromptForge] ComfyUI could not load this text encoder: {exc}") from exc
+            if self.resident is not None:
+                self.resident[src] = clip_obj
         try:
             enhanced = self._generate_with_clip(
                 system_prompt=system_prompt, user_prompt=user_prompt or full_prompt, mode=mode, max_tokens=max_tokens, temperature=temperature,
@@ -2779,13 +2786,19 @@ class PROMPTFORGE_PromptEnhancer:
                 clip=clip_obj, disable_thinking=disable_thinking, auto_retry=auto_retry, min_chars=min_chars,
             )
         finally:
-            # a finished writer left its 9 GB staged in system RAM, where a full swap makes the next load stream slowly
-            del clip_obj
-            gc.collect()
-            comfy.model_management.unload_all_models()
-            comfy.model_management.cleanup_models()
-            comfy.model_management.soft_empty_cache()
+            if self.resident is None:
+                del clip_obj
+                self.release()
         return enhanced
+
+    def release(self):
+        """Drop the writer: a finished writer left staged in system RAM makes the next load stream slowly."""
+        import comfy.model_management
+        self.resident = None if self.resident is None else {}
+        gc.collect()
+        comfy.model_management.unload_all_models()
+        comfy.model_management.cleanup_models()
+        comfy.model_management.soft_empty_cache()
 
     # ------------------------------------------------------------------ #
     # Native ComfyUI CLIP generation (connected clip or locally loaded clip)

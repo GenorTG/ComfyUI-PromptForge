@@ -454,10 +454,12 @@ def _write(encoder, service, config, system, text, images, video, seed, max_toke
            top_p=.9, top_k=40, repetition_penalty=1.05, presence_penalty=.4):
     source = config.get("source", "safetensors")
     model_name = config.get("gguf_model", "auto") if source == "GGUF" else config.get("safetensors_model", "auto")
-    # a resident video model starves the writer: the 9 GB encoder then streams from RAM at single-digit tok/s
-    comfy.model_management.unload_all_models()
-    gc.collect()
-    comfy.model_management.soft_empty_cache()
+    # a resident video model starves the writer: the 9 GB encoder then streams from RAM at single-digit tok/s;
+    # once the writer is loaded for this run, the next calls reuse it
+    if not encoder.resident:
+        comfy.model_management.unload_all_models()
+        gc.collect()
+        comfy.model_management.soft_empty_cache()
     result = encoder._generate(
         full_prompt=system + "\n\n" + text, system_prompt=system, user_prompt=text,
         mode="inputs" if images or video is not None else "text_only", engine="gguf" if source == "GGUF" else "text_encoder",
@@ -916,66 +918,70 @@ class ImagePromptWriter(io.ComfyNode):
                              "Where it says to keep something unchanged, keep it.\n\nRequest:\n" + user_text)
             if not explicit:
                 user_text += "\n\nName what each person wears, with colour and material." if pipe["family"] != "anima" else "\n\nTag every garment each person wears."
-        records = []
-        feedback = ""
-        for index in range(attempts):
-            attempt_seed = (int(seed) + index) % (2**32 - 1) or 1
-            system = system_base + ("\n\n" + feedback if feedback else "")
-            text, thought = _write(encoder, service, writer_model, system, user_text, images, video,
-                                   attempt_seed, min(max_tokens, 4096), temperature, thinking == "on",
-                                   top_p, top_k, repetition_penalty, presence_penalty)
-            text = _strip_context_echo(text)
-            if pipe["family"] == "anima":
-                text = _clean_tags(text)
-            elif not cls.H3:
-                text = _drop_negations(text)
-            if prompt.get("source") == "action" and not cls.H3:
-                text = _grounded(text, user_text, tags=pipe["family"] == "anima")
-            audio_text = ""
-            if cls.H3 and text.strip():
-                text = _H3_EMPTY_REF.sub("", _H3_AGE_ECHO.sub("", _h3_headings(text, mode)))
-                if prompt.get("source") == "action":
-                    text = _grounded_h3(text, user_text)
-                sound_user = ("Name the sound for this clip.\n\nClip:\n" + text + "\n\nBrief for reference:\n" + user_text)
-                audio_text, _ = _write(encoder, service, writer_model, sound_base, sound_user,
-                                       images, video, (attempt_seed + 7919) % (2**32 - 1), 1024, temperature)
-                audio_text = _h3_headings(_strip_context_echo(audio_text), mode)
-                if "overall_soundscape" in audio_text:
-                    # the dedicated sound call wins over the audio sections the picture call wrote on the side
-                    text = re.split(r"(?m)^(?:overall_soundscape|non_diegetic_music):", text)[0].rstrip() + "\n\n" + audio_text.strip()
-                text = _h3_repair_audio(_h3_repair_sections(text, pipe, mode), pipe, mode)
-            request = json.dumps({"system": system, "user": user_text, "context": context}, ensure_ascii=False)
-            issues = [] if checks == "off" else validation_issues(text, pipe["family"])
-            if cls.H3 and checks != "off":
-                issues.extend(_h3_issues(text, mode, context))
-                if _SCROTUM_AS_VULVA.search(text):
-                    issues.append("female anatomy written onto the man's scrotum: it is one closed sac with a centre seam")
-                if prompt.get("source") == "action" and _LEAVES_THE_BODY.search(text) and _library("h3_actions").penetration_modes(str(prompt.get("action", "")).split(": ", 1)[-1]):
-                    issues.append("the shaft leaves the body during the stroke: keep it inside through the whole stroke")
-            records.append({"seed": attempt_seed, "text": text, "validation": issues, "request": request, "thinking": thought})
-            if prompt.get("source") == "idea" and checks != "off":
-                # measured, never enforced: the report lists what the prompt left out so a weak template shows up instead of costing retries
-                dropped = _dropped_facts(prompt.get("text", ""), text)
-                if len(dropped) >= 3:
-                    records[-1]["dropped_facts"] = dropped
-            conflict = _shot_conflict(text) if pipe["family"] == "anima" and checks != "off" else ""
-            # negative wording alone is a blemish, not a failure: after the last retry the text is used and the warning stays in the report
-            last = index == attempts - 1
-            blemish = all(issue.startswith(("negative wording", "description too long", "the shaft leaves", "female anatomy written")) for issue in issues)
-            if (not issues or last and blemish) and (not conflict or last):
-                result = evolve(pipe, artifacts={"text": text, "writer": {
-                    "status": "valid", "validation": issues, "attempts": records, "max_tokens": max_tokens,
-                    "context": context, "preset": preset, **({"preset_mismatch": mismatch} if mismatch else {})}},
-                    invalidate=("positive", "negative"))
-                return io.NodeOutput(result, text)
-            feedback = ("Rewrite affirmatively: drop these words and replace each with what is visible in the scene: "
-                        "no, not, never, without, avoid. Failures: " + "; ".join(issues + [conflict] if conflict else issues))
-        dump = Path(folder_paths.get_temp_directory()) / "PromptForge_writer_failed.json"
-        dump.parent.mkdir(parents=True, exist_ok=True)
-        dump.write_text(json.dumps(records, ensure_ascii=False), encoding="utf-8")
-        reasons = "; ".join(f"attempt {index + 1}: {', '.join(record['validation'])}" for index, record in enumerate(records))
-        raise ValueError(f"Prompt writer exhausted {attempts} validation attempts, encoding blocked. {reasons}. "
-                         f"The attempts are in {dump}.")
+        encoder.resident = {}
+        try:
+            records = []
+            feedback = ""
+            for index in range(attempts):
+                attempt_seed = (int(seed) + index) % (2**32 - 1) or 1
+                system = system_base + ("\n\n" + feedback if feedback else "")
+                text, thought = _write(encoder, service, writer_model, system, user_text, images, video,
+                                       attempt_seed, min(max_tokens, 4096), temperature, thinking == "on",
+                                       top_p, top_k, repetition_penalty, presence_penalty)
+                text = _strip_context_echo(text)
+                if pipe["family"] == "anima":
+                    text = _clean_tags(text)
+                elif not cls.H3:
+                    text = _drop_negations(text)
+                if prompt.get("source") == "action" and not cls.H3:
+                    text = _grounded(text, user_text, tags=pipe["family"] == "anima")
+                audio_text = ""
+                if cls.H3 and text.strip():
+                    text = _H3_EMPTY_REF.sub("", _H3_AGE_ECHO.sub("", _h3_headings(text, mode)))
+                    if prompt.get("source") == "action":
+                        text = _grounded_h3(text, user_text)
+                    sound_user = ("Name the sound for this clip.\n\nClip:\n" + text + "\n\nBrief for reference:\n" + user_text)
+                    audio_text, _ = _write(encoder, service, writer_model, sound_base, sound_user,
+                                           images, video, (attempt_seed + 7919) % (2**32 - 1), 1024, temperature)
+                    audio_text = _h3_headings(_strip_context_echo(audio_text), mode)
+                    if "overall_soundscape" in audio_text:
+                        # the dedicated sound call wins over the audio sections the picture call wrote on the side
+                        text = re.split(r"(?m)^(?:overall_soundscape|non_diegetic_music):", text)[0].rstrip() + "\n\n" + audio_text.strip()
+                    text = _h3_repair_audio(_h3_repair_sections(text, pipe, mode), pipe, mode)
+                request = json.dumps({"system": system, "user": user_text, "context": context}, ensure_ascii=False)
+                issues = [] if checks == "off" else validation_issues(text, pipe["family"])
+                if cls.H3 and checks != "off":
+                    issues.extend(_h3_issues(text, mode, context))
+                    if _SCROTUM_AS_VULVA.search(text):
+                        issues.append("female anatomy written onto the man's scrotum: it is one closed sac with a centre seam")
+                    if prompt.get("source") == "action" and _LEAVES_THE_BODY.search(text) and _library("h3_actions").penetration_modes(str(prompt.get("action", "")).split(": ", 1)[-1]):
+                        issues.append("the shaft leaves the body during the stroke: keep it inside through the whole stroke")
+                records.append({"seed": attempt_seed, "text": text, "validation": issues, "request": request, "thinking": thought})
+                if prompt.get("source") == "idea" and checks != "off":
+                    # measured, never enforced: the report lists what the prompt left out so a weak template shows up instead of costing retries
+                    dropped = _dropped_facts(prompt.get("text", ""), text)
+                    if len(dropped) >= 3:
+                        records[-1]["dropped_facts"] = dropped
+                conflict = _shot_conflict(text) if pipe["family"] == "anima" and checks != "off" else ""
+                # negative wording alone is a blemish, not a failure: after the last retry the text is used and the warning stays in the report
+                last = index == attempts - 1
+                blemish = all(issue.startswith(("negative wording", "description too long", "the shaft leaves", "female anatomy written")) for issue in issues)
+                if (not issues or last and blemish) and (not conflict or last):
+                    result = evolve(pipe, artifacts={"text": text, "writer": {
+                        "status": "valid", "validation": issues, "attempts": records, "max_tokens": max_tokens,
+                        "context": context, "preset": preset, **({"preset_mismatch": mismatch} if mismatch else {})}},
+                        invalidate=("positive", "negative"))
+                    return io.NodeOutput(result, text)
+                feedback = ("Rewrite affirmatively: drop these words and replace each with what is visible in the scene: "
+                            "no, not, never, without, avoid. Failures: " + "; ".join(issues + [conflict] if conflict else issues))
+            dump = Path(folder_paths.get_temp_directory()) / "PromptForge_writer_failed.json"
+            dump.parent.mkdir(parents=True, exist_ok=True)
+            dump.write_text(json.dumps(records, ensure_ascii=False), encoding="utf-8")
+            reasons = "; ".join(f"attempt {index + 1}: {', '.join(record['validation'])}" for index, record in enumerate(records))
+            raise ValueError(f"Prompt writer exhausted {attempts} validation attempts, encoding blocked. {reasons}. "
+                             f"The attempts are in {dump}.")
+        finally:
+            encoder.release()
 
 
 class H3PromptWriter(ImagePromptWriter):
