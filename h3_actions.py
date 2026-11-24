@@ -59,6 +59,7 @@ CAMERAS = {
     "POV (the viewer is A)": "STRICT POV of {A}: the camera IS {A}'s eyes, at eye height, tilted down along {A}'s own body. {A}'s chest, stomach and hips stay visible across the lower third of the frame, and {A}'s hands, forearms or thighs may enter it. {B} stays at arm's length with the whole torso and hips in frame, the contact visible, and {B}'s whole head and face fully inside the upper part of the frame, with headroom above the crown; never crop the head. {A}'s own genitals stay as they are. Never show {A}'s face (only in a mirror), never cut away from this angle. Keep it medium-wide, not a macro close-up. The viewpoint holder's belly and pubic mound stay low in the foreground and must not hide the join.",
     "side view, full bodies": "A still camera at chest height, side-on to the people, framing both bodies fully with both faces visible.",
     "from behind": "The camera is behind the people, looking at the action from behind.",
+    "side view, close on the hips": "A still camera at hip height, side-on to the people and close: the joined hips fill the lower half of the frame so the shaft is seen in profile going into the body, and both faces stay in the upper half.",
     "front view": "A still camera at chest height facing the person or people from the front, the whole body in frame, the face visible.",
     "close-up on the action": "A close-up on the action and the bodies' contact, with faces visible when the camera moves up.",
     "wide shot": "A wide shot of the whole room and both bodies.",
@@ -150,6 +151,7 @@ POV_B = "POV (the viewer is B)"
 POV_A = "POV (the viewer is A)"
 CLOSE = "close-up on the action"
 SIDE = "side view, full bodies"
+HIPS = "side view, close on the hips"
 FRONT = "front view"
 LOW = "low angle, looking up"
 HIGH = "high angle, looking down"
@@ -169,10 +171,10 @@ def cameras(label):
     if label.startswith("Hands"):
         return [CLOSE, POV_B, SIDE, FRONT]
     if "from behind" in label.lower() or "doggy" in label.lower() or "spooning" in label.lower():
-        return [SIDE, CLOSE, BEHIND, POV_B]
+        return [SIDE, HIPS, CLOSE, BEHIND, POV_B]
     if "on top" in label.lower() or "cowgirl" in label.lower():
-        return [SIDE, LOW, POV_A, POV_B, FRONT]
-    return [SIDE, CLOSE, POV_A, POV_B, FRONT]
+        return [SIDE, HIPS, LOW, POV_A, POV_B, FRONT]
+    return [SIDE, HIPS, CLOSE, POV_A, POV_B, FRONT]
 
 
 def default_camera(label):
