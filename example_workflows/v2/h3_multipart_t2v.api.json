@@ -176,7 +176,8 @@
       "text": [
         "8",
         1
-      ]
+      ],
+      "length_words": 0
     },
     "_meta": {
       "title": "Prompt Writer"
@@ -297,7 +298,8 @@
       "pipe": [
         "15",
         0
-      ]
+      ],
+      "decode_with": "decode vae"
     },
     "_meta": {
       "title": "First Pass Preview"

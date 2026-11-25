@@ -151,7 +151,7 @@ Takes the `MODEL` bundle and writes the prompt. Only generation inputs live here
 - **Video duration**: `video_seconds` sets the exact clip length; MiniMax H3 presets use it for shot budget, timestamps and the frame alignment line.
 - **Headless / API**: use `PromptForge_H3_AllInOne_Modes_v5.api.json`. It is already in `/prompt` format; the regular workflow file stores the image picker as an extra widget, so homemade order-based converters read the filename as the description and send no picture.
 - **NSFW audio**: the H3 presets make `overall_soundscape` name room tone, skin impact, wet penetration sounds and breathy voices in that order, and put contact sounds into the action beats. Dialogue is breathy and pauses for breath.
-- **Output length**: each family gets an automatic output cap — Krea 220 words, Krea edit 220, MOSS 320, MOSS edit 80, Qwen 380, Qwen edit 160, Anima 150 tags, H3 750-900 depending on clip length. The cap is written into the request and sets `max_tokens` to that family's ceiling, so the writer wraps up instead of running to another model's length. `length_words` overrides the cap; `0` keeps the automatic value.
+- **Output length**: each family gets an automatic output cap — Krea 460 words, Krea edit 440, MOSS 580, MOSS edit 240, Qwen 440, Qwen edit 240, Anima 200 tags, H3 750-900 depending on clip length. The cap is written into the request and sets `max_tokens` to that family's ceiling, so the writer wraps up instead of running to another model's length. `length_words` overrides the cap; `0` keeps the automatic value.
 - **Age**: the user's age descriptor or number is used exactly as written and never overwritten. Without one, no number is required and no age number is inferred; 18 is not the default.
 - **Sampling**: seed, max_tokens (a requested value is raised to a safe budget: 1600 for H3 actions, 1200 for H3 ideas, 900 for Anima tags, 700 for image prompts, 220 for refine/technical) , temperature 0.7, top_p 0.8, top_k 20, num_beams, repetition_penalty 1.0, presence_penalty 1.0 (Qwen serving uses 1.5; 0.5-1.0 is safer on long structured prompts, 0 turns it off).
 - **Auto-retry** (`auto_retry` toggle on the Prompt Enhancer, on by default; off keeps the first output): rejects empty, too-short, degenerate/repetitive, leaked-reasoning ("Okay, the user wants…"), refusal or broken-contract output and retries up to two more times with new seeds; if every try is a loop, the longest one is returned with repeated sentences removed. Status lines name the reason (too short, repetitive, reasoning leak, refusal, negative wording). Outputs under 400 chars (40 for refine/technical presets, 400 for the Anima tag preset, 2 characters per word of the applied cap) count as too short.
@@ -387,12 +387,12 @@ Output length is capped per family, because a good Krea prompt is not as long as
 
 | Preset | Cap |
 |---|---|
-| Krea 2 T2I / Edit | 220 words |
-| MOSS Image T2I | 320 words |
-| MOSS Image Edit | 80 words |
-| Qwen Image T2I | 380 words |
-| Qwen Image Edit | 160 words |
-| Anima Tags | 150 tags |
+| Krea 2 T2I / Edit | 460 / 440 words |
+| MOSS Image T2I | 580 words |
+| MOSS Image Edit | 240 words |
+| Qwen Image T2I | 440 words |
+| Qwen Image Edit | 240 words |
+| Anima Tags | 200 tags |
 | MiniMax H3 (all modes) | 750 words up to 10 s, 900 above |
 | Enhance / generic styles | 220 / 600-700 words |
 | ACE-Step 1.5 | no word cap |

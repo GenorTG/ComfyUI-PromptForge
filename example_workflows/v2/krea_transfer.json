@@ -737,7 +737,7 @@
       ],
       "size": [
         356,
-        230
+        282
       ],
       "flags": {},
       "order": 10,
@@ -1024,7 +1024,8 @@
           "presence_penalty": 0.4,
           "thinking": "off",
           "checks": "strict",
-          "retries": "1"
+          "retries": "1",
+          "length_words": 0
         }
       },
       "widgets_values": [
@@ -1040,7 +1041,8 @@
         0.4,
         "off",
         "strict",
-        "1"
+        "1",
+        0
       ],
       "color": "#4a7a35",
       "bgcolor": "#2c4421"
@@ -1104,7 +1106,7 @@
       "type": "PROMPTFORGE_V2_IMAGE_ENCODE",
       "pos": [
         44,
-        2066
+        2118
       ],
       "size": [
         322,
@@ -1213,8 +1215,8 @@
       "id": 17,
       "type": "PROMPTFORGE_V2_IMAGE_SAMPLE",
       "pos": [
-        44,
-        2416
+        440,
+        1780
       ],
       "size": [
         560,
@@ -2150,7 +2152,7 @@
       "bounding": [
         3522,
         0,
-        952,
+        424,
         800
       ],
       "color": "#6b5527",
@@ -2162,8 +2164,8 @@
       "bounding": [
         28,
         1704,
-        996,
-        1376
+        988,
+        740
       ],
       "color": "#6b2f2f",
       "font_size": 24,
@@ -2174,7 +2176,7 @@
       "bounding": [
         1062,
         1704,
-        1912,
+        404,
         636
       ],
       "color": "#5a2f6b",

@@ -271,7 +271,7 @@
       "id": 4,
       "type": "PROMPTFORGE_V2_IMAGE_FORMAT",
       "pos": [
-        2858,
+        3267,
         76
       ],
       "size": [
@@ -345,7 +345,7 @@
       "id": 5,
       "type": "PROMPTFORGE_V2_IMAGE_SAMPLING_SETTINGS",
       "pos": [
-        2858,
+        3267,
         394
       ],
       "size": [
@@ -489,8 +489,8 @@
       "id": 7,
       "type": "PROMPTFORGE_V2_SUBJECT_MASK",
       "pos": [
-        1078,
-        1008
+        1758,
+        76
       ],
       "size": [
         369,
@@ -554,8 +554,8 @@
       "id": 8,
       "type": "PROMPTFORGE_V2_MASK_PREPARE",
       "pos": [
-        1078,
-        1230
+        1758,
+        298
       ],
       "size": [
         360,
@@ -608,7 +608,7 @@
       ],
       "size": [
         356,
-        230
+        282
       ],
       "flags": {},
       "order": 8,
@@ -744,7 +744,7 @@
       "id": 11,
       "type": "PROMPTFORGE_V2_IMAGE_PROMPT",
       "pos": [
-        1758,
+        2167,
         76
       ],
       "size": [
@@ -831,7 +831,7 @@
       "id": 12,
       "type": "PROMPTFORGE_V2_IMAGE_PROMPT_WRITER",
       "pos": [
-        2348,
+        2757,
         76
       ],
       "size": [
@@ -895,7 +895,8 @@
           "presence_penalty": 0.4,
           "thinking": "off",
           "checks": "strict",
-          "retries": "1"
+          "retries": "1",
+          "length_words": 0
         }
       },
       "widgets_values": [
@@ -911,7 +912,8 @@
         0.4,
         "off",
         "strict",
-        "1"
+        "1",
+        0
       ],
       "color": "#4a7a35",
       "bgcolor": "#2c4421"
@@ -920,7 +922,7 @@
       "id": 13,
       "type": "PROMPTFORGE_V2_PROMPT_INSPECT",
       "pos": [
-        2348,
+        2757,
         638
       ],
       "size": [
@@ -975,7 +977,7 @@
       "type": "PROMPTFORGE_V2_IMAGE_ENCODE",
       "pos": [
         44,
-        1982
+        2034
       ],
       "size": [
         322,
@@ -1084,8 +1086,8 @@
       "id": 15,
       "type": "PROMPTFORGE_V2_IMAGE_SAMPLE",
       "pos": [
-        44,
-        2332
+        440,
+        1696
       ],
       "size": [
         560,
@@ -1304,7 +1306,7 @@
       "id": 18,
       "type": "PROMPTFORGE_V2_IMAGE_SAVE",
       "pos": [
-        2858,
+        3267,
         1696
       ],
       "size": [
@@ -1362,7 +1364,7 @@
       "id": 19,
       "type": "PROMPTFORGE_V2_PRESETS",
       "pos": [
-        2858,
+        3267,
         2248
       ],
       "size": [
@@ -1412,7 +1414,7 @@
       "id": 20,
       "type": "PROMPTFORGE_V2_RUN_INSPECT",
       "pos": [
-        3338,
+        3747,
         1696
       ],
       "size": [
@@ -1811,8 +1813,8 @@
       "bounding": [
         1062,
         0,
-        1232,
-        1376
+        1641,
+        976
       ],
       "color": "#27564f",
       "font_size": 24,
@@ -1821,7 +1823,7 @@
     {
       "title": "03 Prompt & Review",
       "bounding": [
-        2332,
+        2741,
         0,
         472,
         1180
@@ -1833,9 +1835,9 @@
     {
       "title": "04 Format & Sampling",
       "bounding": [
-        2842,
+        3251,
         0,
-        952,
+        424,
         800
       ],
       "color": "#6b5527",
@@ -1847,8 +1849,8 @@
       "bounding": [
         28,
         1620,
-        996,
-        1376
+        988,
+        740
       ],
       "color": "#6b2f2f",
       "font_size": 24,
@@ -1859,7 +1861,7 @@
       "bounding": [
         1062,
         1620,
-        1232,
+        404,
         380
       ],
       "color": "#5a2f6b",
@@ -1869,7 +1871,7 @@
     {
       "title": "09 Inspect & Save",
       "bounding": [
-        2842,
+        3251,
         1620,
         952,
         1048

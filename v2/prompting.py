@@ -613,6 +613,24 @@ def _h3_repair_audio(text, pipe, mode):
     return text
 
 
+def _shot_budget(seconds):
+    """How many shots fit the clip; the same steps as the H3 templates."""
+    return 1 if seconds <= 5.5 else 2 if seconds <= 9.5 else 3 if seconds <= 13.5 else 5
+
+
+def _clip_length_line(seconds):
+    """A small writer overlooks a length stated only in the system prompt, so the request ends with it."""
+    shots = _shot_budget(seconds)
+    timing = "Write one continuous shot with no timestamp." if shots == 1 else \
+        f"Use at most {shots} shots; every later shot starts before {seconds - 1:.1f} seconds."
+    return f"The clip is exactly {seconds:.2f} seconds long. {timing} Every action, line of dialogue and camera move ends inside {seconds:.2f} seconds."
+
+
+def _late_shots(text, seconds):
+    """Shot start times at or after the end of the clip."""
+    return [start for start in (int(minutes) * 60 + float(rest) for minutes, rest in re.findall(r"\[Shot \d+\]\s*At (\d{1,2}):(\d{2}(?:\.\d+)?)", text)) if start >= seconds]
+
+
 def _h3_issues(text, mode, context):
     sections = _services()._MINIMAX_SECTIONS[mode]
     positions = []
@@ -628,13 +646,13 @@ def _h3_issues(text, mode, context):
     for label, count in (("Picture", context["picture_count"]), ("Video", context["video_count"]), ("Audio", len(context["audio"]))):
         if any(int(number) < 1 or int(number) > count for number in re.findall(rf"<{label}\s+(\d+)>", text)):
             issues.append(f"unknown {label} reference label")
-    body = re.search(r"(?ms)^(?:integrated_multimodal_description|detailed_description):\s*(.*?)(?=^[a-z_]+:\s*$|\Z)", text)
-    words = len(body.group(1).split()) if body else 0
-    if words > 1500:
-        issues.append(f"description too long ({words} words): the brief asks for 650-900")
+    seconds = float(context.get("duration") or 5)
+    if _late_shots(text, seconds):
+        issues.append(f"a shot starts after the {seconds:.2f} second clip has ended")
     return issues
 
 
+UNCAPPED_TOKENS = 8192
 _REFERENCE_LABEL = {"image": "Picture", "video": "Video", "audio": "Audio"}
 
 
@@ -784,10 +802,30 @@ def _drop_unused_acts(text, request):
     return "\n".join(keep)
 
 
-def _system_text(service, preset, context, style_prefix="", sections=None, negative="", explicit=True, male=True, sized=True, brief=False, idea="", request=None):
+# every word or tag count a template states; an uncapped call takes them out, a capped call states the user's number instead
+_LENGTH_RULES = (
+    (r"(?m)^One(?: short| English)? paragraph, \d+-\d+ words", "One paragraph, as long as the scene needs"),
+    (r" Total integrated_multimodal_description \d+-\d+ words[^.\n]*\.", ""),
+    (r"integrated_multimodal_description must be \d+-\d+ words[^.\n]*\. ", ""),
+    (r" Total detailed_description \d+-\d+ words; never compress\.", " Never compress."),
+    (r"(?m)^Main body, \d+-\d+ words for generation tasks", "Main body"),
+    (r"(?m)^- Short idea: add \d+-\d+ tags;[^.\n]*\.", "- Add as many tags as the scene supports."),
+    (r"(?m)^- Add \d+-\d+ environment tags, \d+-\d+ light tags, \d+-\d+ style tags", "- Add environment, light and style tags"),
+)
+
+
+def _without_length_rules(text, length=0):
+    for pattern, replacement in _LENGTH_RULES:
+        if length:
+            replacement = replacement.replace("as long as the scene needs", f"at most {length} words")
+        text = re.sub(pattern, replacement, text)
+    return text
+
+
+def _system_text(service, preset, context, style_prefix="", sections=None, negative="", explicit=True, male=True, sized=True, brief=False, idea="", request=None, length=0):
     """The writer's system prompt: the family template, then only the facts of this request."""
     seconds = float(context.get("duration") or 5)
-    text = service.PROMPTFORGE_PRESETS[preset]["text"].replace("{video_seconds}", f"{seconds:.2f}")
+    text = _without_length_rules(service.PROMPTFORGE_PRESETS[preset]["text"].replace("{video_seconds}", f"{seconds:.2f}"), length)
     # the Order list asks for "two or three props": a small writer invents them (an apple, a pillow, a newspaper)
     text = _fit_to_idea(text, idea)
     if request is not None:
@@ -812,11 +850,10 @@ def _system_text(service, preset, context, style_prefix="", sections=None, negat
     if not sized:
         text = _SIZE_SECTION.sub("", text)
     parts = [text]
-    # no model here truncates its text (the encoders and the image models take any length), so length is a guide: the facts decide it
-    cap = service._output_cap(preset, seconds)
-    if cap and not sections:
-        parts.append(f"# Output length\nA typical prompt for this model runs about {cap} {'tags' if 'tags' in preset.lower() else 'words'}. "
-                     "That is a guide, not a limit: write as much as the request needs, and never drop, merge or soften a fact to stay short.")
+    if not sections:
+        unit = "tags" if "tags" in preset.lower() else "words"
+        parts.append(f"# Output length\nAt most {length} {unit}, set by the user. Spend them on the stated facts first, and never drop, merge or soften one." if length else
+                     "# Output length\nThere is no length limit: describe everything the scene needs in full, and never drop, merge or soften a fact.")
     if context.get("width") and context.get("height"):
         parts.append(f"# Target frame\nThe picture is {context['orientation']}: compose the scene to fit it. Never write the frame size.")
     if context["picture_count"] or context["video_count"] or context["audio"]:
@@ -842,7 +879,8 @@ def _system_text(service, preset, context, style_prefix="", sections=None, negat
     if idea.strip():
         parts.append("# Priority\nEvery fact the request states appears in the prompt: each person and how many, the place, body state, expression, posture and each detail it names. "
                      "Nudity is stated in plain words: when the request says naked, nude, topless or bare, the prompt says so and names the bare skin; clothing is never invented, and a photo's clothes are replaced. "
-                     "The rules above for size, camera and anatomy shape how those facts are written; they never replace one. When words run short, shorten the rule-driven detail, never the request.")
+                     "The rules above for size, camera and anatomy shape how those facts are written; they never replace one."
+                     + (" When words run short, shorten the rule-driven detail, never the request." if length else ""))
     if explicit and context["family"] != "minimax_h3":
         parts.append("Describe only the anatomy the pose and camera show: a part the pose hides or turns away from the lens is left out, and nothing is shown twice.")
     parts.append("The lists and examples in this template show the format: write only what this request needs, never a whole list.")
@@ -861,7 +899,7 @@ class ImagePromptWriter(io.ComfyNode):
                            tooltip="Template for this writer call. Auto follows the pipe family and its references; a pick is used for this call only and leaves the pipe settings alone."),
                     io.Int.Input("seed", default=1, min=0, max=2**32-1),
                     io.Int.Input("max_tokens", default=4096, min=128, max=32768),
-                                        io.String.Input("text", optional=True, force_input=True, tooltip="Prompt text from a Prompt or Prompt Library node when no pipe is used."),
+                    io.String.Input("text", optional=True, force_input=True, tooltip="Prompt text from a Prompt or Prompt Library node when no pipe is used."),
                     io.String.Input("style_prefix", default="", tooltip="Tags or words put in front of every written prompt. Empty uses the family default (Anima gets its anime quality tags)."),
                     io.Float.Input("temperature", default=.55, min=0, max=2),
                     io.Float.Input("top_p", default=.9, min=0, max=1, step=.01),
@@ -873,7 +911,9 @@ class ImagePromptWriter(io.ComfyNode):
                     io.Combo.Input("checks", options=["strict", "off"], default="strict",
                            tooltip="Strict runs the prompt lint and the H3 section syntax. Off keeps whatever came back."),
                     io.Combo.Input("retries", options=["off", "1", "2", "3"], default="1",
-                           tooltip="Extra tries when the written prompt fails the checks. The first try that passes is kept, no further copy is written.")],
+                           tooltip="Extra tries when the written prompt fails the checks. The first try that passes is kept, no further copy is written."),
+                    io.Int.Input("length_words", default=0, min=0, max=4000, step=20, optional=True, display_mode=io.NumberDisplay.slider,
+                                 tooltip="Longest prompt in words (tags for Anima). 0 = uncapped: no word ranges are given to the writer and it may use max_tokens or more.")],
             outputs=[Pipe.Output("pipe"), io.String.Output("text")])
 
     @classmethod
@@ -882,7 +922,7 @@ class ImagePromptWriter(io.ComfyNode):
 
     @classmethod
     def execute(cls, pipe=None, writer_model=None, writer_preset="auto", seed=1, max_tokens=4096, temperature=.55, top_p=.9, top_k=40, repetition_penalty=1.05, presence_penalty=.4, retries="1", checks="strict", thinking="off",
-                style_prefix="", text=None):
+                style_prefix="", text=None, length_words=0):
         pipe = ensure_pipe(pipe, family="minimax_h3" if cls.H3 else "image")
         if text and not _prompt(pipe).get("text"):
             pipe = _store_prompt(pipe, "raw", text, "")
@@ -921,13 +961,15 @@ class ImagePromptWriter(io.ComfyNode):
         negative = (prompt.get("negative") or "").strip()
         explicit, male = _is_explicit(prompt), _male_present(prompt)
         sized = bool(_SIZE_WORDS.search(prompt.get("text", "")))
-        system_base = _system_text(service, preset, context, style_prefix, picture_sections if cls.H3 else None, negative, explicit, male, sized,
+        reply_tokens = max_tokens if length_words else max(max_tokens, UNCAPPED_TOKENS)
+        system_base = _system_text(service, preset, context, style_prefix, picture_sections if cls.H3 else None, negative, explicit, male, sized, length=length_words,
                                    brief=prompt.get("source") == "action", idea=prompt.get("text", "") if prompt.get("source") == "idea" else "",
                                    request=" ".join(str(prompt.get(key, "")) for key in ("text", "camera", "shot", "angle")) if prompt.get("source") == "idea" and not cls.H3 else None)
-        sound_base = _system_text(service, preset, context, "", sound_sections, negative, explicit, male, sized) if sound_sections else ""
+        sound_base = _system_text(service, preset, context, "", sound_sections, negative, explicit, male, sized, length=length_words) if sound_sections else ""
         user_text = prompt["text"]
         if prompt.get("source") == "action" and cls.H3:
-            user_text = (user_text + "\n\nWrite this as 650-900 words of continuous shot prose only: expand every "
+            size = f"at most {length_words} words of continuous shot prose only" if length_words else "continuous shot prose only, as long as it needs"
+            user_text = (user_text + f"\n\nWrite this as {size}: expand every "
                          "position, contact, angle and reaction into visible detail and start with `[Shot 1]`.")
         elif prompt.get("source") == "action" and pipe["family"] == "anima":
             user_text = ("Turn this brief into booru tags. Keep every position, contact and camera fact. Lines with NOT, never, "
@@ -945,6 +987,8 @@ class ImagePromptWriter(io.ComfyNode):
                              "Where it says to keep something unchanged, keep it.\n\nRequest:\n" + user_text)
             if not explicit:
                 user_text += "\n\nName what each person wears, with colour and material." if pipe["family"] != "anima" else "\n\nTag every garment each person wears."
+        if cls.H3:
+            user_text += "\n\n" + _clip_length_line(float(context.get("duration") or 5))
         encoder.resident = {}
         try:
             records = []
@@ -953,7 +997,7 @@ class ImagePromptWriter(io.ComfyNode):
                 attempt_seed = (int(seed) + index) % (2**32 - 1) or 1
                 system = system_base + ("\n\n" + feedback if feedback else "")
                 text, thought = _write(encoder, service, writer_model, system, user_text, images, video,
-                                       attempt_seed, min(max_tokens, 4096), temperature, thinking == "on",
+                                       attempt_seed, reply_tokens, temperature, thinking == "on",
                                        top_p, top_k, repetition_penalty, presence_penalty)
                 text = _strip_context_echo(text)
                 if pipe["family"] == "anima":
@@ -969,7 +1013,7 @@ class ImagePromptWriter(io.ComfyNode):
                         text = _grounded_h3(text, user_text)
                     sound_user = ("Name the sound for this clip.\n\nClip:\n" + text + "\n\nBrief for reference:\n" + user_text)
                     audio_text, _ = _write(encoder, service, writer_model, sound_base, sound_user,
-                                           images, video, (attempt_seed + 7919) % (2**32 - 1), 1024, temperature)
+                                           images, video, (attempt_seed + 7919) % (2**32 - 1), 1024 if length_words else 4096, temperature)
                     audio_text = _h3_headings(_strip_context_echo(audio_text), mode)
                     if "overall_soundscape" in audio_text:
                         # the dedicated sound call wins over the audio sections the picture call wrote on the side
@@ -992,15 +1036,17 @@ class ImagePromptWriter(io.ComfyNode):
                 conflict = _shot_conflict(text) if pipe["family"] == "anima" and checks != "off" else ""
                 # negative wording alone is a blemish, not a failure: after the last retry the text is used and the warning stays in the report
                 last = index == attempts - 1
-                blemish = all(issue.startswith(("negative wording", "description too long", "the shaft leaves", "female anatomy written")) for issue in issues)
+                blemish = all(issue.startswith(("negative wording", "the shaft leaves", "female anatomy written", "a shot starts after")) for issue in issues)
                 if (not issues or last and blemish) and (not conflict or last):
                     result = evolve(pipe, artifacts={"text": text, "writer": {
-                        "status": "valid", "validation": issues, "attempts": records, "max_tokens": max_tokens,
+                        "status": "valid", "validation": issues, "attempts": records, "max_tokens": reply_tokens, "length_words": length_words,
                         "context": context, "preset": preset, **({"preset_mismatch": mismatch} if mismatch else {})}},
                         invalidate=("positive", "negative"))
                     return io.NodeOutput(result, text)
                 feedback = ("Rewrite affirmatively: drop these words and replace each with what is visible in the scene: "
                             "no, not, never, without, avoid. Failures: " + "; ".join(issues + [conflict] if conflict else issues))
+                if any(issue.startswith("a shot starts after") for issue in issues):
+                    feedback += "\n" + _clip_length_line(float(context.get("duration") or 5))
             dump = Path(folder_paths.get_temp_directory()) / "PromptForge_writer_failed.json"
             dump.parent.mkdir(parents=True, exist_ok=True)
             dump.write_text(json.dumps(records, ensure_ascii=False), encoding="utf-8")
