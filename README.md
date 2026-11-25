@@ -15,8 +15,7 @@ the user.
 
 The workflows are the ones you keep in ComfyUI's own workflow folder; each one is
 built from the same `PROMPTFORGE_V2_*` nodes and is blank (no prompts, no media
-paths). `scripts/build_v2_workflows.py` can regenerate a set into a directory of
-your choice. The optional LoRA Manager integration
+paths). The optional LoRA Manager integration
 enhances browsing when installed; it is not required.
 
 ## Legacy workflow notes
