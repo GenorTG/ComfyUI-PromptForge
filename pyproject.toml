@@ -14,7 +14,7 @@ dependencies = [
     "bitsandbytes",
     "accelerate",
     "llama-cpp-python",
-    "imageio-ffmpeg",
+    "av",
     "gguf>=0.13.0",
     "flash-linear-attention",
 ]

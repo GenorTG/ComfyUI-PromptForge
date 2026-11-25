@@ -1,6 +1,4 @@
 """Optional image second stage: learned SesquiLSR latent upscale, or a plain bicubic resize."""
-import importlib
-
 import comfy.model_management
 import comfy.model_patcher
 import comfy.utils
@@ -30,7 +28,7 @@ def target_size(samples, scale):
 
 def sesqui_upscale(samples, format, name, height, width):
     try:
-        sesqui = importlib.import_module("sesqui_lsr")
+        import sesqui_lsr as sesqui
     except ImportError as exc:
         raise ValueError("SesquiLSR is not installed; clone it into custom_nodes or pick bicubic.") from exc
     # Wan latents are already raw VAE latents; Flux2 needs its batch-norm adaptor

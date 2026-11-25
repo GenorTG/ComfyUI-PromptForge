@@ -1,19 +1,19 @@
 """Fast video + audio saving.
 
-Frames are converted to BT.709 YUV 4:2:0 on the GPU, in chunks, on a worker thread while ffmpeg encodes, and the
-audio goes into the same ffmpeg run, so the video is written once. The CPU float -> uint8 conversion and
-ffmpeg's swscale pass of the VHS combine node are what this avoids.
+Frames are converted to BT.709 YUV 4:2:0 on the GPU, in chunks, on a worker thread while the encoder runs (PyAV,
+which ComfyUI ships), and the audio is muxed in the same pass, so the video is written once. The CPU float -> uint8
+conversion and the swscale pass of the VHS combine node are what this avoids.
 """
 import gc
 import json
 import os
 import queue
-import shutil
-import subprocess
-import tempfile
 import threading
+from fractions import Fraction
 from pathlib import Path
 
+import av
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -21,35 +21,21 @@ import comfy.model_management as model_management
 import comfy.utils
 import folder_paths
 
-# name -> (encoder, speed presets fastest..slowest, quality flag, 10-bit pixel format)
+# name -> (encoder, speed presets fastest..slowest, quality option, 10-bit pixel format)
 CODECS = {
-    "h264 (nvenc)": ("h264_nvenc", ("p1", "p3", "p5", "p7"), "-cq", "p010le"),
-    "h265 (nvenc)": ("hevc_nvenc", ("p1", "p3", "p5", "p7"), "-cq", "p010le"),
-    "av1 (nvenc, RTX 40+)": ("av1_nvenc", ("p1", "p3", "p5", "p7"), "-cq", "p010le"),
-    "h264 (cpu x264)": ("libx264", ("ultrafast", "veryfast", "medium", "slow"), "-crf", "yuv420p10le"),
-    "h265 (cpu x265)": ("libx265", ("ultrafast", "veryfast", "medium", "slow"), "-crf", "yuv420p10le"),
-    "av1 (cpu svt-av1)": ("libsvtav1", ("12", "10", "8", "5"), "-crf", "yuv420p10le"),
+    "h264 (nvenc)": ("h264_nvenc", ("p1", "p3", "p5", "p7"), "cq", "p010le"),
+    "h265 (nvenc)": ("hevc_nvenc", ("p1", "p3", "p5", "p7"), "cq", "p010le"),
+    "av1 (nvenc, RTX 40+)": ("av1_nvenc", ("p1", "p3", "p5", "p7"), "cq", "p010le"),
+    "h264 (cpu x264)": ("libx264", ("ultrafast", "veryfast", "medium", "slow"), "crf", "yuv420p10le"),
+    "h265 (cpu x265)": ("libx265", ("ultrafast", "veryfast", "medium", "slow"), "crf", "yuv420p10le"),
+    "av1 (cpu svt-av1)": ("libsvtav1", ("12", "10", "8", "5"), "crf", "yuv420p10le"),
 }
 SPEEDS = ("fastest", "fast", "balanced", "slow")
 # BT.709 RGB -> Y, Cb, Cr rows
 BT709 = ((0.2126, 0.7152, 0.0722), (-0.1146, -0.3854, 0.5), (0.5, -0.4542, -0.0458))
 CHUNK_BYTES = 256 * 1024 ** 2
-
-
-def _ffmpeg():
-    """Absolute ffmpeg path from an explicit override or PATH; it is passed as argv[0] and never through a shell."""
-    path = os.getenv("VHS_FORCE_FFMPEG_PATH") or shutil.which("ffmpeg")
-    if path is None:
-        try:
-            import imageio_ffmpeg
-            path = imageio_ffmpeg.get_ffmpeg_exe()
-        except ImportError:
-            raise ValueError("[PromptForge] ffmpeg was not found. Install ffmpeg or put it on PATH.") from None
-    if not Path(path).is_file():
-        path = shutil.which(path)
-        if path is None:
-            raise ValueError("[PromptForge] ffmpeg was not found; set VHS_FORCE_FFMPEG_PATH or put ffmpeg on PATH.")
-    return path
+AUDIO_LAYOUTS = {1: "mono", 2: "stereo", 6: "5.1", 8: "7.1"}
+BT709_TAG, LIMITED_RANGE = 1, 1  # ffmpeg's numbers for BT.709 matrix / primaries / transfer and for tv range
 
 
 def _to_yuv(frames, bit_depth, device, grain=0.0):
@@ -70,26 +56,32 @@ def _to_yuv(frames, bit_depth, device, grain=0.0):
     return torch.cat([luma.flatten(1), chroma[:, 0].flatten(1), chroma[:, 1].flatten(1)], 1).cpu()
 
 
-def _metadata_file(directory, prompt, extra_pnginfo):
-    """ffmetadata file holding the workflow, so the video can be dropped back into ComfyUI like VHS videos."""
-    data = dict(extra_pnginfo or {})
-    if prompt is not None:
-        data["prompt"] = prompt
-    value = json.dumps(data)
-    for char in ("\\", "=", ";", "#", "\n"):
-        value = value.replace(char, "\\" + char)
-    path = Path(directory) / "metadata.txt"
-    path.write_text(";FFMETADATA1\ncomment=" + value + "\n", encoding="utf-8")
-    return path
+def _fill(frame, data):
+    """Copy one planar yuv420 sample row into the frame's planes, which may be padded to a wider line size."""
+    offset = 0
+    for plane in frame.planes:
+        samples = np.frombuffer(plane, dtype=data.dtype).reshape(plane.height, -1)
+        size = plane.height * plane.width
+        samples[:, :plane.width] = data[offset:offset + size].reshape(plane.height, plane.width)
+        offset += size
 
 
-def _write_audio(audio, directory):
-    """Raw float32 PCM for ffmpeg; returns (path, sample rate, channels)."""
+def _audio_stream(container, audio, seconds, bitrate_kbps):
+    """The AAC stream and its frames, cut to the video's length."""
     waveform = audio["waveform"]
     waveform = waveform[0] if waveform.dim() == 3 else waveform
-    path = Path(directory) / "audio.f32"
-    path.write_bytes(waveform.float().cpu().t().contiguous().numpy().tobytes())
-    return path, int(audio["sample_rate"]), int(waveform.shape[0])
+    rate = int(audio["sample_rate"])
+    waveform = waveform[:, :round(seconds * rate)].float().cpu().contiguous()
+    layout = AUDIO_LAYOUTS.get(waveform.shape[0], f"{waveform.shape[0]}c")
+    stream = container.add_stream("aac", rate=rate, layout=layout)
+    stream.bit_rate = bitrate_kbps * 1000
+
+    def frames():
+        for start in range(0, waveform.shape[1], rate):
+            frame = av.AudioFrame.from_ndarray(waveform[:, start:start + rate].numpy().copy(order="C"), format="fltp", layout=layout)
+            frame.sample_rate, frame.pts, frame.time_base = rate, start, Fraction(1, rate)
+            yield frame
+    return stream, frames()
 
 
 class PROMPTFORGE_SaveVideo:
@@ -125,7 +117,7 @@ class PROMPTFORGE_SaveVideo:
     FUNCTION = "save"
     OUTPUT_NODE = True
     CATEGORY = "🔮 PromptForge/Video"
-    DESCRIPTION = "VHS-style video save with GPU colour conversion and a single ffmpeg pass for video and audio."
+    DESCRIPTION = "VHS-style video save with GPU colour conversion and a single encoding pass for video and audio."
 
     def save(self, images, frame_rate, filename_prefix, codec, speed, rate_control, quality, bitrate_mbit, bit_depth,
              save_output, pingpong, save_metadata, audio=None, audio_bitrate_kbps=192, show_preview=True, loop_preview=True, autoplay_preview=True, film_grain=0.0, prompt=None, extra_pnginfo=None):
@@ -148,50 +140,45 @@ class PROMPTFORGE_SaveVideo:
         filename = f"{name}_{counter:05}.mp4"
         target = Path(folder) / filename
 
-        args = [_ffmpeg(), "-hide_banner", "-loglevel", "error", "-y",
-                "-f", "rawvideo", "-pix_fmt", "yuv420p" if bits == 8 else "yuv420p10le", "-s", f"{out_width}x{out_height}",
-                "-color_range", "tv", "-colorspace", "bt709", "-framerate", str(frame_rate), "-i", "-"]
-        scratch = tempfile.mkdtemp(prefix="promptforge_video_")
+        pix_fmt = "yuv420p" if bits == 8 else pix_fmt_10
+        options = {"preset": presets[SPEEDS.index(speed)]}
+        if rate_control == "quality":
+            options[quality_flag] = str(quality)
+            if encoder.endswith("_nvenc"):
+                options["rc"] = "vbr"
+        if encoder == "libx265":
+            options["x265-params"] = "log-level=error"
+        rate = Fraction(frame_rate).limit_denominator(100000)
         try:
-            inputs = 1
-            if audio is not None:
-                audio_path, sample_rate, channels = _write_audio(audio, scratch)
-                args += ["-f", "f32le", "-ar", str(sample_rate), "-ac", str(channels), "-i", str(audio_path)]
-                inputs += 1
-            if save_metadata:
-                args += ["-i", str(_metadata_file(scratch, prompt, extra_pnginfo))]
-                inputs += 1
-            args += ["-map", "0:v"]
-            if audio is not None:
-                args += ["-map", "1:a", "-c:a", "aac", "-b:a", f"{audio_bitrate_kbps}k", "-t", f"{len(order) / frame_rate:.6f}"]
-            if save_metadata:
-                args += ["-map_metadata", str(inputs - 1)]
-            args += ["-c:v", encoder, "-pix_fmt", "yuv420p" if bits == 8 else pix_fmt_10,
-                     "-color_range", "tv", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709"]
-            preset = presets[SPEEDS.index(speed)]
-            args += ["-preset", preset]
-            if rate_control == "bitrate":
-                args += ["-b:v", f"{bitrate_mbit}M"]
-            elif encoder.endswith("_nvenc"):
-                args += ["-rc", "vbr", quality_flag, str(quality), "-b:v", "0"]
-            else:
-                args += [quality_flag, str(quality)]
-            if encoder == "libx265":
-                args += ["-x265-params", "log-level=error"]
-            args += ["-movflags", "+faststart", str(target)]
-
-            self._encode(args, images, order, bits, len(order), film_grain)
+            with av.open(str(target), "w", format="mp4", options={"movflags": "faststart"}) as container:
+                if save_metadata:
+                    data = dict(extra_pnginfo or {})
+                    if prompt is not None:
+                        data["prompt"] = prompt
+                    container.metadata["comment"] = json.dumps(data)  # where ComfyUI looks, so the video can be dropped back in
+                stream = container.add_stream(encoder, rate=rate, options=options)
+                stream.width, stream.height, stream.pix_fmt = out_width, out_height, pix_fmt
+                context = stream.codec_context
+                context.bit_rate = bitrate_mbit * 1_000_000 if rate_control == "bitrate" else 0
+                context.color_range, context.colorspace = LIMITED_RANGE, BT709_TAG
+                context.color_primaries, context.color_trc = BT709_TAG, BT709_TAG
+                context.thread_type = "AUTO"
+                sound = _audio_stream(container, audio, len(order) / frame_rate, audio_bitrate_kbps) if audio is not None else None
+                self._encode(container, stream, sound, images, order, bits, film_grain)
+        except av.FFmpegError as exc:
+            target.unlink(missing_ok=True)
+            raise ValueError(f"[PromptForge] video encoding failed ({encoder}): {exc}") from exc
         except BaseException:
             target.unlink(missing_ok=True)
             raise
-        finally:
-            shutil.rmtree(scratch, ignore_errors=True)
 
         preview = {"filename": filename, "subfolder": subfolder, "type": "output" if save_output else "temp"}
         info = f"{out_width}x{out_height} - {frame_rate:g} fps - {len(order)} frames ({len(order) / frame_rate:.1f} s) - {codec}, {bits}-bit - {'with sound' if audio is not None else 'no sound'} - {target.stat().st_size / 1024 ** 2:.1f} MB"
         return {"ui": {"images": [preview], "animated": (True,), "promptforge_info": [info]}}
 
-    def _encode(self, args, images, order, bits, total, grain):
+    def _encode(self, container, stream, sound, images, order, bits, grain):
+        total = len(order)
+        raw_format = "yuv420p" if bits == 8 else "yuv420p10le"
         device = model_management.get_torch_device()
         height, width = int(images.shape[1]), int(images.shape[2])
         chunk = max(1, min(32, CHUNK_BYTES // (height * width * 12)))
@@ -229,14 +216,12 @@ class PROMPTFORGE_SaveVideo:
             except BaseException as exc:
                 ready.put(exc)
 
-        errors = tempfile.TemporaryFile()
-        # Every item is one argv string (Path -> str). The list is passed with shell=False, so no argument is
-        # re-parsed and nothing in a filename or widget can become shell text.
-        process = subprocess.Popen([str(arg) for arg in args], stdin=subprocess.PIPE, stderr=errors, shell=False, close_fds=True)
         worker = threading.Thread(target=produce, daemon=True)
         worker.start()
         progress = comfy.utils.ProgressBar(total)
-        failed = False
+        audio_stream, audio_frames = sound or (None, iter(()))
+        pending = next(audio_frames, None)
+        position = 0
         try:
             while True:
                 model_management.throw_exception_if_processing_interrupted()
@@ -248,28 +233,27 @@ class PROMPTFORGE_SaveVideo:
                     break
                 if isinstance(item, BaseException):
                     raise item
-                try:
-                    process.stdin.write(memoryview(item.numpy()))
-                except (BrokenPipeError, OSError):
-                    failed = True
-                    break
+                for data in item.numpy().view("uint8" if bits == 8 else "uint16"):
+                    frame = av.VideoFrame(stream.width, stream.height, raw_format)
+                    _fill(frame, data)
+                    frame.pts, frame.time_base = position, 1 / stream.codec_context.framerate
+                    frame.colorspace, frame.color_range = BT709_TAG, LIMITED_RANGE
+                    container.mux(stream.encode(frame))
+                    position += 1
+                    # sound is written alongside the picture so the file stays interleaved
+                    while pending is not None and pending.pts * pending.time_base <= position / stream.codec_context.framerate:
+                        container.mux(audio_stream.encode(pending))
+                        pending = next(audio_frames, None)
                 progress.update(len(item))
-        except BaseException:
-            process.kill()
-            raise
+            container.mux(stream.encode())
+            if audio_stream is not None:
+                while pending is not None:
+                    container.mux(audio_stream.encode(pending))
+                    pending = next(audio_frames, None)
+                container.mux(audio_stream.encode())
         finally:
             stop.set()
             worker.join()
-            try:
-                process.stdin.close()
-            except OSError:
-                pass
-            code = process.wait()
-            errors.seek(0)
-            message = errors.read().decode(errors="replace").strip()
-            errors.close()
-        if failed or code != 0:
-            raise ValueError(f"[PromptForge] ffmpeg failed: {message[-800:] or f'exit code {code}'}")
 
 
 NODE_CLASS_MAPPINGS = {"PROMPTFORGE_SaveVideo": PROMPTFORGE_SaveVideo}

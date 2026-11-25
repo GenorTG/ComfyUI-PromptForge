@@ -30,7 +30,6 @@ EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff",
 THEMES = ("female", "male", "group", "people", "nsfw", "animals", "scenery", "objects", "other")
 SUBJECT_THEMES = {"animal": "animals", "landscape": "scenery", "building": "scenery", "object": "objects", "vehicle": "objects", "food": "objects", "text": "other"}
 MAX_SIDE = 768
-FORCE_CPU = bool(os.getenv("PROMPTFORGE_TAGGER_CPU"))
 
 PROMPT = """You catalogue images for a personal library. Look at the image and answer with ONE JSON object and nothing else:
 {"people": <number of people visible, 3 means three or more>, "gender": "female" | "male" | "mixed" | "none", "nsfw": true | false, "subject": "person" | "animal" | "landscape" | "building" | "object" | "vehicle" | "food" | "text" | "other", "style": "photo" | "illustration" | "anime" | "3d" | "screenshot" | "other", "tags": [10 to 15 short lowercase keywords: hair colour, clothing, setting, pose, mood, notable objects], "caption": "one plain sentence describing the image"}
@@ -139,8 +138,8 @@ class Tagger:
         if handler is None:
             raise ValueError("[PromptForge] this llama-cpp-python build cannot run this vision model.")
         package._free_vram()
-        layers = 0 if FORCE_CPU else -1
-        if layers and package._gguf_memory_estimate(path, 4096, layers, mmproj) > _free_bytes():
+        layers = -1
+        if package._gguf_memory_estimate(path, 4096, layers, mmproj) > _free_bytes():
             layers = package._gguf_layers_that_fit(path, 4096, mmproj)
         handler_instance = handler(clip_model_path=str(mmproj), verbose=False)
         for gpu_layers, kv_on_gpu in ((layers, layers != 0), (0, False)):

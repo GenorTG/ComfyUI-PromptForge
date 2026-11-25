@@ -189,11 +189,11 @@ RIFE / FILM frame interpolation for large frames (for example the 2x-decoded Min
 
 ### PromptForge Save Video (`PROMPTFORGE_SaveVideo`)
 
-A faster stand-in for VHS Video Combine. Frames are converted to BT.709 YUV on the GPU while ffmpeg encodes, and video, audio and the embedded workflow go into one ffmpeg run. About 2x faster than the VHS path on 1920x1088 clips (240 frames in ~1.7 s on an RTX 5080 against ~3.2 s).
+A faster stand-in for VHS Video Combine. Frames are converted to BT.709 YUV on the GPU while the encoder runs (PyAV, which ComfyUI ships), and video, audio and the embedded workflow are written in one pass.
 
 - **Codecs**: h264 / h265 / av1 on nvenc (GPU) or x264 / x265 / SVT-AV1 (CPU), `speed` preset, `quality` (crf/cq) or `bitrate`, 8 or 10-bit.
 - **Options**: `film_grain` (fine grain added while encoding, 0.005-0.01 is subtle), `pingpong`, `save_output` (off writes to temp), `save_metadata` (workflow in the file), optional `audio` with `audio_bitrate_kbps`.
-- Odd sizes are padded by one pixel to an even size. Needs `ffmpeg` on PATH (or `VHS_FORCE_FFMPEG_PATH`). nvenc rejects very small frames (under about 150 px); use a CPU codec for those.
+- Odd sizes are padded by one pixel to an even size. No separate `ffmpeg` install is needed. nvenc rejects very small frames (under about 150 px); use a CPU codec for those.
 - Keep the interpolation node's `output_precision` on float32 when feeding this node or VHS.
 
 ### PromptForge Loader (`PROMPTFORGE_Loader`)
@@ -406,7 +406,7 @@ The cap is injected into the request and sets `max_tokens` for that family; the 
 
 ## Dependencies
 
-PromptForge does not need any other custom node pack. Its Python requirements are in `pyproject.toml` (`transformers`, `llama-cpp-python`, `bitsandbytes`, `accelerate`, `huggingface-hub`, `psutil`, `Pillow`, `numpy`, `imageio-ffmpeg`, `gguf`, `flash-linear-attention`); `flash-linear-attention` gives Qwen3.5 model folders (transformers route) their fast kernels, about twice as fast; the first prompt written with such a model compiles them once (around 40 s). ComfyUI itself provides the rest (`comfy_kitchen`, `safetensors`, the MiniMax H3, LTX and frame interpolation nodes). `ffmpeg` should be on the PATH for the video nodes (`imageio-ffmpeg` is the fallback).
+PromptForge does not need any other custom node pack. Its Python requirements are in `pyproject.toml` (`transformers`, `llama-cpp-python`, `bitsandbytes`, `accelerate`, `huggingface-hub`, `psutil`, `Pillow`, `numpy`, `av`, `gguf`, `flash-linear-attention`); `flash-linear-attention` gives Qwen3.5 model folders (transformers route) their fast kernels, about twice as fast; the first prompt written with such a model compiles them once (around 40 s). ComfyUI itself provides the rest (`comfy_kitchen`, `safetensors`, the MiniMax H3, LTX and frame interpolation nodes).
 
 GGUF diffusion models and text encoders in the Loader are loaded by `gguf_native/`, which is the loading code of [ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF) by City96 (Apache-2.0, license in `gguf_native/LICENSE-ComfyUI-GGUF`) included in this pack. It adds no nodes, so it can sit next to the original pack without clashing.
 
