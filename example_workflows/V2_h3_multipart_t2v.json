@@ -330,7 +330,7 @@
       ],
       "size": [
         356,
-        214
+        264
       ],
       "flags": {},
       "order": 4,
@@ -752,7 +752,7 @@
       "type": "PROMPTFORGE_V2_H3_SAMPLING_SETTINGS",
       "pos": [
         1774,
-        346
+        396
       ],
       "size": [
         430,
@@ -821,7 +821,7 @@
       "type": "PROMPTFORGE_V2_H3_UPSCALE_SETTINGS",
       "pos": [
         1774,
-        764
+        814
       ],
       "size": [
         422,
@@ -875,7 +875,7 @@
       "type": "PROMPTFORGE_V2_H3_PARTS",
       "pos": [
         1774,
-        990
+        1040
       ],
       "size": [
         400,
@@ -929,7 +929,7 @@
       "type": "PROMPTFORGE_V2_H3_CONTINUITY",
       "pos": [
         1774,
-        1262
+        1312
       ],
       "size": [
         377,
@@ -983,7 +983,7 @@
       "type": "PROMPTFORGE_V2_H3_SEQUENCE",
       "pos": [
         44,
-        1614
+        1664
       ],
       "size": [
         377,
@@ -1061,7 +1061,7 @@
       "type": "PROMPTFORGE_V2_H3_FIRST_PASS_PREVIEW",
       "pos": [
         674,
-        1614
+        1664
       ],
       "size": [
         430,
@@ -1111,7 +1111,7 @@
       "type": "PROMPTFORGE_V2_FRAME_INTERPOLATE",
       "pos": [
         1264,
-        1614
+        1664
       ],
       "size": [
         395,
@@ -1181,7 +1181,7 @@
       "type": "PROMPTFORGE_V2_VIDEO_CLEANUP",
       "pos": [
         1264,
-        1904
+        1954
       ],
       "size": [
         375,
@@ -1249,7 +1249,7 @@
       "type": "PROMPTFORGE_V2_H3_PREVIEW_SAVE",
       "pos": [
         1774,
-        1614
+        1664
       ],
       "size": [
         440,
@@ -1343,7 +1343,7 @@
       "type": "PROMPTFORGE_V2_PRESETS",
       "pos": [
         1774,
-        2144
+        2194
       ],
       "size": [
         420,
@@ -1393,7 +1393,7 @@
       "type": "PROMPTFORGE_V2_RUN_INSPECT",
       "pos": [
         1774,
-        2596
+        2646
       ],
       "size": [
         440,
@@ -1696,7 +1696,7 @@
         1758,
         0,
         472,
-        1432
+        1482
       ],
       "color": "#6b5527",
       "font_size": 24,
@@ -1718,7 +1718,7 @@
       "title": "06 Encode & Sample",
       "bounding": [
         28,
-        1538,
+        1588,
         592,
         258
       ],
@@ -1730,7 +1730,7 @@
       "title": "07 Refine & Decode",
       "bounding": [
         658,
-        1538,
+        1588,
         552,
         222
       ],
@@ -1742,7 +1742,7 @@
       "title": "08 Optional RIFE",
       "bounding": [
         1248,
-        1538,
+        1588,
         472,
         580
       ],
@@ -1754,7 +1754,7 @@
       "title": "09 Inspect & Save",
       "bounding": [
         1758,
-        1538,
+        1588,
         472,
         1600
       ],

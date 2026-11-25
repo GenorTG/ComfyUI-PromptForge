@@ -339,7 +339,7 @@
       ],
       "size": [
         356,
-        214
+        264
       ],
       "flags": {},
       "order": 4,
@@ -890,7 +890,7 @@
       "type": "PROMPTFORGE_V2_H3_SAMPLING_SETTINGS",
       "pos": [
         2454,
-        346
+        396
       ],
       "size": [
         430,
@@ -959,7 +959,7 @@
       "type": "PROMPTFORGE_V2_H3_UPSCALE_SETTINGS",
       "pos": [
         2454,
-        764
+        814
       ],
       "size": [
         422,
@@ -1013,7 +1013,7 @@
       "type": "PROMPTFORGE_V2_H3_CONTINUITY",
       "pos": [
         2454,
-        990
+        1040
       ],
       "size": [
         377,
@@ -2368,7 +2368,7 @@
         2438,
         0,
         472,
-        1160
+        1210
       ],
       "color": "#6b5527",
       "font_size": 24,

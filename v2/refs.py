@@ -51,7 +51,7 @@ class ReferenceManager(io.ComfyNode):
         return schema("REFERENCES", "MANAGER", "Reference Manager",
                       description="Ordered picture, video and voice references, each with a name and an optional description. Row order sets the <Picture N>/<Video N>/<Audio N> numbering; media from sockets follows the rows.",
                       inputs=[Pipe.Input("pipe", optional=True),
-                              io.String.Input("items", default="[]", multiline=True, dynamic_prompts=True),
+                              io.String.Input("items", default="[]", multiline=True),
                               io.String.Input("names", default="", tooltip="Comma-separated reference names to use this run; empty uses every enabled reference."),
                               io.Float.Input("extra_video_fps", default=24.0, min=0.01, max=1000, tooltip="Frame rate of the videos connected to extra_videos."),
                               grown(io.Image, "extra_images"), grown(io.Image, "extra_videos"), grown(io.Audio, "extra_audios")],

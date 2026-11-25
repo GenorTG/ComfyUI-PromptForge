@@ -39,6 +39,13 @@ class RuntimeTests(unittest.TestCase):
                 return [[torch.ones(1, max(1, len(tokens.split())), 64), {}]]
         return Clip()
 
+    def test_no_text_widget_is_rewritten_by_dynamic_prompts(self):
+        # the browser strips braces and // comments from such widgets, which destroys JSON state
+        for key, node in self.runtime.pack.NODE_CLASS_MAPPINGS.items():
+            if key.startswith("PROMPTFORGE_V2_"):
+                flagged = [item.id for item in node.define_schema().inputs if getattr(item, "dynamic_prompts", None)]
+                self.assertEqual(flagged, [], key)
+
     def test_registration_through_real_init(self):
         from comfy_api.latest import io
         mappings = self.v2.NODE_CLASS_MAPPINGS

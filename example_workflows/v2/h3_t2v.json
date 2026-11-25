@@ -339,7 +339,7 @@
       ],
       "size": [
         356,
-        214
+        264
       ],
       "flags": {},
       "order": 4,
@@ -761,7 +761,7 @@
       "type": "PROMPTFORGE_V2_H3_SAMPLING_SETTINGS",
       "pos": [
         1774,
-        346
+        396
       ],
       "size": [
         430,
@@ -830,7 +830,7 @@
       "type": "PROMPTFORGE_V2_H3_UPSCALE_SETTINGS",
       "pos": [
         1774,
-        764
+        814
       ],
       "size": [
         422,
@@ -2043,7 +2043,7 @@
         1758,
         0,
         472,
-        958
+        1008
       ],
       "color": "#6b5527",
       "font_size": 24,
