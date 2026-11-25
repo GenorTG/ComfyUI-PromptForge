@@ -179,6 +179,14 @@ class PromptTests(unittest.TestCase):
         image = self.prompts._action_text("image: Sex - doggy style", ("", "", ""), "", "auto")
         self.assertNotIn("NOT her on her back", image)
         self.assertIn("The woman is BOTTOM on hands and knees. The man kneels behind her.", image)
+        scissors = self.prompts._action_text("image: Sex - scissors", ("", "", ""), "", "auto")
+        self.assertIn("the first woman's", scissors)
+        self.assertIn("the second woman's", scissors)
+        self.assertNotIn("the man", scissors)
+        self.assertNotIn("between his", scissors)
+        self.assertNotIn("shaft enters", scissors)
+        self.assertEqual(self.prompts._action_genders("Sex - scissors", 2, False), ["female", "female"])
+        self.assertFalse(self.prompts._male_present({"source": "action", "action": "image: Sex - scissors", "text": ""}))
         self.assertEqual(self.prompts._drop_negations("A woman stands. No clothing, no background. Her hand rests on her hip, not moving. Without props."),
                          "A woman stands. Her hand rests on her hip.")
         self.assertEqual(self.prompts._drop_negations("She remains still, no movement, no shift in posture. The camera frames her face without cropping. Fingers spread but not gripping, palms open."),
@@ -237,22 +245,26 @@ class PromptTests(unittest.TestCase):
         self.assertEqual(cleaned, "1girl, no humans, standing, no panties, solo")
 
     def test_rating_and_cast_follow_the_request(self):
-        def system(family, source, text="", action=None):
-            kwargs = {"action": "image: " + action} if action else {}
-            pipe = self.prompts.ImagePrompt.execute(self.contracts.new_pipe(family), source=source, text=text, **kwargs).args[0]
+        def system(family, source, text="", action=None, h3=False):
+            kwargs = {"action": ("h3: " if h3 else "image: ") + action} if action else {}
+            node, writer = (self.prompts.H3Prompt, self.prompts.H3PromptWriter) if h3 else (self.prompts.ImagePrompt, self.prompts.ImagePromptWriter)
+            pipe = node.execute(self.contracts.new_pipe("minimax_h3" if h3 else family), source=source, text=text, **kwargs).args[0]
             with patch.object(self.service.PROMPTFORGE_PromptEnhancer, "_generate", return_value="x") as generate:
                 try:
-                    self.prompts.ImagePromptWriter.execute(pipe, writer_model={}, retries="off")
+                    writer.execute(pipe, writer_model={}, retries="off")
                 except ValueError:
                     pass
             return generate.call_args_list[0].kwargs["system_prompt"]
         self.assertIn('Rating: "safe".', system("anima", "idea", "a knight on a cliff"))
         self.assertIn('Rating: "nsfw" for nudity, "explicit" for sex acts.', system("anima", "action", action="Sex - doggy style"))
         solo = system("krea2", "action", action="Nude - on the back, arms above head")
-        self.assertIn("Everyone in this scene is a woman", solo)
+        self.assertIn("Everyone in this scene is female", solo)
         self.assertNotIn("1056", solo)
         self.assertNotIn("glans", solo)
         self.assertIn("glans", system("krea2", "action", action="Sex - doggy style"))
+        h3_solo = system("minimax_h3", "action", action="Solo - standing, still", h3=True)
+        self.assertIn("Everyone in this scene is female", h3_solo)
+        self.assertNotIn("man's hips", h3_solo)
         self.assertIn("show the format", system("krea2", "idea", "a knight on a cliff"))
 
     def test_body_size_section_only_when_the_request_names_a_size(self):

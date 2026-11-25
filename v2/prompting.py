@@ -131,8 +131,8 @@ def _action_options():
 def _action_genders(label, count, h3):
     if h3:
         return [role["gender"] for role in _library("h3_actions").role_info(label)]
-    # image briefs always call subject 1 the woman and subject 2 the man
-    return ["female", "male"] if count == 2 else ["female"]
+    # image briefs call subject 1 the woman and subject 2 the man, except a two-woman scissor scene
+    return ["female", "female"] if "scissor" in label.lower() else ["female", "male"] if count == 2 else ["female"]
 
 
 def _action_catalog():
@@ -734,7 +734,7 @@ def _male_present(prompt):
     if prompt.get("source") == "action":
         family, label = prompt["action"].split(": ", 1)
         entry = _store.get(family, label)
-        return any(role["gender"] == "male" for role in entry["roles"]) if "roles" in entry else entry.get("people", 1) > 1
+        return any(role["gender"] == "male" for role in entry["roles"]) if "roles" in entry else entry.get("people", 1) > 1 and "scissor" not in label.lower()
     return bool(_MALE_WORDS.search(prompt.get("text", "")))
 
 
@@ -801,10 +801,10 @@ def _system_text(service, preset, context, style_prefix="", sections=None, negat
         text = _CAPABLE.sub("", text.replace("whether it is worn, open, pulled aside or off", "and how it is worn"))
     else:
         text = text.replace(_RATING, 'Rating: "nsfw" for nudity, "explicit" for sex acts.')
-        if not male and context["family"] != "minimax_h3":
+        if not male:
             kept = [line for line in text.split("\n") if not _MALE_ANATOMY.search(line)]
             if len(kept) < len(text.split("\n")):
-                text = "\n".join(kept) + "\n\nEveryone in this scene is a woman: name only the anatomy the camera shows, by its exact name."
+                text = "\n".join(kept) + "\n\nEveryone in this scene is female: name only the anatomy the camera shows, by its exact name."
     if brief and explicit and context["family"] == "anima":
         # an action brief already names the act; the template's act lists get copied into the tags whole
         text = re.sub(r"(?m)^- (?:Acts|Choreography):.*\n", "", text)

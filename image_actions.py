@@ -166,16 +166,21 @@ def brief(action, people, camera="auto", place="auto", lighting="auto", outfit="
     """The action block appended to the writer's user text."""
     entry = action_store.get(FAMILY, action)
     count, arrangement = entry["people"], entry["brief"]
-    labels = ["the woman in the input image" if source == "input image" else "the woman", "the man"]
+    if "scissor" in action.lower():
+        labels = ["the first woman", "the second woman"]
+    else:
+        labels = ["the woman in the input image" if source == "input image" else "the woman", "the man"]
     action_text = arrangement.format(A=labels[0], B=labels[1])
+    if "scissor" in action.lower():
+        action_text = re.sub(r"\bhis\b", f"{labels[1]}'s", action_text)
     action_text = re.sub(r"(?<=[.!?])\s+([a-z])", lambda m: m.group(0)[:-1] + m.group(1).upper(), action_text)
     lines = ["# Image action preset", "Action: " + action_text[:1].upper() + action_text[1:]]
     if action in POSE_NOTES:
         lines.append(f"STAGE LAYOUT (follow exactly): {POSE_NOTES[action]}")
     if people[0].strip():
-        lines.append(f"Subject 1 (the woman): {people[0].strip()}")
+        lines.append(f"Subject 1 ({labels[0]}): {people[0].strip()}")
     if count == 2 and people[1].strip():
-        lines.append(f"Subject 2 (the man): {people[1].strip()}")
+        lines.append(f"Subject 2 ({labels[1]}): {people[1].strip()}")
     if count == 1:
         lines.append("Only this one person appears in the frame." if source != "input image" else
                      "Only this one person appears; the input image supplies the identity.")
@@ -210,7 +215,7 @@ def brief(action, people, camera="auto", place="auto", lighting="auto", outfit="
     if overrides.strip():
         lines.append(f"Overrides: {overrides.strip()}")
     if count == 2:
-        if action.startswith("Sex - "):
+        if action.startswith("Sex - ") and "scissor" not in action.lower():
             lines.append("Her body stays whole under him: his hips sit between, behind or above her thighs, never inside her torso. Show the join with exact anatomy: the shaft enters the named opening, the labia grip the shaft, the clitoris stays visible above, and some shaft stays outside her. Never let the shaft merge into the belly or thigh.")
         else:
             lines.append("Show the point of contact between the two bodies clearly.")
