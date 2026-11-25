@@ -187,7 +187,7 @@
       "id": 3,
       "type": "PROMPTFORGE_V2_IMAGE_FORMAT",
       "pos": [
-        1774,
+        2178,
         76
       ],
       "size": [
@@ -261,7 +261,7 @@
       "id": 4,
       "type": "PROMPTFORGE_V2_IMAGE_SAMPLING_SETTINGS",
       "pos": [
-        1774,
+        2178,
         394
       ],
       "size": [
@@ -336,8 +336,8 @@
       "id": 5,
       "type": "PROMPTFORGE_V2_WRITER_MODEL",
       "pos": [
-        44,
-        1214
+        644,
+        76
       ],
       "size": [
         364,
@@ -396,7 +396,7 @@
       "id": 6,
       "type": "PROMPTFORGE_V2_IMAGE_PROMPT",
       "pos": [
-        674,
+        1078,
         76
       ],
       "size": [
@@ -483,7 +483,7 @@
       "id": 7,
       "type": "PROMPTFORGE_V2_IMAGE_PROMPT_WRITER",
       "pos": [
-        1264,
+        1668,
         76
       ],
       "size": [
@@ -547,7 +547,8 @@
           "presence_penalty": 0.4,
           "thinking": "off",
           "checks": "strict",
-          "retries": "1"
+          "retries": "1",
+          "length_words": 0
         }
       },
       "widgets_values": [
@@ -563,7 +564,8 @@
         0.4,
         "off",
         "strict",
-        "1"
+        "1",
+        0
       ],
       "color": "#4a7a35",
       "bgcolor": "#2c4421"
@@ -572,7 +574,7 @@
       "id": 8,
       "type": "PROMPTFORGE_V2_PROMPT_INSPECT",
       "pos": [
-        1264,
+        1668,
         638
       ],
       "size": [
@@ -627,7 +629,7 @@
       "type": "PROMPTFORGE_V2_IMAGE_ENCODE",
       "pos": [
         44,
-        1610
+        1364
       ],
       "size": [
         322,
@@ -736,8 +738,8 @@
       "id": 10,
       "type": "PROMPTFORGE_V2_IMAGE_SAMPLE",
       "pos": [
-        44,
-        1960
+        406,
+        1364
       ],
       "size": [
         560,
@@ -830,8 +832,8 @@
       "id": 11,
       "type": "PROMPTFORGE_V2_IMAGE_LATENT_UPSCALE",
       "pos": [
-        674,
-        1610
+        1078,
+        1364
       ],
       "size": [
         372,
@@ -894,8 +896,8 @@
       "id": 12,
       "type": "PROMPTFORGE_V2_IMAGE_DECODE",
       "pos": [
-        674,
-        1808
+        1078,
+        1562
       ],
       "size": [
         264,
@@ -956,8 +958,8 @@
       "id": 13,
       "type": "PROMPTFORGE_V2_IMAGE_SAVE",
       "pos": [
-        1774,
-        1610
+        2178,
+        1364
       ],
       "size": [
         440,
@@ -1014,8 +1016,8 @@
       "id": 14,
       "type": "PROMPTFORGE_V2_PRESETS",
       "pos": [
-        1774,
-        2162
+        2178,
+        1916
       ],
       "size": [
         420,
@@ -1064,8 +1066,8 @@
       "id": 15,
       "type": "PROMPTFORGE_V2_RUN_INSPECT",
       "pos": [
-        2254,
-        1610
+        2658,
+        1364
       ],
       "size": [
         440,
@@ -1371,8 +1373,8 @@
       "bounding": [
         28,
         0,
-        592,
-        1428
+        996,
+        1182
       ],
       "color": "#2a4a6b",
       "font_size": 24,
@@ -1381,7 +1383,7 @@
     {
       "title": "02 Intent & References",
       "bounding": [
-        658,
+        1062,
         0,
         552,
         716
@@ -1393,7 +1395,7 @@
     {
       "title": "03 Prompt & Review",
       "bounding": [
-        1248,
+        1652,
         0,
         472,
         1180
@@ -1405,9 +1407,9 @@
     {
       "title": "04 Format & Sampling",
       "bounding": [
-        1758,
+        2162,
         0,
-        952,
+        424,
         800
       ],
       "color": "#6b5527",
@@ -1418,9 +1420,9 @@
       "title": "06 Encode & Sample",
       "bounding": [
         28,
-        1534,
-        592,
-        1090
+        1288,
+        954,
+        740
       ],
       "color": "#6b2f2f",
       "font_size": 24,
@@ -1429,9 +1431,9 @@
     {
       "title": "07 Refine & Decode",
       "bounding": [
-        658,
-        1534,
-        552,
+        1062,
+        1288,
+        404,
         380
       ],
       "color": "#5a2f6b",
@@ -1441,8 +1443,8 @@
     {
       "title": "09 Inspect & Save",
       "bounding": [
-        1758,
-        1534,
+        2162,
+        1288,
         952,
         1048
       ],

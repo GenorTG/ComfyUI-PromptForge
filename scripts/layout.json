@@ -1,0 +1,231 @@
+{
+ "exact": {
+  "h3_ref2v": {
+   "nodes": {
+    "model": [45, 76, 352, 362],
+    "loras": [44, 490, 560, 636],
+    "performance": [3304, 76, 400, 262],
+    "preview": [3304, 394, 420, 458],
+    "format": [2794, 76, 425, 262],
+    "reference_board": [674, 76, 980, 1196],
+    "references": [1694, 76, 280, 162],
+    "writer_model": [44, 1182, 364, 190],
+    "prompt": [1694, 382, 520, 616],
+    "prompt_writer": [2284, 76, 420, 506],
+    "prompt_review": [2284, 638, 440, 518],
+    "sampling_first_and_refine": [2793, 389, 430, 362],
+    "upscale_settings": [2793, 807, 422, 170],
+    "encode": [44, 1518, 360, 174],
+    "sample_first": [44, 1748, 399, 321],
+    "first_pass_preview": [674, 1518, 619, 574],
+    "latent_upscale": [1333, 1520, 410, 94],
+    "sample_refine": [1333, 1670, 353, 112],
+    "decode": [1329, 1854, 362, 300],
+    "optional_rife": [2284, 1518, 395, 234],
+    "optional_cleanup": [2284, 1808, 375, 190],
+    "save_video": [2794, 1518, 859, 1028],
+    "presets": [3678, 2142, 420, 396],
+    "run_inspect": [3671, 1521, 440, 518]
+   },
+   "groups": {
+    "01 Models & LoRAs": [28, 0, 592, 1396],
+    "02 Intent & References": [658, 0, 1572, 1296],
+    "03 Prompt & Review": [2268, 0, 472, 1180],
+    "04 Format & Sampling": [2778, 0, 463, 996],
+    "05 Performance & Preview": [3288, 0, 452, 876],
+    "06 Encode & Sample": [28, 1442, 592, 648],
+    "07 Refine & Decode": [658, 1442, 1567, 736],
+    "08 Optional RIFE": [2268, 1442, 472, 580],
+    "09 Inspect & Save": [2778, 1442, 1345, 1120]
+   }
+  },
+  "krea_ref2i_multi": {
+   "nodes": {
+    "model": [44, 76, 320, 390],
+    "loras": [44, 522, 560, 636],
+    "edit_lora": [44, 1214, 400, 276],
+    "format": [3538, 76, 318, 262],
+    "sampling_first": [3538, 394, 392, 382],
+    "reference_1": [1078, 76, 640, 876],
+    "reference_2": [1758, 76, 640, 876],
+    "subject_mask_1": [1758, 1008, 369, 166],
+    "edit_mask_1": [1758, 1230, 360, 122],
+    "subject_mask_2": [1758, 1408, 369, 166],
+    "edit_mask_2": [2438, 76, 360, 122],
+    "edit_prepare": [44, 1780, 356, 282],
+    "writer_model": [644, 76, 364, 190],
+    "prompt": [2438, 254, 520, 616],
+    "prompt_writer": [3028, 76, 420, 506],
+    "prompt_review": [3028, 638, 440, 518],
+    "encode": [48, 2102, 322, 294],
+    "sample_first": [415, 1779, 560, 640],
+    "latent_upscale": [1078, 1780, 372, 142],
+    "decode": [1078, 1978, 264, 82],
+    "save_image": [3538, 1780, 440, 496],
+    "presets": [3538, 2332, 420, 396],
+    "run_inspect": [4018, 1780, 440, 518]
+   },
+   "groups": {
+    "01 Models & LoRAs": [28, 0, 996, 1514],
+    "02 Intent & References": [1062, 0, 1912, 1598],
+    "03 Prompt & Review": [3012, 0, 472, 1180],
+    "04 Format & Sampling": [3522, 0, 952, 800],
+    "06 Encode & Sample": [28, 1704, 996, 1376],
+    "07 Refine & Decode": [1062, 1704, 1912, 380],
+    "09 Inspect & Save": [3522, 1704, 952, 1048]
+   }
+  }
+ },
+ "columns": {
+  "h3": {
+   "01": [
+    [
+     "model",
+     "loras",
+     "writer_model"
+    ]
+   ],
+   "02": [
+    [
+     "reference_board"
+    ],
+    [
+     "first_frame"
+    ],
+    [
+     "last_frame"
+    ],
+    [
+     "source_video"
+    ],
+    [
+     "references",
+     "prompt"
+    ]
+   ],
+   "03": [
+    [
+     "prompt_writer",
+     "prompt_review"
+    ]
+   ],
+   "04": [
+    [
+     "format",
+     "sampling_first_and_refine",
+     "upscale_settings"
+    ],
+    [
+     "parts",
+     "continuity"
+    ]
+   ],
+   "05": [
+    [
+     "performance",
+     "preview"
+    ]
+   ],
+   "06": [
+    [
+     "encode",
+     "sample_first",
+     "sequence"
+    ]
+   ],
+   "07": [
+    [
+     "first_pass_preview"
+    ],
+    [
+     "latent_upscale",
+     "sample_refine",
+     "decode",
+     "source_clip",
+     "join_source"
+    ]
+   ],
+   "08": [
+    [
+     "optional_rife",
+     "optional_cleanup"
+    ]
+   ],
+   "09": [
+    [
+     "save_video"
+    ],
+    [
+     "run_inspect",
+     "presets"
+    ]
+   ]
+  },
+  "image": {
+   "01": [
+    [
+     "model",
+     "loras",
+     "edit_lora"
+    ],
+    [
+     "writer_model"
+    ]
+   ],
+   "02": [
+    [
+     "reference_1"
+    ],
+    [
+     "reference_2",
+     "reference_scale",
+     "subject_mask_1",
+     "edit_mask_1",
+     "subject_mask_2"
+    ],
+    [
+     "edit_mask_2",
+     "prompt"
+    ]
+   ],
+   "03": [
+    [
+     "prompt_writer",
+     "prompt_review"
+    ]
+   ],
+   "04": [
+    [
+     "format",
+     "sampling_first"
+    ]
+   ],
+   "06": [
+    [
+     "edit_prepare",
+     "encode"
+    ],
+    [
+     "sample_first"
+    ]
+   ],
+   "07": [
+    [
+     "latent_upscale",
+     "decode",
+     "transfer_composite",
+     "composite_result"
+    ]
+   ],
+   "09": [
+    [
+     "save_image",
+     "presets"
+    ],
+    [
+     "run_inspect"
+    ]
+   ]
+  }
+ }
+}

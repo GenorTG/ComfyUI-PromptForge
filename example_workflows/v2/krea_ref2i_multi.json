@@ -791,7 +791,7 @@
       ],
       "size": [
         356,
-        230
+        282
       ],
       "flags": {},
       "order": 11,
@@ -1078,7 +1078,8 @@
           "presence_penalty": 0.4,
           "thinking": "off",
           "checks": "strict",
-          "retries": "1"
+          "retries": "1",
+          "length_words": 0
         }
       },
       "widgets_values": [
@@ -1094,7 +1095,8 @@
         0.4,
         "off",
         "strict",
-        "1"
+        "1",
+        0
       ],
       "color": "#4a7a35",
       "bgcolor": "#2c4421"
@@ -1157,8 +1159,8 @@
       "id": 17,
       "type": "PROMPTFORGE_V2_IMAGE_ENCODE",
       "pos": [
-        44,
-        2066
+        48,
+        2102
       ],
       "size": [
         322,
@@ -1267,8 +1269,8 @@
       "id": 18,
       "type": "PROMPTFORGE_V2_IMAGE_SAMPLE",
       "pos": [
-        44,
-        2416
+        415,
+        1779
       ],
       "size": [
         560,

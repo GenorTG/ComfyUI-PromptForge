@@ -30,6 +30,10 @@ Pipe = io.Custom(PIPE)
 DIRTY = ("positive", "negative", "latent", "images", "audio", "video", "first_pass_audio")
 OUTPUTS = ("images", "audio", "video")
 MODES = ["t2v", "i2v", "l2v", "fl2v", "ref2v", "continue"]
+DECODE_VAE = "decode vae"
+DECODE_CHOICES = [DECODE_VAE, "video vae"]
+DECODE_TOOLTIP = ("decode vae: the H3 Model's decode_vae_name (the video VAE when it says same); a wired vae input is not used then. "
+                  "video vae: the main video VAE, or the one wired into vae.")
 
 
 def schema(key, title, inputs, outputs=None, output=False):
@@ -498,10 +502,11 @@ def free_vram():
         pass
 
 
-def decode(pipe, tile_size=256, frames_per_pass=0, output_device="auto", audio_normalize=False, audio_gain_db=0.0, audio_from="second pass"):
+def decode(pipe, tile_size=256, frames_per_pass=0, output_device="auto", audio_normalize=False, audio_gain_db=0.0, audio_from="second pass", decode_with=DECODE_VAE):
     checked(pipe)
     latent, vae, audio_vae = require(pipe, "latent", "vae", "audio_vae")
-    decoder = pipe["artifacts"].get("decode_vae", vae)
+    # H3 Model's decode_vae is the video VAE itself when decode_vae_name is "same"
+    decoder = pipe["artifacts"].get("decode_vae", vae) if decode_with == DECODE_VAE else vae
     free_vram()
     # 256 px tiles are what the upscale VAE decodes cleanly; under pressure only the
     # frame batch shrinks, never the tile, so the seams stay consistent
@@ -537,7 +542,8 @@ def decode(pipe, tile_size=256, frames_per_pass=0, output_device="auto", audio_n
     audio = dict(audio, waveform=waveform.clamp(-1.0, 1.0))
     pipe = evolve(pipe, section="timing", settings={"fps": 24})
     return evolve(pipe, section="decode", settings={"tile_size": tile_size, "frames_per_pass": frames_per_pass,
-                  "output_device": output_device, "audio_normalize": audio_normalize, "audio_gain_db": audio_gain_db, "audio_from": audio_from},
+                  "output_device": output_device, "audio_normalize": audio_normalize, "audio_gain_db": audio_gain_db, "audio_from": audio_from,
+                  "decode_with": decode_with},
                   artifacts={"images": images, "audio": audio}, invalidate=("video",))
 
 
@@ -551,14 +557,15 @@ class H3Decode(io.ComfyNode):
             io.Boolean.Input("audio_normalize", default=False, tooltip="Peak-normalise the decoded audio to -3 dBFS."),
             io.Float.Input("audio_gain_db", default=0.0, min=-30.0, max=30.0, step=0.5),
             io.Combo.Input("audio_from", options=["second pass", "first pass"], default="second pass", optional=True,
-                           tooltip="Which pass the soundtrack comes from. First pass keeps the audio the first sampling made, before the refine pass reworked it; only differs when a second pass runs.")],
+                           tooltip="Which pass the soundtrack comes from. First pass keeps the audio the first sampling made, before the refine pass reworked it; only differs when a second pass runs."),
+            io.Combo.Input("decode_with", options=DECODE_CHOICES, default=DECODE_VAE, optional=True, tooltip=DECODE_TOOLTIP)],
             [Pipe.Output("pipe"), io.Image.Output("images"), io.Audio.Output("audio")])
 
     @classmethod
     def execute(cls, pipe=None, vae=None, latent=None, tile_size=256, frames_per_pass=0, output_device="auto",
-                audio_normalize=False, audio_gain_db=0.0, audio_from="second pass"):
+                audio_normalize=False, audio_gain_db=0.0, audio_from="second pass", decode_with=DECODE_VAE):
         result = decode(take(checked(ensure_pipe(pipe, family="minimax_h3")), vae=vae, latent=latent),
-                        tile_size, frames_per_pass, output_device, audio_normalize, audio_gain_db, audio_from)
+                        tile_size, frames_per_pass, output_device, audio_normalize, audio_gain_db, audio_from, decode_with)
         return io.NodeOutput(result, *require(result, "images", "audio"))
 
 
@@ -767,10 +774,11 @@ class H3FirstPassPreview(io.ComfyNode):
     def define_schema(cls):
         return schema("FIRST_PASS_PREVIEW", "First Pass Preview", [Pipe.Input("pipe", optional=True),
             io.Boolean.Input("enabled", default=True), io.Boolean.Input("save", default=True, tooltip="Write the first pass to the output folder instead of only previewing it."),
-            io.String.Input("filename_prefix", default="video/PromptForge_H3_first_pass")], output=True)
+            io.String.Input("filename_prefix", default="video/PromptForge_H3_first_pass"),
+            io.Combo.Input("decode_with", options=DECODE_CHOICES, default=DECODE_VAE, optional=True, tooltip=DECODE_TOOLTIP)], output=True)
 
     @classmethod
-    def execute(cls, pipe=None, enabled=False, save=True, filename_prefix="video/PromptForge_H3_first_pass"):
+    def execute(cls, pipe=None, enabled=False, save=True, filename_prefix="video/PromptForge_H3_first_pass", decode_with=DECODE_VAE):
         pipe = checked(ensure_pipe(pipe, family="minimax_h3"))
         if not enabled:
             return io.NodeOutput(pipe)
@@ -780,7 +788,7 @@ class H3FirstPassPreview(io.ComfyNode):
         elif pipe["artifacts"].get("latent") is None:
             return io.NodeOutput(pipe)
         else:
-            preview = decode(pipe, **pipe["settings"].get("decode", {}))
+            preview = decode(pipe, **{**pipe["settings"].get("decode", {}), "decode_with": decode_with})
         saved = H3PreviewSave.execute(preview, save=save, filename_prefix=filename_prefix)
         return io.NodeOutput(pipe, ui=saved.ui)
 

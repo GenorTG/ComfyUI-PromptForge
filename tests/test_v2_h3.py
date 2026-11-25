@@ -286,6 +286,20 @@ class H3Tests(unittest.TestCase):
         self.assertTrue(shown["images"][0]["filename"].endswith(".mp4"), shown)
         self.assertEqual(shown["animated"], (True,))
 
+    def test_decode_with_picks_the_decode_vae_or_the_video_vae(self):
+        torch = self.torch
+        latent = {"samples": SimpleNamespace(unbind=lambda: (torch.zeros(1), torch.zeros(1)))}
+        pipe = self.contracts.evolve(self.pipe(), artifacts={"latent": latent, "decode_vae": "separate"})
+        used = []
+        def frames(self_, latent, vae, *args):
+            used.append(vae)
+            return (torch.zeros(5, 32, 32, 3),)
+        audio = {"waveform": torch.zeros(1, 2, 48000), "sample_rate": 48000}
+        with patch.object(self.h3.minimax_decode.PROMPTFORGE_MiniMaxDecode, "decode", frames), patch.object(self.h3.nodes_audio, "vae_decode_audio", return_value=audio):
+            self.h3.decode(pipe)
+            self.h3.decode(pipe, decode_with="video vae")
+        self.assertEqual(used, ["separate", pipe["artifacts"]["vae"]])
+
     def test_real_cpu_preview_encodes_audio_and_video(self):
         result = self.h3.H3PreviewSave.execute(self.decoded(self.pipe()), filename_prefix="h3_fixture").args[0]
         self.assertEqual(self.contracts.require(result, "video").get_dimensions(), (32, 32))

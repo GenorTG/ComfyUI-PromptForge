@@ -39,7 +39,7 @@ class PromptTests(unittest.TestCase):
             result = self.prompts.ImagePromptWriter.execute(pipe, writer_model={"source": "GGUF", "gguf_model": "local"}, max_tokens=256).args[0]
         self.assertEqual(generate.call_count, 2)
         self.assertEqual(generate.call_args.kwargs["engine"], "gguf")
-        self.assertEqual(generate.call_args.kwargs["max_tokens"], 256)
+        self.assertEqual(generate.call_args.kwargs["max_tokens"], 8192)  # uncapped: never below 8192
         self.assertEqual(result["artifacts"]["writer"]["status"], "valid")
         self.assertNotIn("text", pipe["artifacts"])
 
@@ -144,7 +144,7 @@ class PromptTests(unittest.TestCase):
 
     def non_explicit(self, name, prune=True):
         """The preset as the writer sees it for a request that is not sexual."""
-        text = self.service.PROMPTFORGE_PRESETS[name]["text"]
+        text = self.prompts._without_length_rules(self.service.PROMPTFORGE_PRESETS[name]["text"])
         text = self.prompts._SIZE_SECTION.sub("", self.prompts._EXPLICIT_SECTIONS.sub("", text))
         text = text.replace("whether it is worn, open, pulled aside or off", "and how it is worn")
         text = text.replace("and only the two or three props actually in frame", "and only the props the request names")
@@ -415,13 +415,6 @@ class PromptTests(unittest.TestCase):
         involved = oral.replace("female: never a penis", "female: vulva, vagina and clitoris, never a penis")
         self.assertEqual(self.prompts._grounded_h3(text, involved).count("vulva"), 2)
 
-    def test_h3_runaway_description_is_flagged_but_never_blocks(self):
-        long_text = "integrated_multimodal_description:\n[Shot 1] " + "She moves. " * 800 + "\n\noverall_soundscape:\nsoft\n\nnon_diegetic_music:\nN/A"
-        issues = self.prompts._h3_issues(long_text, "t2va", {"picture_count": 0, "video_count": 0, "audio": []})
-        self.assertTrue(any(issue.startswith("description too long") for issue in issues))
-        short = long_text.replace("She moves. " * 800, "She moves. " * 50)
-        self.assertEqual(self.prompts._h3_issues(short, "t2va", {"picture_count": 0, "video_count": 0, "audio": []}), [])
-
     def test_a_free_hand_is_not_negative_wording(self):
         self.assertEqual(self.prompts.validation_issues("Her left hand rests on the knee, the other hand free, fingers loose, eyes on the lens, hair down.", "krea2"), [])
         self.assertTrue(self.prompts._NEGATIVE.search("a watermark-free picture"))
@@ -454,11 +447,11 @@ class PromptTests(unittest.TestCase):
                 "other students staring at the girl and the teacher having sex, class in session, realistic size difference between the girl and the professor with him being older")
         edit = self.service.PROMPTFORGE_PRESETS["Krea 2 Edit"]["text"]
         fitted = self.prompts._fit_to_idea(edit, idea)
-        self.assertIn("usually 100-", fitted); self.assertNotIn("100-200 words", fitted)
+        self.assertIn("usually 140-", fitted); self.assertNotIn("100-200 words", fitted)
         self.assertNotIn("two or three props", fitted); self.assertNotIn("four arms, four legs", fitted)
         self.assertIn("small whole figures", fitted)
         short_idea = self.prompts._fit_to_idea(edit, "a girl on a bed")
-        self.assertIn("usually 100-280 words, more when the request has more facts", short_idea)
+        self.assertIn("usually 140-380 words, more when the request has more facts", short_idea)
         self.assertIn("four arms, four legs", short_idea)
         short = "The same person as the photo: petite build, long dark hair. She is nude on a desk, a man behind her, soft light, three-quarter view."
         missing = self.prompts._dropped_facts(idea, short)
@@ -491,13 +484,38 @@ class PromptTests(unittest.TestCase):
                 pass
         system = generate.call_args_list[0].kwargs["system_prompt"]
         self.assertIn("# Priority", system)
-        self.assertIn("never the request", system)
-        self.assertIn("a guide, not a limit", system)
-        self.assertNotIn("Hard limit", system)
+        self.assertIn("never replace one", system)
+        self.assertIn("There is no length limit", system)
+        self.assertNotIn("140-380", system)
         self.assertNotIn("POV means the camera IS", system)
-        self.assertIn("100-280", self.service.PROMPTFORGE_PRESETS["Krea 2 Edit"]["text"])
-        self.assertEqual(self.service.OUTPUT_CAPS["krea 2 edit"], 340)
+        self.assertIn("140-380", self.service.PROMPTFORGE_PRESETS["Krea 2 Edit"]["text"])
+        self.assertEqual(self.service.OUTPUT_CAPS["krea 2 edit"], 440)
 
+
+
+    def test_h3_clip_length_budgets_shots_and_flags_late_ones(self):
+        self.assertEqual([self.prompts._shot_budget(s) for s in (3, 5.17, 8, 10.1, 15)], [1, 1, 2, 3, 5])
+        self.assertIn("no timestamp", self.prompts._clip_length_line(5.17))
+        self.assertIn("exactly 10.12 seconds", self.prompts._clip_length_line(10.12))
+        text = "[Shot 1] a. [Shot 2] At 00:04.000, the camera cuts. [Shot 3] At 00:07.500, the camera cuts."
+        self.assertEqual(self.prompts._late_shots(text, 5.17), [7.5])
+        self.assertEqual(self.prompts._late_shots(text, 10), [])
+
+
+    def test_writer_length_is_uncapped_unless_the_user_sets_it(self):
+        context = {"family": "krea2", "picture_count": 0, "video_count": 0, "audio": [], "references": [], "descriptions": [], "contact_sheet": False, "duration": 5, "orientation": "portrait", "width": 832, "height": 1216, "writer_mode": "t2i", "mode": "t2i"}
+        counts = re.compile(r"\d+\s*-\s*\d+\s*(?:words|tags|environment|light tags|style tags)|Short idea: add \d")
+        for preset in self.service.PROMPTFORGE_PRESETS:
+            if not preset.startswith(("Krea", "MOSS", "Anima", "MiniMax", "Qwen")):
+                continue
+            family = dict(context, family="minimax_h3" if preset.startswith("MiniMax") else "anima" if preset.startswith("Anima") else "krea2")
+            free = self.prompts._system_text(self.service, preset, family, idea="a tree")
+            self.assertIsNone(counts.search(free), (preset, counts.search(free)))
+            self.assertIn("There is no length limit", free)
+            capped = self.prompts._system_text(self.service, preset, family, idea="a tree", length=240)
+            self.assertIn("At most 240", capped, preset)
+        node = self.prompts.ImagePromptWriter.define_schema().inputs[-1]
+        self.assertEqual((node.id, node.default, node.optional), ("length_words", 0, True))
 
 
 if __name__ == "__main__":

@@ -176,7 +176,8 @@
       "text": [
         "8",
         1
-      ]
+      ],
+      "length_words": 0
     },
     "_meta": {
       "title": "Prompt Writer"
@@ -304,7 +305,8 @@
       "pipe": [
         "14",
         0
-      ]
+      ],
+      "decode_with": "decode vae"
     },
     "_meta": {
       "title": "First Pass Preview"
@@ -364,7 +366,8 @@
         "17",
         1
       ],
-      "audio_from": "second pass"
+      "audio_from": "second pass",
+      "decode_with": "decode vae"
     },
     "_meta": {
       "title": "Decode"

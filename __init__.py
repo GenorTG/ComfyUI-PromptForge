@@ -525,14 +525,14 @@ def _land_text(text):
 
 OUTPUT_CAPS = {  # preset -> hard cap, in words (tags for Anima); MiniMax scales with video_seconds
     "enhance": 300,
-    "krea 2 t2i": 320,
-    "krea 2 edit": 340,
-    "krea 2 edit - two people": 340,
-    "moss image t2i": 440,
-    "moss image edit": 180,
+    "krea 2 t2i": 460,
+    "krea 2 edit": 440,
+    "krea 2 edit - two people": 400,
+    "moss image t2i": 580,
+    "moss image edit": 240,
     "qwen image t2i": 440,
     "qwen image edit": 240,
-    "anima tags": 150,
+    "anima tags": 200,
     "pony→natural": 600,
     "refine": 600,
     "technical specs": 600,
@@ -1952,8 +1952,8 @@ class PROMPTFORGE_PromptEnhancer:
     RETURN_NAMES = ("ENHANCED_PROMPT", "THINKING", "REQUEST")
     FUNCTION = "enhance"
     DESCRIPTION = ("Writes the prompt for the selected model family, with a hard output-length cap chosen "
-                   "automatically per family (Krea 220 words, MOSS 320 / 80 edit, Qwen 380 / 160 edit, Anima "
-                   "150 tags, H3 by clip length). Set length_words to override the cap. REQUEST returns the exact text sent to the writer.")
+                   "automatically per family (Krea 460 / 440 edit, MOSS 580 / 240 edit, Qwen 440 / 240 edit, Anima "
+                   "200 tags, H3 by clip length). Set length_words to override the cap. REQUEST returns the exact text sent to the writer.")
 
     @classmethod
     def VALIDATE_INPUTS(cls, enhancement_preset=None):
@@ -2000,7 +2000,7 @@ class PROMPTFORGE_PromptEnhancer:
                 "frame_info": ("STRING", {"default": "", "tooltip": "FRAME_INFO from the Empty Latent node. Tells the writer the target aspect ratio so it plans a composition that fits the frame."}),
                 "action": ("PROMPTFORGE_ACTION", {"tooltip": "From a PromptForge Action node: a pose, place, camera, light and outfit as a binding brief."}),
                 "use_action": ("BOOLEAN", {"default": True, "tooltip": "Off ignores the connected Action node and writes from your own text alone; use it for custom scenes while the node stays connected."}),
-                "length_words": ("INT", {"default": 0, "min": 0, "max": 10000, "tooltip": "Hard output cap in words (tags for Anima). 0 = automatic for the preset: Krea 220, Krea edit 220, MOSS 320, MOSS edit 80, Qwen 380, Qwen edit 160, Anima 150 tags, H3 750-900. Set a number to override."}),
+                "length_words": ("INT", {"default": 0, "min": 0, "max": 10000, "tooltip": "Hard output cap in words (tags for Anima). 0 = automatic for the preset: Krea 460, Krea edit 440, MOSS 580, MOSS edit 240, Qwen 440, Qwen edit 240, Anima 200 tags, H3 750-900. Set a number to override."}),
             },
         }
 

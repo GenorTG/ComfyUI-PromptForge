@@ -82,7 +82,6 @@ function targetOf(nodes, saved) {
 function applySettings(node, name, preset) {
   const graph = node.graph;
   const nodes = graph?._nodes || [];
-  const model = widget(node, "model");
   let written = 0;
   graph?.beforeChange?.();
   try {
@@ -111,9 +110,10 @@ function applySettings(node, name, preset) {
   if (status) {
     status.hidden = false;
     status.textContent = written
-      ? `applied "${name}" to ${baseOf(model?.value)}`
+      ? `applied "${name}" to ${baseOf(widget(node, node.promptforgeModelPresets.field)?.value)}`
       : `no replaceable settings in "${name}"`;
     status.title = preset.source || status.textContent;
+    node.promptforgeModelPresets.shownFor = widget(node, node.promptforgeModelPresets.field)?.value;
   }
 }
 
@@ -141,8 +141,9 @@ async function fetchProfile(node, current) {
 function refresh(node) {
   const controls = node.promptforgeModelPresets;
   if (!controls) return;
-  const presetsNode = node.graph?._nodes?.find((entry) => typeOf(entry) === PRESET_NODE);
-  const current = widget(node, "model")?.value || "";
+  // saved sets in a Presets node name image checkpoints only
+  const presetsNode = controls.field === "model" ? node.graph?._nodes?.find((entry) => typeOf(entry) === PRESET_NODE) : null;
+  const current = widget(node, controls.field)?.value || "";
   const entry = presetsNode && widget(presetsNode, "presets");
   // typing in the presets JSON is a plain textarea edit, hook its callback once
   if (entry && !entry.promptforgeModelPresetsBound) {
@@ -157,7 +158,7 @@ function refresh(node) {
   const store = entry?.value;
   const real = current && !current.startsWith("(") && !current.startsWith("<");
   if (real && controls.profileFor !== current && controls.fetching !== current) fetchProfile(node, current);
-  const profile = profileEntry(real && controls.profileFor === current ? controls.profile : null, current);
+  const profile = profileEntry(real && controls.profileFor === current ? controls.profile : null, current, controls.sampling);
   const matches = [...(profile ? [profile] : []), ...(store && real ? matchesFor(store, current) : [])];
   controls.matches = matches;
   controls.tools.hidden = !real;
@@ -173,8 +174,12 @@ function refresh(node) {
     controls.pick.replaceChildren(new Option("Choose a saved set…", ""), ...matches.map(([key]) => new Option(key, key)));
     controls.pick.value = "";
   }
-  // keep a fresh confirmation visible, drop a stale one
-  if (!matches.length) controls.status.hidden = true;
+  // keep a fresh confirmation visible; otherwise say whether this checkpoint has a profile at all
+  if (controls.field === "model") { if (!matches.length) controls.status.hidden = true; return; }
+  if (controls.shownFor === current || !real || controls.profileFor !== current) return;
+  controls.shownFor = current;
+  controls.status.hidden = false;
+  controls.status.textContent = matches.length ? matches[0][0] : "no profile for this model: set Sampling Settings, then Save as profile";
 }
 
 // Widget callbacks refresh directly; a redraw also catches node adds/removes,
@@ -184,7 +189,7 @@ function refreshIfChanged(node) {
   if (!controls) return;
   const presetsNode = node.graph?._nodes?.find((entry) => typeOf(entry) === PRESET_NODE);
   const store = presetsNode ? widget(presetsNode, "presets")?.value : null;
-  const model = widget(node, "model")?.value;
+  const model = widget(node, controls.field)?.value;
   const last = controls.signature;
   if (last && last.node === presetsNode && last.store === store && last.model === model) return;
   controls.signature = { node: presetsNode, store, model };
@@ -214,10 +219,9 @@ function watchGraph(node) {
   }
 }
 
-function bind(node) {
-  if (node.promptforgeModelPresets) return;
-  const row = node.widgets?.find((entry) => entry.name === "model_picker")?.element;
-  if (!row) return;
+// `row` holds the buttons; `field` names the checkpoint widget and `sampling` the node type the values go to
+function bind(node, row, field = "model", sampling = SAMPLING) {
+  if (node.promptforgeModelPresets || !row) return;
   style();
 
   const tools = element("span", { className: "pfmp-tools" });
@@ -243,7 +247,7 @@ function bind(node) {
   row.style.rowGap = "2px";
   row.append(tools, status);
 
-  node.promptforgeModelPresets = { tools, use, pick, forget, status, matches: [], signature: null, profile: null, profileFor: null, fetching: null, autoPending: false };
+  node.promptforgeModelPresets = { field, sampling, tools, use, pick, forget, status, matches: [], signature: null, profile: null, profileFor: null, fetching: null, autoPending: false };
 
   use.addEventListener("click", () => {
     const [name, preset] = node.promptforgeModelPresets.matches[0] || [];
@@ -254,12 +258,12 @@ function bind(node) {
     if (found) applySettings(node, ...found);
   });
   autoBox.addEventListener("change", () => { try { localStorage.setItem(AUTO_KEY, autoBox.checked ? "1" : "0"); } catch { /* per-viewer convenience only */ } });
-  const report = (text) => { status.hidden = false; status.textContent = text; status.title = text; };
+  const report = (text) => { controls().shownFor = widget(node, field)?.value; status.hidden = false; status.textContent = text; status.title = text; };
   save.addEventListener("click", async () => {
-    const current = widget(node, "model")?.value || "";
-    const target = targetOf(node.graph?._nodes || [], { type: SAMPLING });
+    const current = widget(node, field)?.value || "";
+    const target = targetOf(node.graph?._nodes || [], { type: sampling });
     if (!target) return report("no single Sampling Settings node in this workflow to read");
-    const settings = Object.fromEntries(FIELDS.get(SAMPLING).map((field) => [field, target.widgets?.find((entry) => entry.name === field)?.value]).filter(([, value]) => value != null));
+    const settings = Object.fromEntries(FIELDS.get(sampling).map((name) => [name, widget(target, name)?.value]).filter(([, value]) => value != null));
     const response = await api.fetchApi("/promptforge/v2/model-profile", { method: "POST", body: JSON.stringify({ model: current, settings }) });
     if (!response.ok) return report("could not save the profile");
     controls().profileFor = null;
@@ -267,7 +271,7 @@ function bind(node) {
     report(`saved ${settings.steps} steps, CFG ${settings.cfg}, ${settings.sampler_name} + ${settings.scheduler} for ${baseOf(current)}`);
   });
   forget.addEventListener("click", async () => {
-    const current = widget(node, "model")?.value || "";
+    const current = widget(node, field)?.value || "";
     await api.fetchApi(`/promptforge/v2/model-profile?model=${encodeURIComponent(current)}`, { method: "DELETE" });
     controls().profileFor = null;
     refresh(node);
@@ -281,7 +285,7 @@ function bind(node) {
   });
 
   // programmatic model writes (family filter, configure) do not touch the DOM
-  const model = widget(node, "model");
+  const model = widget(node, field);
   const callback = model.callback;
   model.callback = function () {
     const result = callback?.apply(this, arguments);
@@ -293,21 +297,7 @@ function bind(node) {
   refresh(node);
 }
 
-// The H3 model node is a plain combo: picking a checkpoint by hand applies its profile to the H3 Sampling Settings node.
-async function applyH3Profile(node) {
-  const current = widget(node, "model_name")?.value || "";
-  if (!autoOn() || !current || current.startsWith("<")) return;
-  let profile = null;
-  try {
-    const response = await api.fetchApi(`/promptforge/v2/model-profile?model=${encodeURIComponent(current)}`);
-    if (response.ok) profile = (await response.json()).profile;
-  } catch { return; }
-  const entry = profileEntry(profile, current, H3_SAMPLING);
-  if (!entry) return;
-  applySettings(node, ...entry);
-  app.extensionManager?.toast?.add?.({ severity: "info", summary: "Sampler profile applied", detail: `${entry[0]} for ${baseOf(current)}`, life: 3500 });
-}
-
+// The H3 model node is a plain combo, so its buttons get a row of their own; picking a checkpoint by hand applies its profile.
 app.registerExtension({
   name: "PromptForge.V2H3ModelProfiles",
   beforeRegisterNodeDef(nodeType, nodeData) {
@@ -315,12 +305,38 @@ app.registerExtension({
     const created = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
       const result = created?.apply(this, arguments);
-      const control = widget(this, "model_name");
-      if (control) {
-        const callback = control.callback;
-        control.callback = (...args) => { const value = callback?.apply(control, args); applyH3Profile(this); return value; };
-      }
+      const node = this;
+      const control = widget(node, "model_name");
+      if (!control || node.promptforgeModelPresets) return result;
+      const row = element("div");
+      row.style.cssText = "display:flex;gap:4px;width:100%;overflow:hidden";
+      row.addEventListener("pointerdown", (event) => event.stopPropagation());
+      node.addDOMWidget("model_profiles", "promptforge_v2", row, { serialize: false, getMinHeight: () => 52 });
+      bind(node, row, "model_name", H3_SAMPLING);
+      const callback = control.callback;
+      control.callback = function () {
+        node.promptforgeModelPresets.autoPending = true;
+        const value = callback?.apply(this, arguments);
+        refresh(node);
+        return value;
+      };
+      const configure = node.onConfigure;
+      node.onConfigure = function () {
+        const configured = configure?.apply(this, arguments);
+        requestAnimationFrame(() => refresh(node));
+        return configured;
+      };
       return result;
+    };
+    const draw = nodeType.prototype.onDrawForeground;
+    nodeType.prototype.onDrawForeground = function () {
+      refreshIfChanged(this);
+      return draw?.apply(this, arguments);
+    };
+    const removed = nodeType.prototype.onRemoved;
+    nodeType.prototype.onRemoved = function () {
+      unbind(this);
+      return removed?.apply(this, arguments);
     };
   },
 });
@@ -336,7 +352,7 @@ app.registerExtension({
       // the picker row comes from the model UI, which may not have run yet
       let tries = 0;
       const attach = () => {
-        bind(node);
+        bind(node, widget(node, "model_picker")?.element);
         if (!node.promptforgeModelPresets && ++tries < 40) requestAnimationFrame(attach);
       };
       attach();
@@ -345,7 +361,7 @@ app.registerExtension({
     // off-screen nodes never draw, so the draw hook is only a late fallback
     const draw = nodeType.prototype.onDrawForeground;
     nodeType.prototype.onDrawForeground = function () {
-      bind(this);
+      bind(this, widget(this, "model_picker")?.element);
       refreshIfChanged(this);
       return draw?.apply(this, arguments);
     };

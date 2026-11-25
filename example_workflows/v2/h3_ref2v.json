@@ -6,12 +6,12 @@
       "id": 1,
       "type": "PROMPTFORGE_V2_H3_MODEL",
       "pos": [
-        44,
+        45,
         76
       ],
       "size": [
         352,
-        298
+        362
       ],
       "flags": {},
       "order": 0,
@@ -102,7 +102,7 @@
       "type": "PROMPTFORGE_V2_LORA_STACK",
       "pos": [
         44,
-        430
+        490
       ],
       "size": [
         560,
@@ -334,8 +334,8 @@
         76
       ],
       "size": [
-        356,
-        264
+        425,
+        262
       ],
       "flags": {},
       "order": 4,
@@ -446,8 +446,8 @@
         76
       ],
       "size": [
-        330,
-        250
+        280,
+        162
       ],
       "flags": {},
       "order": 6,
@@ -517,7 +517,7 @@
       "type": "PROMPTFORGE_V2_WRITER_MODEL",
       "pos": [
         44,
-        1122
+        1182
       ],
       "size": [
         364,
@@ -727,7 +727,8 @@
           "presence_penalty": 0.4,
           "thinking": "off",
           "checks": "strict",
-          "retries": "1"
+          "retries": "1",
+          "length_words": 0
         }
       },
       "widgets_values": [
@@ -743,7 +744,8 @@
         0.4,
         "off",
         "strict",
-        "1"
+        "1",
+        0
       ],
       "color": "#4a7a35",
       "bgcolor": "#2c4421"
@@ -806,8 +808,8 @@
       "id": 12,
       "type": "PROMPTFORGE_V2_H3_SAMPLING_SETTINGS",
       "pos": [
-        2794,
-        396
+        2793,
+        389
       ],
       "size": [
         430,
@@ -875,8 +877,8 @@
       "id": 13,
       "type": "PROMPTFORGE_V2_H3_UPSCALE_SETTINGS",
       "pos": [
-        2794,
-        814
+        2793,
+        807
       ],
       "size": [
         422,
@@ -1033,8 +1035,8 @@
         1748
       ],
       "size": [
-        427,
-        318
+        399,
+        321
       ],
       "flags": {},
       "order": 14,
@@ -1129,8 +1131,8 @@
         1518
       ],
       "size": [
-        430,
-        122
+        619,
+        574
       ],
       "flags": {},
       "order": 15,
@@ -1160,13 +1162,15 @@
         "promptforge_v2_widget_values": {
           "enabled": true,
           "save": true,
-          "filename_prefix": "video/PromptForge/h3_ref2v_first_pass"
+          "filename_prefix": "video/PromptForge/h3_ref2v_first_pass",
+          "decode_with": "decode vae"
         }
       },
       "widgets_values": [
         true,
         true,
-        "video/PromptForge/h3_ref2v_first_pass"
+        "video/PromptForge/h3_ref2v_first_pass",
+        "decode vae"
       ],
       "color": "#7a3b8a",
       "bgcolor": "#3d2248"
@@ -1175,8 +1179,8 @@
       "id": 17,
       "type": "PROMPTFORGE_V2_H3_LATENT_UPSCALE",
       "pos": [
-        674,
-        1696
+        1333,
+        1520
       ],
       "size": [
         410,
@@ -1235,12 +1239,12 @@
       "id": 18,
       "type": "PROMPTFORGE_V2_H3_REFINE",
       "pos": [
-        674,
-        1846
+        1333,
+        1670
       ],
       "size": [
-        352,
-        114
+        353,
+        112
       ],
       "flags": {},
       "order": 17,
@@ -1301,12 +1305,12 @@
       "id": 19,
       "type": "PROMPTFORGE_V2_H3_DECODE",
       "pos": [
-        674,
-        2016
+        1329,
+        1854
       ],
       "size": [
         362,
-        210
+        300
       ],
       "flags": {},
       "order": 18,
@@ -1365,7 +1369,8 @@
           "output_device": "auto",
           "audio_normalize": false,
           "audio_gain_db": 0.0,
-          "audio_from": "second pass"
+          "audio_from": "second pass",
+          "decode_with": "decode vae"
         }
       },
       "widgets_values": [
@@ -1374,7 +1379,8 @@
         "auto",
         false,
         0.0,
-        "second pass"
+        "second pass",
+        "decode vae"
       ],
       "color": "#7a3b8a",
       "bgcolor": "#3d2248"
@@ -1525,8 +1531,8 @@
         1518
       ],
       "size": [
-        440,
-        474
+        859,
+        1028
       ],
       "flags": {},
       "order": 21,
@@ -1615,8 +1621,8 @@
       "id": 23,
       "type": "PROMPTFORGE_V2_PRESETS",
       "pos": [
-        2794,
-        2048
+        3678,
+        2142
       ],
       "size": [
         420,
@@ -1665,8 +1671,8 @@
       "id": 24,
       "type": "PROMPTFORGE_V2_RUN_INSPECT",
       "pos": [
-        2794,
-        2500
+        3671,
+        1521
       ],
       "size": [
         440,
@@ -2037,7 +2043,7 @@
         28,
         0,
         592,
-        1336
+        1396
       ],
       "color": "#2a4a6b",
       "font_size": 24,
@@ -2072,8 +2078,8 @@
       "bounding": [
         2778,
         0,
-        472,
-        1008
+        463,
+        996
       ],
       "color": "#6b5527",
       "font_size": 24,
@@ -2108,8 +2114,8 @@
       "bounding": [
         658,
         1442,
-        1572,
-        808
+        1567,
+        736
       ],
       "color": "#5a2f6b",
       "font_size": 24,
@@ -2132,8 +2138,8 @@
       "bounding": [
         2778,
         1442,
-        472,
-        1600
+        1345,
+        1120
       ],
       "color": "#2f5a6b",
       "font_size": 24,

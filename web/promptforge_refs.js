@@ -3,6 +3,7 @@ import { api } from "../../scripts/api.js";
 import { createLibrary } from "./promptforge_library.js";
 
 const NODE = "PROMPTFORGE_V2_REFERENCES_MANAGER";
+const CARD = "application/x-promptforge-reference"; // the drag type of a card being reordered
 const LANES = [["image", "Pictures", ".png,.jpg,.jpeg,.webp", "picture"], ["video", "Videos", "video/*", "video"], ["audio", "Voices", "audio/*", "voice"]];
 const widget = (node, name) => node.widgets?.find((entry) => entry.name === name);
 const element = (tag, props = {}) => Object.assign(document.createElement(tag), props);
@@ -92,13 +93,18 @@ function iconButton(glyph, title, action, danger = false) {
 function card(node, item, index, redraw) {
   const box = element("div");
   box.style.cssText = "display:flex;flex-direction:column;gap:4px;padding:5px;border-radius:8px;background:#0003;border:1px solid #fff2;min-width:0";
-  box.draggable = true;
-  box.addEventListener("dragstart", (event) => event.dataTransfer.setData("text/plain", String(index)));
-  box.addEventListener("dragover", (event) => event.preventDefault());
+  // a card drags only from its picture or its empty space: on text and controls the mouse selects as usual
+  box.addEventListener("pointerdown", (event) => { box.draggable = !event.target.closest("input, button, video, audio, [data-text]"); });
+  box.addEventListener("dragstart", (event) => { if (box.draggable) event.dataTransfer.setData(CARD, String(index)); });
+  box.addEventListener("dragend", () => { box.draggable = false; });
+  box.addEventListener("pointerup", () => { box.draggable = false; });
+  box.addEventListener("dragover", (event) => { if (event.dataTransfer.types.includes(CARD)) event.preventDefault(); });
   box.addEventListener("drop", (event) => {
+    const data = event.dataTransfer.getData(CARD);
+    if (!data) return;
     event.preventDefault();
-    const from = Number(event.dataTransfer.getData("text/plain"));
-    if (Number.isNaN(from) || from === index) return;
+    const from = Number(data);
+    if (from === index) return;
     const items = read(node);
     const [moved] = items.splice(from, 1);
     items.splice(from < index ? index - 1 : index, 0, moved);
@@ -155,20 +161,40 @@ function card(node, item, index, redraw) {
   });
 
   const file = element("div", { textContent: item.file, title: item.file });
-  file.style.cssText = "font:10px monospace;opacity:.55;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+  file.dataset.text = "";
+  file.style.cssText = "font:10px monospace;opacity:.55;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text";
 
-  box.append(thumb(item), tools, name, description, file);
+  const preview = thumb(item);
+  const swap = iconButton("⇄", "Replace this file; name and description stay", () => replace(node, index, item.kind, redraw));
+  swap.style.cssText += ";position:absolute;top:5px;right:5px;background:#000a;z-index:2";
+  preview.append(swap);
+  box.append(preview, tools, name, description, file);
   return box;
 }
 
-function pickFromLibrary(node, redraw) {
+function replace(node, index, kind, redraw) {
+  const set = (path) => {
+    const items = read(node);
+    items[index].file = path;
+    write(node, items);
+    redraw();
+  };
+  const picker = element("input", { type: "file", accept: LANES.find(([name]) => name === kind)[2] });
+  picker.addEventListener("change", async () => { if (picker.files[0]) set(await upload(picker.files[0])); });
+  if (kind !== "image") return picker.click();
+  const own = element("button", { textContent: "Upload a file…", type: "button" });
+  const close = openLibrary("Click the picture to use instead.", (name) => { set(name); close(); }, [own]);
+  own.addEventListener("click", () => { picker.addEventListener("change", close, { once: true }); picker.click(); });
+}
+
+function openLibrary(hint, onPick, extraControls = []) {
   const backdrop = element("div");
   backdrop.style.cssText = "position:fixed;inset:0;z-index:10001;background:#0009;display:flex;align-items:center;justify-content:center";
   const card = element("div");
   card.style.cssText = "width:min(1180px,95vw);height:min(800px,92vh);display:flex;flex-direction:column;padding:12px;box-sizing:border-box;background:var(--comfy-menu-bg,#222);border:1px solid #555;border-radius:8px";
   const bar = element("div");
   bar.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:7px";
-  const count = element("span", { textContent: "Click pictures to add them; Close when done." });
+  const count = element("span", { textContent: hint });
   const close = element("button", { textContent: "Close", type: "button" });
   close.style.cssText = "padding:7px 14px;font:13px sans-serif";
   bar.append(close, count);
@@ -177,29 +203,36 @@ function pickFromLibrary(node, redraw) {
   let library;
   const cleanup = () => { library?.destroy(); backdrop.remove(); };
   close.onclick = cleanup;
-  library = createLibrary(card, { current: "", onPick: (name) => {
+  library = createLibrary(card, { current: "", extraControls, onPick: (name) => onPick(name, count) });
+  backdrop.addEventListener("pointerdown", (event) => event.stopPropagation());
+  backdrop.addEventListener("click", (event) => { if (event.target === backdrop) cleanup(); });
+  document.body.append(backdrop);
+  return cleanup;
+}
+
+function pickFromLibrary(node, redraw) {
+  openLibrary("Click pictures to add them; Close when done.", (name, status) => {
     const items = read(node);
     items.push({ kind: "image", file: name, name: `image ${items.filter((item) => item.kind === "image").length + 1}`, description: "", enabled: true });
     write(node, items);
     redraw();
-    count.textContent = `Added ${name}. Click more or Close.`;
-  } });
-  backdrop.addEventListener("pointerdown", (event) => event.stopPropagation());
-  backdrop.addEventListener("click", (event) => { if (event.target === backdrop) cleanup(); });
-  document.body.append(backdrop);
+    status.textContent = `Added ${name}. Click more or Close.`;
+  });
 }
 
 function build(node) {
   const root = element("div");
   root.style.cssText = "position:relative;width:100%;height:100%;min-width:0;overflow:hidden;contain:layout paint;border-radius:8px;background:linear-gradient(180deg,#0006,#0002)";
   const list = element("div");
-  list.style.cssText = "position:absolute;inset:0;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:8px;color:var(--input-text);font:12px sans-serif";
+  list.style.cssText = "position:absolute;inset:0;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:8px;color:var(--input-text);font:12px sans-serif;user-select:text";
   root.append(list);
   root.addEventListener("pointerdown", (event) => event.stopPropagation());
   root.addEventListener("wheel", (event) => event.stopPropagation());
-  root.addEventListener("dragover", (event) => event.preventDefault());
+  // the browser's own right-click menu (copy, paste) instead of the graph's
+  root.addEventListener("contextmenu", (event) => event.stopPropagation());
+  root.addEventListener("dragover", (event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); });
   root.addEventListener("drop", async (event) => {
-    if (event.dataTransfer.getData("text/plain")) return;
+    if (!event.dataTransfer.files.length) return;
     event.preventDefault();
     const items = read(node);
     for (const file of event.dataTransfer.files || []) {

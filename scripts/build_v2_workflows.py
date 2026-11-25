@@ -14,7 +14,8 @@ GROUPS = ["01 Models & LoRAs", "02 Intent & References", "03 Prompt & Review",
           "05 Performance & Preview"]
 GAP = 56
 SIDE_GAP = 40
-MAX_STACK = 1500  # a group taller than this wraps into a second column
+GROUP_GAP = 38
+ROW_GAP = 106
 # stage -> (group, node title, node body): one hue per pipeline stage
 GROUP_COLORS = {"01": ("#2a4a6b", "#2b5278", "#1d3347"), "02": ("#27564f", "#2a6b5f", "#1b403a"),
                 "03": ("#3a5a2a", "#4a7a35", "#2c4421"), "04": ("#6b5527", "#8a6d2f", "#4a3b1b"),
@@ -22,6 +23,8 @@ GROUP_COLORS = {"01": ("#2a4a6b", "#2b5278", "#1d3347"), "02": ("#27564f", "#2a6
                 "07": ("#5a2f6b", "#7a3b8a", "#3d2248"), "08": ("#4a4a4a", "#5a5a5a", "#333333"),
                 "09": ("#2f5a6b", "#3b7a8a", "#223d48")}
 NODE_SIZES = json.loads((Path(__file__).with_name("node_sizes.json")).read_text())
+# geometry of the two hand-arranged workflows, and the column order every other template follows
+LAYOUT = json.loads((Path(__file__).with_name("layout.json")).read_text())
 
 
 def write_json(path, value):
@@ -128,49 +131,66 @@ class Graph:
             self.pipe = (node_id, info["output"].index(PIPE))
         return node_id
 
-    def node_size(self, node):
+    def node_size(self, role, node):
+        """The hand-arranged size of this role (own family first), else the measured default."""
+        guides = ["h3_ref2v", "krea_ref2i_multi"] if self.family == "h3" else ["krea_ref2i_multi", "h3_ref2v"]
+        for guide in guides:
+            if role in LAYOUT["exact"][guide]["nodes"]:
+                return tuple(LAYOUT["exact"][guide]["nodes"][role][2:])
+        if role in ("first_frame", "last_frame"):
+            return tuple(LAYOUT["exact"]["krea_ref2i_multi"]["nodes"]["reference_1"][2:])
         return tuple(NODE_SIZES[node["type"]])
 
+    def place(self, node, label, x, y, size):
+        node["pos"], node["size"] = [x, y], list(size)
+        _, node["color"], node["bgcolor"] = GROUP_COLORS[label[:2]]
+
+    def group(self, label, bounding):
+        return {"title": label, "bounding": list(bounding), "color": GROUP_COLORS[label[:2]][0], "font_size": 24, "flags": {}}
+
     def layout(self):
-        groups, plans = [], []
-        ordered_groups = [GROUPS[i] for i in (0, 1, 2, 3, 8, 4, 5, 6, 7)]
-        for index, label in enumerate(ordered_groups):
-            members = [self.nodes[n - 1] for n, group in self.roles.values() if group == label]
+        by_role = {role: (self.nodes[n - 1], group) for role, (n, group) in self.roles.items()}
+        exact = LAYOUT["exact"].get(self.name)
+        if exact and set(exact["nodes"]) == set(by_role):
+            for role, (node, label) in by_role.items():
+                x, y, w, h = exact["nodes"][role]
+                self.place(node, label, x, y, (w, h))
+            return [self.group(label, bounding) for label, bounding in exact["groups"].items()]
+        plans = {}
+        for label in GROUPS:
+            members = [role for role, (_, group) in by_role.items() if group == label]
             if not members:
                 continue
-            stacks = [[]]
-            for node in members:
-                size = self.node_size(node)
-                if stacks[-1] and sum(h + GAP for _, (_, h) in stacks[-1]) + size[1] > MAX_STACK:
-                    stacks.append([])
-                stacks[-1].append((node, size))
-            widths = [max(width for _, (width, _) in stack) for stack in stacks]
-            plans.append((index, label, stacks, widths, sum(widths) + SIDE_GAP * (len(stacks) - 1),
-                          max(sum(h + GAP for _, (_, h) in stack) for stack in stacks)))
-
-        columns = [0] * 5
-        for index, _, _, _, width, _ in plans:
-            columns[index % 5] = max(columns[index % 5], width)
-        offsets, x = {}, 44
-        for column, width in enumerate(columns):
-            offsets[column] = x
-            x += width + 70
-        row_tops = {0: 0, 1: max((height for index, _, _, _, _, height in plans if index < 5), default=0) + 150}
-
-        for index, label, stacks, widths, width, height in plans:
-            column, row = index % 5, index // 5
-            left, top = offsets[column], row_tops[row]
-            color, node_color, body = GROUP_COLORS[label[:2]]
-            x = left
-            for stack, stack_width in zip(stacks, widths):
+            wanted = LAYOUT["columns"]["h3" if self.family == "h3" else "image"][label[:2]]
+            columns = [[role for role in column if role in members] for column in wanted]
+            columns = [column for column in columns if column]
+            missing = [role for role in members if not any(role in column for column in columns)]
+            if missing:
+                raise ValueError(f"{self.name}: layout.json has no column for {missing}")
+            sized = [[(role, self.node_size(role, by_role[role][0])) for role in column] for column in columns]
+            widths = [max(size[0] for _, size in column) for column in sized]
+            height = max(sum(size[1] for _, size in column) + GAP * (len(column) - 1) for column in sized)
+            plans[label[:2]] = (label, sized, widths, sum(widths) + SIDE_GAP * (len(widths) - 1) + 32, 76 + height + 24)
+        # groups 01-05 form the top row; 06-09 sit under 01-04, and the last one may reach under 05
+        lefts, x = [], 28
+        for column in range(5):
+            top, bottom = plans.get(f"0{column + 1}"), plans.get(f"0{column + 6}")
+            lefts.append(x)
+            widths = [plan[3] for plan in (top, None if column == 3 and "05" in plans else bottom) if plan]
+            if widths:
+                x += max(widths) + GROUP_GAP
+        second = max(plan[4] for key, plan in plans.items() if key < "06") + ROW_GAP
+        groups = []
+        for key, (label, sized, widths, width, height) in plans.items():
+            left, top = lefts[(int(key) - 1) % 5], second if key >= "06" else 0
+            x = left + 16
+            for column, column_width in zip(sized, widths):
                 y = top + 76
-                for node, size in stack:
-                    node["pos"], node["size"] = [x, y], list(size)
-                    node["color"], node["bgcolor"] = node_color, body
+                for role, size in column:
+                    self.place(by_role[role][0], label, x, y, size)
                     y += size[1] + GAP
-                x += stack_width + SIDE_GAP
-            groups.append({"title": label, "bounding": [left - 16, top, columns[column] + 32, height + 76 - GAP + 24],
-                           "color": color, "font_size": 24, "flags": {}})
+                x += column_width + SIDE_GAP
+            groups.append(self.group(label, (left, top, width, height)))
         return groups
 
     def validate(self):

@@ -10,6 +10,9 @@ const H3_NODE = "PROMPTFORGE_V2_H3_FORMAT";
 const H3_UPSCALE = "PROMPTFORGE_V2_H3_UPSCALE_SETTINGS";
 const H3_LATENT_UPSCALE = "PROMPTFORGE_V2_H3_LATENT_UPSCALE";
 const H3_REFERENCES = "PROMPTFORGE_V2_H3_REFERENCES";
+const H3_MODEL = "PROMPTFORGE_V2_H3_MODEL";
+const H3_DECODE = "PROMPTFORGE_V2_H3_DECODE";
+const H3_FIRST_PASS = "PROMPTFORGE_V2_H3_FIRST_PASS_PREVIEW";
 
 // name: width, height, aspect, orientation. The backend carries the same table; preset maths derives the megapixels.
 const table = (rows) => Object.fromEntries(rows.map(([name, width, height, aspect, orientation]) =>
@@ -224,6 +227,25 @@ function h3FormatUI(node) {
   return refresh;
 }
 
+// which VAE file turns the latent into frames, read from the H3 Model node and this node's own switch
+function decodeLine(node) {
+  const models = node.graph?._nodes?.filter((entry) => typeOf(entry) === H3_MODEL) || [];
+  if (models.length !== 1) return "";
+  const main = value(models[0], "vae_name"), chosen = value(models[0], "decode_vae_name");
+  const separate = value(node, "decode_with") !== "video vae" && chosen !== "same";
+  const name = String(separate ? chosen : main).split("/").pop();
+  return `${typeOf(node) === H3_FIRST_PASS ? "First pass" : "Final video"} decodes with ${separate ? "the decode VAE" : "the video VAE"}:\n${name}`
+    + (!separate && linked(node, ["vae"]) ? "\n(a different VAE wired into vae takes its place)" : "");
+}
+
+function decodeUI(node) {
+  const root = panel(node, "decode_vae_line", 40);
+  const line = sizeLine(node, () => decodeLine(node));
+  line.line.style.overflowWrap = "anywhere";
+  root.append(line.line);
+  return line.update;
+}
+
 function formatUI(node) {
   const sizing = widget(node, "sizing");
   const preset = widget(node, "preset");
@@ -306,6 +328,15 @@ function formatUI(node) {
 app.registerExtension({
   name: "PromptForge.V2Format",
   beforeRegisterNodeDef(nodeType, nodeData) {
+    if (nodeData.name === H3_DECODE || nodeData.name === H3_FIRST_PASS) {
+      const created = nodeType.prototype.onNodeCreated;
+      nodeType.prototype.onNodeCreated = function () {
+        const result = created?.apply(this, arguments);
+        if (!this.promptforgeDecodeLine) this.promptforgeDecodeLine = decodeUI(this);
+        return result;
+      };
+      return;
+    }
     if (nodeData.name === H3_NODE) {
       const created = nodeType.prototype.onNodeCreated;
       nodeType.prototype.onNodeCreated = function () {
