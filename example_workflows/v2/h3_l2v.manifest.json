@@ -146,7 +146,7 @@
   "notes": [
     "Fill blank prompt text before queueing.",
     "Raw mode skips writer execution; idea/action needs Writer Model.",
-    "RIFE is disabled by its enabled widget; enabling it requires a selected interpolation checkpoint.",
+    "0.5 MP first pass, 2x latent upscale with a refine pass, then RIFE x2; each step has an enabled switch.",
     "H3 baseline from the legacy workflow and quality notes: euler/beta57, 8 steps, CFG 1, shifts 0/0; second pass er_sde, 3 steps, start sigma 0.9035; the second pass is the Upscale Settings switch."
   ],
   "schema_sha256": {

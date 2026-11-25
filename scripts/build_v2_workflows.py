@@ -242,7 +242,7 @@ class Graph:
         if "multipart" in self.name:
             notes.append("Fill both blank parts_json entries; each part must have explicit text and positive duration.")
         if self.family == "h3":
-            notes.append("RIFE is disabled by its enabled widget; enabling it requires a selected interpolation checkpoint.")
+            notes.append("0.5 MP first pass, 2x latent upscale with a refine pass, then RIFE x2; each step has an enabled switch.")
         baselines = {"krea2": "Krea 2 turbo baseline: euler/simple, 10 steps, CFG 1, NAG off; verify against the selected checkpoint.",
                      "moss_image": "MOSS baseline from the legacy workflow: er_sde/bong_tangent, 8 steps, CFG 1 for text to image.",
                      "anima": "Anima baseline from the model card: er_sde/simple, 30 steps, CFG 4.5.",
@@ -372,7 +372,7 @@ def h3_graph(catalogue, name, mode, multipart=False):
     model_out, clip_out = (loras, 1), (loras, 2)
     graph.add("PERFORMANCE", "performance", GROUPS[8])
     graph.add("PREVIEW_SETTINGS", "preview", GROUPS[8], {"enabled": True})
-    graph.add("H3_FORMAT", "format", GROUPS[3], {"width": 848, "height": 480, "seconds": 5.0})
+    graph.add("H3_FORMAT", "format", GROUPS[3], {"width": 960, "height": 544, "seconds": 5.0, "aspect": "16:9", "megapixels": 0.5})
     if mode in ("i2v", "fl2v"):
         graph.add("LOAD_IMAGE", "first_frame", GROUPS[1], {"filename": "<INPUT_FIRST_FRAME.png>", "role": "first_frame"})
     if mode in ("l2v", "fl2v"):
@@ -387,7 +387,7 @@ def h3_graph(catalogue, name, mode, multipart=False):
     graph.add("H3_SAMPLING_SETTINGS", "sampling_first_and_refine", GROUPS[3])
     upscale_model = "<SELECT_H3_FP32_LATENT_UPSCALER>"
     graph.add("H3_UPSCALE_SETTINGS", "upscale_settings", GROUPS[3],
-              {"upscale_model": upscale_model, "enabled": False, "mode": "megapixels", "percent": 200.0,
+              {"upscale_model": upscale_model, "enabled": True, "mode": "percent simplified", "percent": 200.0,
                "megapixels": 1.0})
     result = None
     if multipart:
@@ -417,7 +417,7 @@ def h3_graph(catalogue, name, mode, multipart=False):
         if mode == "continue":
             result = graph.add("H3_JOIN", "join_source", GROUPS[5], {"overlap_frames": 22},
                                {"previous": (source_clip, 0), "images": (decoded, 1), "audio": (decoded, 2)})
-    interpolated = graph.add("FRAME_INTERPOLATE", "optional_rife", GROUPS[6], {"enabled": False})
+    interpolated = graph.add("FRAME_INTERPOLATE", "optional_rife", GROUPS[6], {"enabled": True, "multiplier": 2})
     cleaned = graph.add("VIDEO_CLEANUP", "optional_cleanup", GROUPS[6],
                         {"enabled": False, "denoise_quality": "Ultra", "deblur_quality": "Low"},
                         connections={"images": (interpolated, 1)})

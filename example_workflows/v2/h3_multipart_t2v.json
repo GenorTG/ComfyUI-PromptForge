@@ -364,20 +364,20 @@
         "Node name for S&R": "PROMPTFORGE_V2_H3_FORMAT",
         "promptforge_role": "format",
         "promptforge_v2_widget_values": {
-          "width": 848,
-          "height": 480,
+          "width": 960,
+          "height": 544,
           "seconds": 5.0,
-          "aspect": "custom",
-          "megapixels": 1.0,
+          "aspect": "16:9",
+          "megapixels": 0.5,
           "orientation": "as selected"
         }
       },
       "widgets_values": [
-        848,
-        480,
+        960,
+        544,
         5.0,
-        "custom",
-        1.0,
+        "16:9",
+        0.5,
         "as selected"
       ],
       "color": "#8a6d2f",
@@ -854,16 +854,16 @@
         "promptforge_role": "upscale_settings",
         "promptforge_v2_widget_values": {
           "upscale_model": "<SELECT_H3_FP32_LATENT_UPSCALER>",
-          "enabled": false,
-          "mode": "megapixels",
+          "enabled": true,
+          "mode": "percent simplified",
           "percent": 200.0,
           "megapixels": 1.0
         }
       },
       "widgets_values": [
         "<SELECT_H3_FP32_LATENT_UPSCALER>",
-        false,
-        "megapixels",
+        true,
+        "percent simplified",
         200.0,
         1.0
       ],
@@ -1157,7 +1157,7 @@
         "Node name for S&R": "PROMPTFORGE_V2_FRAME_INTERPOLATE",
         "promptforge_role": "optional_rife",
         "promptforge_v2_widget_values": {
-          "enabled": false,
+          "enabled": true,
           "multiplier": 2,
           "model_name": "rife_v4.26.safetensors",
           "batch_size": 0,
@@ -1166,7 +1166,7 @@
         }
       },
       "widgets_values": [
-        false,
+        true,
         2,
         "rife_v4.26.safetensors",
         0,

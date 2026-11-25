@@ -81,11 +81,11 @@
   "5": {
     "class_type": "PROMPTFORGE_V2_H3_FORMAT",
     "inputs": {
-      "width": 848,
-      "height": 480,
+      "width": 960,
+      "height": 544,
       "seconds": 5.0,
-      "aspect": "custom",
-      "megapixels": 1.0,
+      "aspect": "16:9",
+      "megapixels": 0.5,
       "orientation": "as selected",
       "pipe": [
         "4",
@@ -241,8 +241,8 @@
     "class_type": "PROMPTFORGE_V2_H3_UPSCALE_SETTINGS",
     "inputs": {
       "upscale_model": "<SELECT_H3_FP32_LATENT_UPSCALER>",
-      "enabled": false,
-      "mode": "megapixels",
+      "enabled": true,
+      "mode": "percent simplified",
       "percent": 200.0,
       "megapixels": 1.0,
       "pipe": [
@@ -400,7 +400,7 @@
   "20": {
     "class_type": "PROMPTFORGE_V2_FRAME_INTERPOLATE",
     "inputs": {
-      "enabled": false,
+      "enabled": true,
       "multiplier": 2,
       "model_name": "rife_v4.26.safetensors",
       "batch_size": 0,
