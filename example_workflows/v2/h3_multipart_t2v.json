@@ -60,6 +60,12 @@
           "type": "VAE",
           "links": [],
           "slot_index": 4
+        },
+        {
+          "name": "decode_vae",
+          "type": "VAE",
+          "links": [],
+          "slot_index": 5
         }
       ],
       "title": "Model",

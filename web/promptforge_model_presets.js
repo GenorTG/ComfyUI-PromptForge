@@ -7,17 +7,12 @@ const PRESET_NODE = "PROMPTFORGE_V2_PRESETS";
 const SAMPLING = "PROMPTFORGE_V2_IMAGE_SAMPLING_SETTINGS";
 const H3_NODE = "PROMPTFORGE_V2_H3_MODEL";
 const H3_SAMPLING = "PROMPTFORGE_V2_H3_SAMPLING_SETTINGS";
-const ENCODE = "PROMPTFORGE_V2_IMAGE_ENCODE";
-const FORMAT = "PROMPTFORGE_V2_IMAGE_FORMAT";
 const TAG = /\[[a-z]+\]\s+/gi;
 
-// Only these snapshot fields are written. Format keeps `sizing` and `preset`
-// first because the preset widget rewrites the size widgets from its own table.
+// A model only brings its sampling values: size, format, upscalers and prompts stay the user's.
 const FIELDS = new Map([
   [SAMPLING, ["steps", "cfg", "sampler_name", "scheduler"]],
   [H3_SAMPLING, ["steps", "cfg", "sampler_name", "scheduler", "shift_video", "shift_audio", "refine_steps", "refine_cfg", "refine_sampler", "refine_scheduler", "start_sigma"]],
-  [ENCODE, ["clip_skip"]],
-  [FORMAT, ["sizing", "preset", "aspect", "megapixels", "orientation", "width", "height"]],
 ]);
 
 const CSS = `
@@ -107,7 +102,6 @@ function applySettings(node, name, preset) {
         control.callback?.(value);
         written++;
       }
-      target.promptforgeV2Format?.();
     }
   } finally { graph?.afterChange?.(); }
 

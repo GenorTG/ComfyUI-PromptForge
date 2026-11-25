@@ -132,8 +132,8 @@ class SingleLora(io.ComfyNode):
         return nodes_schema("SINGLE", "LORA", "Single LoRA", inputs=[Pipe.Input("pipe", optional=True),
                                  io.Model.Input("model", optional=True), io.Clip.Input("clip", optional=True),
                                  io.Combo.Input("lora_name", options=["(none)"] + folder_paths.get_filename_list("loras")),
-                                 io.Boolean.Input("enabled", default=True), io.Float.Input("model_strength", default=1.0, min=-20, max=20, step=0.05),
-                                 io.Float.Input("clip_strength", default=1.0, min=-20, max=20, step=0.05),
+                                 io.Boolean.Input("enabled", default=True), io.Float.Input("model_strength", default=1.0, min=-10, max=10, step=0.05),
+                                 io.Float.Input("clip_strength", default=1.0, min=-10, max=10, step=0.05),
                                  io.Boolean.Input("mlp_only", default=False, optional=True, tooltip="Keep only the feed-forward layers of the LoRA. For a LoRA trained on a base model whose attention would damage a fine-tune."),
                                  io.Int.Input("max_rank", default=0, min=0, max=512, optional=True, tooltip="Cut the LoRA to this many strongest directions per layer. 0 keeps its own rank.")],
                          outputs=[Pipe.Output(), io.Model.Output("model"), io.Clip.Output("clip")])

@@ -60,7 +60,7 @@ class H3Model(io.ComfyNode):
             io.Combo.Input("optimize_for", options=["balanced", "quality", "speed"], default="balanced"),
             Pipe.Input("pipe", optional=True)],
             [Pipe.Output("pipe"), io.Model.Output("model"), io.Clip.Output("clip"), io.Vae.Output("vae"),
-             io.Vae.Output("audio_vae")])
+             io.Vae.Output("audio_vae"), io.Vae.Output("decode_vae", tooltip="The decode VAE, or the video VAE when decode_vae_name is same.")])
 
     @classmethod
     def execute(cls, model_name, clip_name, vae_name, audio_vae_name, decode_vae_name="same", weight_dtype="default", optimize_for="balanced", pipe=None):
@@ -73,7 +73,7 @@ class H3Model(io.ComfyNode):
         result = evolve(pipe, section="models", settings={"model": model_name, "clip": clip_name, "vae": vae_name,
             "audio_vae": audio_vae_name, "decode_vae": decode_vae_name, "weight_dtype": weight_dtype, "optimize_for": optimize_for},
             artifacts={"model": model, "clip": clip, "vae": vae, "audio_vae": audio_vae, "decode_vae": decoder}, invalidate=DIRTY)
-        return io.NodeOutput(result, model, clip, vae, audio_vae)
+        return io.NodeOutput(result, model, clip, vae, audio_vae, decoder)
 
 
 class H3Format(io.ComfyNode):

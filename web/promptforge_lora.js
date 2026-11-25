@@ -31,13 +31,17 @@ function el(tag, style = {}, props = {}) {
 const INPUT_STYLE = { background: "var(--comfy-input-bg)", color: "var(--input-text)", border: "1px solid var(--border-color)", borderRadius: "3px", padding: "1px 4px", boxSizing: "border-box" };
 
 function numberInput(value, onChange, { width = "68px", placeholder = "" } = {}) {
-  const input = el("input", { ...INPUT_STYLE, width, flex: "0 0 auto" }, { type: "number", step: 0.05, value: value ?? "", placeholder });
-  input.addEventListener("change", () => onChange(input.value === "" ? null : Number(input.value)));
+  const input = el("input", { ...INPUT_STYLE, width, flex: "0 0 auto" }, { type: "number", min: -10, max: 10, step: 0.05, value: value ?? "", placeholder });
+  const bounded = (next) => Math.max(-10, Math.min(10, next));
+  input.addEventListener("change", () => {
+    if (input.value !== "") input.value = bounded(Number(input.value));
+    onChange(input.value === "" ? null : Number(input.value));
+  });
   // the wheel nudges by 0.05 instead of zooming the canvas
   input.addEventListener("wheel", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    const next = Math.round(((Number(input.value) || 0) + (event.deltaY < 0 ? 0.05 : -0.05)) * 100) / 100;
+    const next = bounded(Math.round(((Number(input.value) || 0) + (event.deltaY < 0 ? 0.05 : -0.05)) * 100) / 100);
     input.value = next;
     onChange(next);
   }, { passive: false });

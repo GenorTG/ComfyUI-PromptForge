@@ -80,6 +80,9 @@ const widget = (node, name) => node.widgets?.find((entry) => entry.name === name
 const text = (value) => value == null || value === "" ? "" : String(value);
 const numeric = (value, fallback) => value == null || value === "" || !Number.isFinite(Number(value)) ? fallback : Number(value);
 
+const STRENGTH = [-10, 10];
+const bounded = (value) => Math.max(STRENGTH[0], Math.min(STRENGTH[1], value));
+
 function numberInput(value, onChange, placeholder, clamp) {
   const input = el("input", { type: "number", step: 0.05, value: value ?? "", placeholder: placeholder || "", title: placeholder || "" }, {});
   input.className = "pflora-num";
@@ -115,8 +118,8 @@ function normalize(row) {
 }
 function canonical(row) {
   const { on, model, clip, random, min, max, ...rest } = row;
-  const strength = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
-  const edge = (value, fallback) => Math.max(-2, Math.min(2, numeric(value, fallback)));
+  const strength = (value, fallback) => bounded(Number.isFinite(Number(value)) ? Number(value) : fallback);
+  const edge = (value, fallback) => bounded(numeric(value, fallback));
   const low = edge(min, 0.6);
   const high = edge(max, 1);
   return {
@@ -661,12 +664,12 @@ function buildUI(node) {
       range.className = "pflora-num pflora-range";
       const sync = () => { range.value = `${values.min} – ${values.max}`; };
       const set = (key) => (value) => {
-        values[key] = Math.max(-2, Math.min(2, value ?? (key === "min" ? 0.6 : 1)));
+        values[key] = bounded(value ?? (key === "min" ? 0.6 : 1));
         edit(node, (items) => { items[index][key] = values[key]; }, false);
         sync();
       };
-      const low = numberInput(values.min, set("min"), "min", [-2, 2]);
-      const high = numberInput(values.max, set("max"), "max", [-2, 2]);
+      const low = numberInput(values.min, set("min"), "min", STRENGTH);
+      const high = numberInput(values.max, set("max"), "max", STRENGTH);
       low.className = "pflora-num pflora-range-num";
       high.className = "pflora-num pflora-range-num";
       const order = () => {
@@ -682,8 +685,8 @@ function buildUI(node) {
       line.append(low, high, range);
     } else {
       line.append(
-        numberInput(item.model_strength, (value) => edit(node, (items) => { items[index].model_strength = value ?? 1; }), "model"),
-        numberInput(item.clip_strength, (value) => edit(node, (items) => { items[index].clip_strength = value; }), "= model"),
+        numberInput(item.model_strength, (value) => edit(node, (items) => { items[index].model_strength = value ?? 1; }), "model", STRENGTH),
+        numberInput(item.clip_strength, (value) => edit(node, (items) => { items[index].clip_strength = value; }), "= model", STRENGTH),
       );
     }
     const layers = el("select", { title: "Layers of this LoRA to use. Feed-forward only is the soft patch for a LoRA trained on another base model: it keeps the motion and concept and leaves the attention alone." }, {});

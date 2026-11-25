@@ -111,15 +111,6 @@ function formatUI(node) {
     return Object.hasOwn(FAMILY_PREFIX, value) ? value : FAMILY_DEFAULT;
   };
   const options = () => mode() === "generic" ? Object.keys(GENERIC) : Object.keys(PRESETS).filter((name) => name.startsWith(FAMILY_PREFIX[family()]));
-  const chosen = () => {
-    const names = options();
-    if (preset?.options) preset.options.values = names;
-    if (names.includes(preset?.value)) return;
-    if (!preset) return;
-    preset.value = names[0];
-    // only write the preset into the size widgets while it is the active source
-    if (mode() === "presets" || mode() === "generic") preset.callback?.(preset.value);
-  };
   const apply = (name) => {
     const entry = PRESETS[name] || GENERIC[name];
     if (!entry) return;
@@ -141,7 +132,9 @@ function formatUI(node) {
       sizing.value = value;
       sizing.callback?.(value);
       refresh();
-      if (value === "presets" || value === "generic") apply(preset?.value);
+      if (value !== "presets" && value !== "generic") return;
+      if (preset && !options().includes(preset.value)) preset.value = options()[0];
+      apply(preset?.value);
     });
   });
 
@@ -156,7 +149,8 @@ function formatUI(node) {
     hide(widget(node, "orientation"), active !== "megapixels");
     hide(widget(node, "width"), active !== "custom");
     hide(widget(node, "height"), active !== "custom");
-    chosen();
+    // a family change only changes the list: the picked size stays until the user picks another
+    if (preset?.options) preset.options.values = options();
     modes.paint();
     node.setDirtyCanvas?.(true, true);
   }
