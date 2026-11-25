@@ -88,6 +88,9 @@ class PromptTests(unittest.TestCase):
         kiss = base("they kiss on a balcony")
         self.assertNotIn("- Penetration:", kiss)
         self.assertNotIn("- Oral and hand acts:", kiss)
+        self.assertIn("use the noun the user used", kiss)
+        self.assertIn("The girl from the second photo:", kiss)
+        self.assertNotIn('by "the man" or "the woman"', kiss)
 
     def test_writer_auto_preset_stays_silent(self):
         pipe = self.prompts.ImagePrompt.execute(self.contracts.new_pipe("anima"), source="idea", text="garden").args[0]

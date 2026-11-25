@@ -120,6 +120,22 @@ class H3Tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Resume"):
             self.h3.H3Sequence.execute(changed, resume=first)
 
+    def test_sequence_upscale_runs_the_refine_pass_for_every_part(self):
+        from comfy_api.latest import io
+        base = self.h3.H3SamplingSettings.execute(self.pipe(), seed=10).args[0]
+        base = self.h3.H3Parts.execute(base, '[{"text":"First tree","seconds":0.2},{"text":"Second tree","seconds":0.2}]').args[0]
+        for enabled, expected in ((False, [(10, None), (11, None)]), (True, [(10, None), (17, .9035), (11, None), (18, .9035)])):
+            with self.subTest(enabled=enabled):
+                pipe = self.h3.H3UpscaleSettings.execute(base, upscale_model="m", enabled=enabled).args[0]
+                calls = []
+                def sample(p, **kwargs):
+                    calls.append((kwargs["seed"], kwargs.get("start_sigma")))
+                    return p
+                with patch.object(self.h3, "sample", side_effect=sample), patch.object(self.h3, "decode", side_effect=lambda p, **kw: self.decoded(p)), patch.object(self.h3.H3LatentUpscale, "execute", side_effect=lambda p: io.NodeOutput(p)) as upscale:
+                    self.h3.H3Sequence.execute(pipe)
+                self.assertEqual(calls, expected)
+                self.assertEqual(upscale.call_count, 2 if enabled else 0)
+
     def test_sequence_idea_action_writer_context_and_lazy_dependency(self):
         from comfy_api.latest import io
         pipe = self.h3.H3SamplingSettings.execute(self.pipe()).args[0]

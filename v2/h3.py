@@ -359,7 +359,8 @@ class H3SamplingSettings(io.ComfyNode):
     @classmethod
     def define_schema(cls):
         inputs = sampling_inputs()
-        inputs += [io.Int.Input("refine_steps", default=3, min=1, max=1000),
+        inputs += [io.Int.Input("refine_steps", default=3, min=1, max=1000,
+                tooltip="The refine_* inputs and start_sigma drive the second pass, which runs only when Upscale Settings is enabled."),
             io.Float.Input("refine_cfg", default=1.0, min=0, max=100),
             io.Combo.Input("refine_sampler", options=comfy.samplers.KSampler.SAMPLERS, default="er_sde"),
             io.Combo.Input("refine_scheduler", options=list(dict.fromkeys(["linear from start", *comfy.samplers.KSampler.SCHEDULERS, "beta57"])), default="linear from start"),
@@ -428,7 +429,7 @@ class H3UpscaleSettings(io.ComfyNode):
     def define_schema(cls):
         return schema("UPSCALE_SETTINGS", "Upscale Settings", [Pipe.Input("pipe", optional=True),
             io.Combo.Input("upscale_model", options=folder_paths.get_filename_list("latent_upscale_models") or ["(no models found)"]),
-            io.Boolean.Input("enabled", default=False),
+            io.Boolean.Input("enabled", default=False, tooltip="On: upscale the first pass, then refine it with the refine settings from Sampling Settings."),
             io.Combo.Input("mode", options=["megapixels", "percent simplified", "percent per side"], default="megapixels",
                            tooltip="Megapixels sets the second pass area (0.5 to 1.0). Percent simplified scales the pixel area, so 200 doubles it. Percent per side scales width and height, so 200 makes four times the pixels. The aspect never changes."),
             io.Float.Input("percent", default=200.0, min=100.0, max=800.0, step=5.0),

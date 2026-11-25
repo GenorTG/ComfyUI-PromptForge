@@ -171,17 +171,15 @@ class H3Sequence(io.ComfyNode):
             comfy.model_management.unload_all_models()
             comfy.model_management.soft_empty_cache(force=True)
             working = h3.sample(working, **dict(sampling["first"], seed=seed))
-            upscale = pipe["settings"].get("upscale")
-            second_pass = bool(upscale and upscale.get("enabled", True)) or sampling.get("refine_enabled", False)
+            second_pass = pipe["settings"].get("upscale", {}).get("enabled", False)
             if second_pass and save_first_pass:
                 first = h3.decode(working, **pipe["settings"].get("decode", {}))
                 first = {**first, "artifacts": {"images": first["artifacts"]["images"].to("cpu"), "audio": first["artifacts"]["audio"]}}
                 first_overlap = working["artifacts"].get("continuation_overlap", continuity.get("overlap_frames", 0))
                 first_pass = h3.join(first_pass, first, first_overlap, continuity.get("transition", "crossfade"), continuity.get("match_levels", True)) if first_pass is not None else first
                 del first
-            if upscale and upscale.get("enabled", True):
+            if second_pass:
                 working = h3.H3LatentUpscale.execute(working).args[0]
-            if sampling.get("refine_enabled", False):
                 working = h3.sample(working, **dict(sampling["refine"], seed=(seed + 7) % 2**64))
             working = h3.decode(working, **pipe["settings"].get("decode", {}))
             overlap = working["artifacts"].get("continuation_overlap", continuity.get("overlap_frames", 0))
