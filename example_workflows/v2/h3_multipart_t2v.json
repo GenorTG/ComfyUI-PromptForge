@@ -179,7 +179,7 @@
         "{\"filter\":\"all\",\"items\":[]}",
         "auto",
         0,
-        false,
+        "randomize",
         true,
         false,
         0.0
@@ -678,7 +678,7 @@
       "widgets_values": [
         "auto",
         1,
-        false,
+        "randomize",
         4096,
         "",
         0.55,
@@ -800,7 +800,7 @@
       },
       "widgets_values": [
         0,
-        false,
+        "randomize",
         8,
         1.0,
         "euler",

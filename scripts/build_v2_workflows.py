@@ -84,12 +84,10 @@ class Graph:
                 value = values.get(name, default(spec))
                 named[name] = value
                 widgets.append(value)
-                if spec[1].get("control_after_generate"):
-                    widgets.append("fixed")
-                elif name == "seed" and spec[0] == "INT":
-                    # Current ComfyUI V3 frontend adds this control widget to
-                    # seed inputs even when V3 object_info omits the legacy flag.
-                    widgets.append(False)
+                # Current ComfyUI V3 frontend adds this control widget to
+                # seed inputs even when V3 object_info omits the legacy flag.
+                if spec[1].get("control_after_generate") or name == "seed" and spec[0] == "INT":
+                    widgets.append("randomize")
                 api_inputs[name] = value
                 if isinstance(value, str) and value.startswith("<"):
                     self.placeholders.append({"node": str(node_id), "role": role, "input": name, "value": value})
@@ -399,18 +397,18 @@ def h3_graph(catalogue, name, mode, multipart=False):
     else:
         if mode == "continue":
             graph.add("H3_CONTINUITY", "continuity", GROUPS[3])
+        # no model wires from here on: a socket would replace the pipe's model and drop the Performance and Live Preview patches
         encode = graph.add("H3_ENCODE", "encode", GROUPS[4],
-                           connections={"clip": clip_out, "vae": (model, 3), "model": model_out, "text": (prompt, 1)})
+                           connections={"clip": clip_out, "vae": (model, 3), "text": (prompt, 1)})
         sample_node = graph.add("H3_SAMPLE", "sample_first", GROUPS[4],
-                                connections={"model": model_out, "positive": (encode, 1),
-                                             "negative": (encode, 2), "latent": (encode, 3)})
+                                connections={"positive": (encode, 1), "negative": (encode, 2), "latent": (encode, 3)})
         graph.add("H3_FIRST_PASS_PREVIEW", "first_pass_preview", GROUPS[5],
                   {"enabled": True, "filename_prefix": f"video/PromptForge/{name}_first_pass"},
                   connections={"pipe": (sample_node, 0)})
         upscaled = graph.add("H3_LATENT_UPSCALE", "latent_upscale", GROUPS[5],
                              connections={"latent": (sample_node, 1)})
         refined = graph.add("H3_REFINE", "sample_refine", GROUPS[5],
-                            connections={"model": model_out, "latent": (upscaled, 1)})
+                            connections={"latent": (upscaled, 1)})
         decoded = graph.add("H3_DECODE", "decode", GROUPS[5],
                             connections={"vae": (model, 3), "latent": (refined, 1)})
         result = decoded

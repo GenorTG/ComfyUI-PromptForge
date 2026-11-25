@@ -781,8 +781,7 @@ class H3FirstPassPreview(io.ComfyNode):
             return io.NodeOutput(pipe)
         else:
             preview = decode(pipe, **pipe["settings"].get("decode", {}))
-        # saved without a result asset, so the workflow result stays the finished second pass
-        saved = H3PreviewSave.execute(preview, save=save, filename_prefix=filename_prefix, show_preview=False)
+        saved = H3PreviewSave.execute(preview, save=save, filename_prefix=filename_prefix)
         return io.NodeOutput(pipe, ui=saved.ui)
 
 

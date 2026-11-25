@@ -278,6 +278,14 @@ class H3Tests(unittest.TestCase):
             self.assertTrue(save.call_args.kwargs["save"])
             self.assertNotIn("images", pipe["artifacts"])
 
+    def test_first_pass_preview_returns_a_player(self):
+        pipe = self.contracts.evolve(self.pipe(), artifacts={"latent": {"samples": self.torch.ones(1)}})
+        with patch.object(self.h3, "decode", return_value=self.decoded(pipe)):
+            output = self.h3.H3FirstPassPreview.execute(pipe, enabled=True, save=False, filename_prefix="h3_first_fixture")
+        shown = output.ui.as_dict()
+        self.assertTrue(shown["images"][0]["filename"].endswith(".mp4"), shown)
+        self.assertEqual(shown["animated"], (True,))
+
     def test_real_cpu_preview_encodes_audio_and_video(self):
         result = self.h3.H3PreviewSave.execute(self.decoded(self.pipe()), filename_prefix="h3_fixture").args[0]
         self.assertEqual(self.contracts.require(result, "video").get_dimensions(), (32, 32))

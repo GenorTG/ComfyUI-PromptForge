@@ -46,6 +46,15 @@ class RuntimeTests(unittest.TestCase):
                 flagged = [item.id for item in node.define_schema().inputs if getattr(item, "dynamic_prompts", None)]
                 self.assertEqual(flagged, [], key)
 
+    def test_h3_templates_sample_the_pipe_model(self):
+        # a model socket after Performance / Live Preview would silently replace their patched model
+        stages = {"PROMPTFORGE_V2_H3_ENCODE", "PROMPTFORGE_V2_H3_SAMPLE", "PROMPTFORGE_V2_H3_REFINE"}
+        templates = sorted((Path(__file__).parents[1] / "example_workflows/v2").glob("h3_*.api.json"))
+        self.assertTrue(templates)
+        for path in templates:
+            wired = [node["class_type"] for node in json.loads(path.read_text()).values() if node["class_type"] in stages and "model" in node["inputs"]]
+            self.assertEqual(wired, [], path.name)
+
     def test_registration_through_real_init(self):
         from comfy_api.latest import io
         mappings = self.v2.NODE_CLASS_MAPPINGS

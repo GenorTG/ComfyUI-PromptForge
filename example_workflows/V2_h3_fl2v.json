@@ -1,6 +1,6 @@
 {
   "last_node_id": 25,
-  "last_link_id": 44,
+  "last_link_id": 41,
   "nodes": [
     {
       "id": 1,
@@ -53,8 +53,8 @@
           "name": "vae",
           "type": "VAE",
           "links": [
-            22,
-            35
+            21,
+            32
           ],
           "slot_index": 3
         },
@@ -143,18 +143,14 @@
         {
           "name": "model",
           "type": "MODEL",
-          "links": [
-            19,
-            24,
-            32
-          ],
+          "links": [],
           "slot_index": 1
         },
         {
           "name": "clip",
           "type": "CLIP",
           "links": [
-            21
+            20
           ],
           "slot_index": 2
         },
@@ -188,7 +184,7 @@
         "{\"filter\":\"all\",\"items\":[]}",
         "auto",
         0,
-        false,
+        "randomize",
         true,
         false,
         0.0
@@ -700,7 +696,7 @@
           "type": "STRING",
           "links": [
             13,
-            20
+            19
           ],
           "slot_index": 1
         }
@@ -819,7 +815,7 @@
       "widgets_values": [
         "auto",
         1,
-        false,
+        "randomize",
         4096,
         "",
         0.55,
@@ -941,7 +937,7 @@
       },
       "widgets_values": [
         0,
-        false,
+        "randomize",
         8,
         1.0,
         "euler",
@@ -1035,25 +1031,25 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 19,
+          "link": null,
           "shape": 7
         },
         {
           "name": "text",
           "type": "STRING",
-          "link": 20,
+          "link": 19,
           "shape": 7
         },
         {
           "name": "clip",
           "type": "CLIP",
-          "link": 21,
+          "link": 20,
           "shape": 7
         },
         {
           "name": "vae",
           "type": "VAE",
-          "link": 22,
+          "link": 21,
           "shape": 7
         },
         {
@@ -1068,7 +1064,7 @@
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            23
+            22
           ],
           "slot_index": 0
         },
@@ -1076,7 +1072,7 @@
           "name": "positive",
           "type": "CONDITIONING",
           "links": [
-            25
+            23
           ],
           "slot_index": 1
         },
@@ -1084,7 +1080,7 @@
           "name": "negative",
           "type": "CONDITIONING",
           "links": [
-            26
+            24
           ],
           "slot_index": 2
         },
@@ -1092,7 +1088,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            27
+            25
           ],
           "slot_index": 3
         }
@@ -1129,31 +1125,31 @@
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 23,
+          "link": 22,
           "shape": 7
         },
         {
           "name": "model",
           "type": "MODEL",
-          "link": 24,
+          "link": null,
           "shape": 7
         },
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 25,
+          "link": 23,
           "shape": 7
         },
         {
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 26,
+          "link": 24,
           "shape": 7
         },
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 27,
+          "link": 25,
           "shape": 7
         },
         {
@@ -1168,7 +1164,7 @@
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            28
+            26
           ],
           "slot_index": 0
         },
@@ -1176,7 +1172,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            30
+            28
           ],
           "slot_index": 1
         }
@@ -1225,7 +1221,7 @@
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 28,
+          "link": 26,
           "shape": 7
         }
       ],
@@ -1234,7 +1230,7 @@
           "name": "PROMPTFORGE_V2_PIPE",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            29
+            27
           ],
           "slot_index": 0
         }
@@ -1275,13 +1271,13 @@
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 29,
+          "link": 27,
           "shape": 7
         },
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 30,
+          "link": 28,
           "shape": 7
         }
       ],
@@ -1290,7 +1286,7 @@
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            31
+            29
           ],
           "slot_index": 0
         },
@@ -1298,7 +1294,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            33
+            30
           ],
           "slot_index": 1
         }
@@ -1335,19 +1331,19 @@
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 31,
+          "link": 29,
           "shape": 7
         },
         {
           "name": "model",
           "type": "MODEL",
-          "link": 32,
+          "link": null,
           "shape": 7
         },
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 33,
+          "link": 30,
           "shape": 7
         }
       ],
@@ -1356,7 +1352,7 @@
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            34
+            31
           ],
           "slot_index": 0
         },
@@ -1364,7 +1360,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            36
+            33
           ],
           "slot_index": 1
         }
@@ -1401,19 +1397,19 @@
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 34,
+          "link": 31,
           "shape": 7
         },
         {
           "name": "vae",
           "type": "VAE",
-          "link": 35,
+          "link": 32,
           "shape": 7
         },
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 36,
+          "link": 33,
           "shape": 7
         }
       ],
@@ -1422,7 +1418,7 @@
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            37
+            34
           ],
           "slot_index": 0
         },
@@ -1436,7 +1432,7 @@
           "name": "audio",
           "type": "AUDIO",
           "links": [
-            42
+            39
           ],
           "slot_index": 2
         }
@@ -1483,7 +1479,7 @@
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 37,
+          "link": 34,
           "shape": 7
         }
       ],
@@ -1492,7 +1488,7 @@
           "name": "PROMPTFORGE_V2_PIPE",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            38
+            35
           ],
           "slot_index": 0
         },
@@ -1500,7 +1496,7 @@
           "name": "frames",
           "type": "IMAGE",
           "links": [
-            39
+            36
           ],
           "slot_index": 1
         },
@@ -1553,13 +1549,13 @@
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 38,
+          "link": 35,
           "shape": 7
         },
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 39,
+          "link": 36,
           "shape": 7
         }
       ],
@@ -1568,7 +1564,7 @@
           "name": "PROMPTFORGE_V2_PIPE",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            40
+            37
           ],
           "slot_index": 0
         },
@@ -1576,7 +1572,7 @@
           "name": "frames",
           "type": "IMAGE",
           "links": [
-            41
+            38
           ],
           "slot_index": 1
         }
@@ -1621,19 +1617,19 @@
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 40,
+          "link": 37,
           "shape": 7
         },
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 41,
+          "link": 38,
           "shape": 7
         },
         {
           "name": "audio",
           "type": "AUDIO",
-          "link": 42,
+          "link": 39,
           "shape": 7
         }
       ],
@@ -1642,7 +1638,7 @@
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            43
+            40
           ],
           "slot_index": 0
         },
@@ -1715,7 +1711,7 @@
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 43,
+          "link": 40,
           "shape": 7
         }
       ],
@@ -1724,7 +1720,7 @@
           "name": "PROMPTFORGE_V2_PIPE",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            44
+            41
           ],
           "slot_index": 0
         }
@@ -1765,7 +1761,7 @@
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 44,
+          "link": 41,
           "shape": 7
         }
       ],
@@ -1941,14 +1937,6 @@
     ],
     [
       19,
-      2,
-      1,
-      15,
-      1,
-      "MODEL"
-    ],
-    [
-      20,
       10,
       1,
       15,
@@ -1956,7 +1944,7 @@
       "STRING"
     ],
     [
-      21,
+      20,
       2,
       2,
       15,
@@ -1964,7 +1952,7 @@
       "CLIP"
     ],
     [
-      22,
+      21,
       1,
       3,
       15,
@@ -1972,7 +1960,7 @@
       "VAE"
     ],
     [
-      23,
+      22,
       15,
       0,
       16,
@@ -1980,15 +1968,7 @@
       "PROMPTFORGE_V2_PIPE"
     ],
     [
-      24,
-      2,
-      1,
-      16,
-      1,
-      "MODEL"
-    ],
-    [
-      25,
+      23,
       15,
       1,
       16,
@@ -1996,7 +1976,7 @@
       "CONDITIONING"
     ],
     [
-      26,
+      24,
       15,
       2,
       16,
@@ -2004,7 +1984,7 @@
       "CONDITIONING"
     ],
     [
-      27,
+      25,
       15,
       3,
       16,
@@ -2012,7 +1992,7 @@
       "LATENT"
     ],
     [
-      28,
+      26,
       16,
       0,
       17,
@@ -2020,47 +2000,39 @@
       "PROMPTFORGE_V2_PIPE"
     ],
     [
-      29,
+      27,
       17,
       0,
       18,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      28,
+      16,
+      1,
+      18,
+      1,
+      "LATENT"
+    ],
+    [
+      29,
+      18,
+      0,
+      19,
       0,
       "PROMPTFORGE_V2_PIPE"
     ],
     [
       30,
-      16,
-      1,
       18,
       1,
+      19,
+      2,
       "LATENT"
     ],
     [
       31,
-      18,
-      0,
-      19,
-      0,
-      "PROMPTFORGE_V2_PIPE"
-    ],
-    [
-      32,
-      2,
-      1,
-      19,
-      1,
-      "MODEL"
-    ],
-    [
-      33,
-      18,
-      1,
-      19,
-      2,
-      "LATENT"
-    ],
-    [
-      34,
       19,
       0,
       20,
@@ -2068,7 +2040,7 @@
       "PROMPTFORGE_V2_PIPE"
     ],
     [
-      35,
+      32,
       1,
       3,
       20,
@@ -2076,7 +2048,7 @@
       "VAE"
     ],
     [
-      36,
+      33,
       19,
       1,
       20,
@@ -2084,7 +2056,7 @@
       "LATENT"
     ],
     [
-      37,
+      34,
       20,
       0,
       21,
@@ -2092,39 +2064,39 @@
       "PROMPTFORGE_V2_PIPE"
     ],
     [
-      38,
+      35,
       21,
       0,
       22,
       0,
       "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      36,
+      21,
+      1,
+      22,
+      1,
+      "IMAGE"
+    ],
+    [
+      37,
+      22,
+      0,
+      23,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      38,
+      22,
+      1,
+      23,
+      1,
+      "IMAGE"
     ],
     [
       39,
-      21,
-      1,
-      22,
-      1,
-      "IMAGE"
-    ],
-    [
-      40,
-      22,
-      0,
-      23,
-      0,
-      "PROMPTFORGE_V2_PIPE"
-    ],
-    [
-      41,
-      22,
-      1,
-      23,
-      1,
-      "IMAGE"
-    ],
-    [
-      42,
       20,
       2,
       23,
@@ -2132,7 +2104,7 @@
       "AUDIO"
     ],
     [
-      43,
+      40,
       23,
       0,
       24,
@@ -2140,7 +2112,7 @@
       "PROMPTFORGE_V2_PIPE"
     ],
     [
-      44,
+      41,
       24,
       0,
       25,
