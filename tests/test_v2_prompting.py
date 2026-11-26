@@ -502,6 +502,21 @@ class PromptTests(unittest.TestCase):
         self.assertEqual(self.prompts._late_shots(text, 10), [])
 
 
+    def test_h3_writer_request_carries_the_format_clip_length(self):
+        h3 = self.runtime.pack.v2.h3
+        for seconds, stated in ((5, "5.17"), (10, "10.12")):
+            pipe = h3.H3Format.execute(self.contracts.new_pipe("minimax_h3"), seconds=seconds).args[0]
+            pipe = self.prompts.H3Prompt.execute(pipe, source="idea", text="a person walks through a garden").args[0]
+            with patch.object(self.service.PROMPTFORGE_PromptEnhancer, "_generate", return_value="x") as generate:
+                try:
+                    self.prompts.H3PromptWriter.execute(pipe, writer_model={}, retries="off")
+                except ValueError:
+                    pass
+            asked = " ".join(str(value) for value in generate.call_args_list[0].kwargs.values())
+            self.assertIn(f"The clip is exactly {stated} seconds long.", asked)
+            print(f"\n{seconds} s request ends with: " + asked[asked.index("The clip is exactly"):][:230])
+
+
     def test_writer_length_is_uncapped_unless_the_user_sets_it(self):
         context = {"family": "krea2", "picture_count": 0, "video_count": 0, "audio": [], "references": [], "descriptions": [], "contact_sheet": False, "duration": 5, "orientation": "portrait", "width": 832, "height": 1216, "writer_mode": "t2i", "mode": "t2i"}
         counts = re.compile(r"\d+\s*-\s*\d+\s*(?:words|tags|environment|light tags|style tags)|Short idea: add \d")

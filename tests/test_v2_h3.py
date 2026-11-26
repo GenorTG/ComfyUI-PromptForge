@@ -300,6 +300,31 @@ class H3Tests(unittest.TestCase):
             self.h3.decode(pipe, decode_with="video vae")
         self.assertEqual(used, ["separate", pipe["artifacts"]["vae"]])
 
+    def test_experimental_speedup_is_inert_by_default_and_patches_only_what_is_enabled(self):
+        from comfy_api.latest import io
+        performance = self.runtime.pack.v2.performance
+        model = SimpleNamespace()
+        pipe = self.contracts.evolve(self.pipe(), artifacts={"model": model})
+        with patch.object(performance.BlockSparseAttention, "execute", side_effect=AssertionError("sparse ran")):
+            result = performance.H3Speedup.execute(pipe, log_to_console=False)
+        self.assertIs(result.args[1], model)
+        self.assertFalse(result.args[0]["settings"]["speedup"]["sol_attention"])
+        with patch.object(performance.BlockSparseAttention, "execute", return_value=io.NodeOutput("sparse")) as sparse:
+            result = performance.H3Speedup.execute(pipe, sol_attention=True, sol_tau=1.1, log_to_console=False)
+        self.assertEqual(result.args[0]["artifacts"]["model"], "sparse")
+        self.assertEqual(sparse.call_args.args[1:], ({"selection": "sol-attn", "tau": 1.1}, 0.2, 1.0))
+        busy = self.contracts.evolve(pipe, "performance", {"sparse_attention": True})
+        with self.assertRaisesRegex(ValueError, "one sparse method"):
+            performance.H3Speedup.execute(busy, sol_attention=True)
+
+    def test_first_pass_preview_keeps_models_only_when_asked(self):
+        latent = {"samples": self.torch.ones(1)}
+        for keep in (False, True):
+            pipe = self.contracts.evolve(self.pipe(), "speedup", {"keep_models_for_first_pass": keep}, {"latent": latent})
+            with patch.object(self.h3, "decode", return_value=self.decoded(pipe)) as decode:
+                self.h3.H3FirstPassPreview.execute(pipe, enabled=True, save=False, filename_prefix="h3_keep_fixture")
+            self.assertEqual(decode.call_args.kwargs["keep_models"], keep)
+
     def test_real_cpu_preview_encodes_audio_and_video(self):
         result = self.h3.H3PreviewSave.execute(self.decoded(self.pipe()), filename_prefix="h3_fixture").args[0]
         self.assertEqual(self.contracts.require(result, "video").get_dimensions(), (32, 32))

@@ -55,6 +55,22 @@ class RuntimeTests(unittest.TestCase):
             wired = [node["class_type"] for node in json.loads(path.read_text()).values() if node["class_type"] in stages and "model" in node["inputs"]]
             self.assertEqual(wired, [], path.name)
 
+    def test_reference_focus_composes_and_crops(self):
+        import torch
+        focus = self.v2.focus
+        image = torch.ones(1, 100, 80, 3) * 0.2
+        mask = torch.zeros(1, 100, 80); mask[:, 20:60, 30:50] = 1
+        out, cut = focus.compose(image, mask, "grey", True, 0.25)
+        self.assertEqual(tuple(out.shape[1:3]), (60, 30))
+        self.assertAlmostEqual(float(out[0, 0, 0, 0]), 0.5); self.assertAlmostEqual(float(out[0, 30, 15, 0]), 0.2)
+        kept, _ = focus.compose(image, mask, "keep", False, 0.25)
+        self.assertTrue(torch.equal(kept, image))
+
+    def test_reference_focus_is_off_unless_a_row_asks(self):
+        with patch.object(self.v2.focus, "apply", side_effect=AssertionError("focus ran")):
+            self.assertEqual([item.id for item in self.v2.media.LoadImage.define_schema().inputs][6], "focus")
+            self.assertEqual(self.v2.media.LoadImage.define_schema().inputs[6].default, "")
+
     def test_registration_through_real_init(self):
         from comfy_api.latest import io
         mappings = self.v2.NODE_CLASS_MAPPINGS

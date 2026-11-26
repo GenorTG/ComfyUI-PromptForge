@@ -390,6 +390,8 @@ def h3_graph(catalogue, name, mode, multipart=False):
     model_out, clip_out = (loras, 1), (loras, 2)
     graph.add("PERFORMANCE", "performance", GROUPS[8])
     graph.add("PREVIEW_SETTINGS", "preview", GROUPS[8], {"enabled": True})
+    # Sol attention on by default; GPUs without the kernel fall back to dense attention
+    graph.add("H3_SPEEDUP", "speedup", GROUPS[8], {"sol_attention": True})
     graph.add("H3_FORMAT", "format", GROUPS[3], {"width": 960, "height": 544, "seconds": 5.0, "aspect": "16:9", "megapixels": 0.5})
     if mode in ("i2v", "fl2v"):
         graph.add("LOAD_IMAGE", "first_frame", GROUPS[1], {"filename": "<INPUT_FIRST_FRAME.png>", "role": "first_frame"})
