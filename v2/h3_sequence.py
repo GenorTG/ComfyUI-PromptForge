@@ -165,7 +165,7 @@ class H3Sequence(io.ComfyNode):
                 comfy.model_management.unload_all_models()
                 comfy.model_management.soft_empty_cache()
             report.append(f"Part {index + 1}: writer {prompt['source']}")
-            working = h3.encode(working)
+            working = h3.retry_unloaded("encoding", lambda: h3.encode(working))
             # the text encoder is the biggest resident model; drop it before sampling/decode
             working = evolve(working, invalidate=("clip",))
             comfy.model_management.unload_all_models()

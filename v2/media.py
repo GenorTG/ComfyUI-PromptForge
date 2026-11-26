@@ -1,14 +1,11 @@
 """Pipe-aware reference loading and time-preserving video postprocessing."""
 from pathlib import Path
 
-import gc
-
 import torch
 import torch.nn.functional as F
 from PIL import Image, ImageOps
 import numpy as np
 
-import comfy.model_management as mm
 import comfy.utils
 import folder_paths
 import node_helpers
@@ -215,23 +212,8 @@ class FrameInterpolate(io.ComfyNode):
         count = len(frames)
         if count < 2:
             return io.NodeOutput(pipe, frames, fps)
-        interpolator = PROMPTFORGE_FrameInterpolate()
-        try:
-            result = interpolator.interpolate(frames, multiplier, model_name, batch_size, overlap, scale)[0]
-        except ValueError as exc:
-            if "GB of RAM" not in str(exc):
-                raise
-            # the estimate runs before any batching; give it the RAM the models and reachable input still hold
-            mm.free_registrations(1 << 62)
-            mm.unload_all_models()
-            gc.collect()
-            mm.soft_empty_cache()
-            result = interpolator.interpolate(frames, multiplier, model_name, batch_size, overlap, scale)[0]
-        # The core interpolator produces (N-1)*M+1 frames. Extend the final hold
-        # to N*M so frame-based playback duration and audio length stay unchanged.
-        target = count * multiplier
-        if len(result) < target:
-            result = torch.cat((result, result[-1:].expand(target - len(result), -1, -1, -1)), dim=0)
+        # (N-1)*M+1 interpolated frames; the last one is held up to N*M so playback duration and audio length stay unchanged
+        result = PROMPTFORGE_FrameInterpolate().interpolate(frames, multiplier, model_name, batch_size, overlap, scale, hold=multiplier - 1)[0]
         fps *= multiplier
         out = evolve(pipe, "timing", {"fps": fps, "native_fps": timing.get("native_fps", fmt.get("fps", 24)),
                                      "frames": len(result), "duration": len(result) / fps}, {"images": result})

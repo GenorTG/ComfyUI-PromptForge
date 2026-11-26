@@ -22,6 +22,8 @@ import torch
 import comfy.model_management as model_management
 import comfy.utils
 
+from . import frame_buffer
+
 CONTEXT_GROUPS = 1  # latents kept before a pass for the causal context; one group (5) already covers the 3 the decoder trims
 TILES_PER_CALL_MAX = 16
 RESERVE = 512 << 20
@@ -53,9 +55,13 @@ def _check_packing(inner):
         raise ValueError(f"[PromptForge] the H3 decoder emits {channels} channels per pixel, which is not a packed RGB layout.")
 
 
-def _final_bytes(vae, video):
-    """Bytes of the finished frames, which is exactly the buffer the decode writes into."""
-    return math.prod(vae.first_stage_model.decode_output_shape(video.shape)) * model_management.dtype_size(vae.vae_output_dtype())
+def _output(vae, video):
+    """(dtype, bytes) of the finished frames, which is exactly the buffer the decode writes into; float16 when float32 would crowd the RAM."""
+    values = math.prod(vae.first_stage_model.decode_output_shape(video.shape))
+    dtype = vae.vae_output_dtype()
+    if dtype == torch.float32:
+        dtype = frame_buffer.video_dtype(values, 0.25)
+    return dtype, values * model_management.dtype_size(dtype)
 
 
 def _destination(choice, final):
@@ -68,11 +74,11 @@ def _destination(choice, final):
     return gpu if model_management.get_free_memory(gpu) > 4 * final + RESERVE else model_management.intermediate_device()
 
 
-def _decode(vae, video, dest, work, drop=0):
+def _decode(vae, video, dest, work, dtype, drop=0):
     """One decode pass of `video` into a buffer on `work` (the dest itself for a single pass); frames end up on `dest`."""
     inner = vae.first_stage_model
     with model_management.cuda_device_context(vae.device):
-        pixels = torch.empty(inner.decode_output_shape(video.shape), device=work, dtype=vae.vae_output_dtype())
+        pixels = frame_buffer.empty(inner.decode_output_shape(video.shape), dtype, work)
         inner.decode(video.to(device=vae.device, dtype=vae.vae_dtype), output_buffer=pixels)
         vae.process_output(pixels)
     frames = pixels.movedim(1, -1)[:, drop:]
@@ -91,7 +97,7 @@ def _windows(latent_steps, groups):
         done += core
 
 
-def _run(vae, video, dest, tile, groups, tiles_per_call):
+def _run(vae, video, dest, dtype, tile, groups, tiles_per_call):
     inner = vae.first_stage_model
     inner.tiling = tile > 0
     inner.tiles_per_call = tiles_per_call
@@ -99,7 +105,7 @@ def _run(vae, video, dest, tile, groups, tiles_per_call):
         inner.tile_size, inner.tile_overlap_min = tile, max(64, tile // 4)
     total = (video.shape[2] - 2) // 5
     if not groups or video.shape[2] < 2 or (video.shape[2] - 2) % 5 or groups >= total:
-        return _decode(vae, video, dest, dest)
+        return _decode(vae, video, dest, dest, dtype)
 
     # a pass decodes on the GPU and leaves only its finished frames on `dest`, so a long clip never needs a
     # whole-clip buffer anywhere and the packed sub-pixels never cross the bus
@@ -113,13 +119,13 @@ def _run(vae, video, dest, tile, groups, tiles_per_call):
         # one more group of latents after the pass, decoded only for its continuation: without it the last 4
         # frames of every pass would be decoded against the clip end instead of what really follows
         tail = min(5, 2 + 5 * total - end)
-        piece = _decode(vae, video[:, :, start:end + tail], dest, work, drop)
+        piece = _decode(vae, video[:, :, start:end + tail], dest, work, dtype, drop)
         if tail:
             piece = piece[:, :5 + 17 * ((end - start - 2) // 5) - drop]
         if out is None:
             frames = 5 + 17 * total
             # frames-first, so the final reshape is a view and the clip is not copied once more at the size of a whole video
-            out = torch.empty(frames, *piece.shape[2:], device=piece.device, dtype=piece.dtype)
+            out = frame_buffer.empty((frames, *piece.shape[2:]), piece.dtype, piece.device)
         part = piece.reshape(-1, *piece.shape[2:])
         out[position:position + part.shape[0]] = part
         position += part.shape[0]
@@ -159,7 +165,7 @@ class PROMPTFORGE_MiniMaxDecode:
         with model_management.cuda_device_context(vae.device):
             model_management.load_models_gpu([vae.patcher], memory_required=vae.memory_used_decode(video.shape, vae.vae_dtype), force_full_load=vae.disable_offload)
         model_management.soft_empty_cache()  # the plan below must see the memory that is really left, not reserved blocks
-        final = _final_bytes(vae, video)
+        dtype, final = _output(vae, video)
         dest = _destination(output_device, final)
         total = (video.shape[2] - 2) // 5
         tile = max(256, tile_size // 16 * 16) if tile_size else 256
@@ -174,7 +180,7 @@ class PROMPTFORGE_MiniMaxDecode:
         try:
             while True:
                 try:
-                    images = _run(vae, video, dest, tile, groups, tiles_per_call)
+                    images = _run(vae, video, dest, dtype, tile, groups, tiles_per_call)
                 except model_management.OOM_EXCEPTION:
                     gc.collect()
                     model_management.soft_empty_cache()

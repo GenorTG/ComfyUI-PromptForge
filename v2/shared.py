@@ -1,8 +1,11 @@
+import gc
 import json
 import re
 import time
 from pathlib import Path
 
+import comfy.model_management
+import comfy_aimdo.model_vbar
 import folder_paths
 from aiohttp import web
 from comfy_api.latest import io
@@ -16,6 +19,30 @@ Pipe = io.Custom(PIPE)
 CATEGORY = "PromptForge V2/Shared"
 DATE_TOKEN = re.compile(r"%date:([^%]+)%")
 DATE_FORMATS = {"yyyy": "%Y", "MM": "%m", "dd": "%d", "HH": "%H", "mm": "%M", "ss": "%S"}
+
+
+def free_vram():
+    """Hard release: unload every model, then empty the CUDA allocator."""
+    comfy.model_management.unload_all_models()
+    comfy.model_management.free_memory(1e30, comfy.model_management.get_torch_device(), for_dynamic=True)
+    gc.collect()
+    comfy.model_management.soft_empty_cache(force=True)
+    try:
+        comfy_aimdo.model_vbar.vbars_reset_watermark_limits()
+    except Exception:
+        pass
+
+
+def retry_unloaded(label, work):
+    """Runs `work`; when the GPU runs out of memory everything is unloaded and it runs once more."""
+    try:
+        return work()
+    except Exception as exc:
+        comfy.model_management.raise_non_oom(exc)
+    # outside the except block, so the traceback no longer holds the failed run's tensors
+    print(f"[PromptForge] out of memory while {label}; unloading everything and trying once more.", flush=True)
+    free_vram()
+    return work()
 
 
 def expand_date_tokens(prefix, moment=None):
