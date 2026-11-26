@@ -502,16 +502,17 @@ def free_vram():
         pass
 
 
-def decode(pipe, tile_size=256, frames_per_pass=0, output_device="auto", audio_normalize=False, audio_gain_db=0.0, audio_from="second pass", decode_with=DECODE_VAE):
+def decode(pipe, tile_size=256, frames_per_pass=0, output_device="auto", audio_normalize=False, audio_gain_db=0.0, audio_from="second pass", decode_with=DECODE_VAE, keep_models=False):
     checked(pipe)
     latent, vae, audio_vae = require(pipe, "latent", "vae", "audio_vae")
     # H3 Model's decode_vae is the video VAE itself when decode_vae_name is "same"
     decoder = pipe["artifacts"].get("decode_vae", vae) if decode_with == DECODE_VAE else vae
-    free_vram()
+    if not keep_models:
+        free_vram()
     # 256 px tiles are what the upscale VAE decodes cleanly; under pressure only the
     # frame batch shrinks, never the tile, so the seams stay consistent
     free = comfy.model_management.get_free_memory()
-    if free < 2 << 30:
+    if free < 2 << 30 and not keep_models:  # kept models are moved aside by the decoder's own load; an OOM still frees everything below
         frames_per_pass = frames_per_pass or 8
     attempts = [(256, frames_per_pass)]
     attempts += [(256, frames_per_pass or 8), (256, frames_per_pass or 4)]
@@ -717,7 +718,7 @@ class H3PreviewSave(io.ComfyNode):
             io.Audio.Input("audio", optional=True), io.Boolean.Input("save", default=False),
             io.String.Input("filename_prefix", default="video/PromptForge_H3",
                             tooltip="Prefix for the saved file. Tokens expand per run: %date:yyyy-MM-dd%, %date:yyyy-MM-dd_HH-mm-ss%, %date:yyyy%, %date:MM%, %date:dd%, plus %family%, %model%, %mode%, %source%, %category%, %action% and %seed% from the run."),
-            io.Combo.Input("encoder_preset", options=["high quality", "balanced", "small file", "lossless-ish"], default="high quality",
+            io.Combo.Input("encoder_preset", options=["high quality", "balanced", "small file", "lossless-ish", "fast (GPU)", "compatible"], default="high quality",
                            tooltip="Writes a coherent encoder set into the widgets below when picked. The widgets stay editable and are what actually gets used."),
             io.Combo.Input("codec", options=list(video_save.CODECS), default="h265 (cpu x265)"),
             io.Combo.Input("speed", options=list(video_save.SPEEDS), default="slow"),
@@ -744,6 +745,7 @@ class H3PreviewSave(io.ComfyNode):
         pipe = take(checked(ensure_pipe(pipe, family="minimax_h3")), images=images, audio=audio)
         if codec not in video_save.CODECS or speed not in video_save.SPEEDS or rate_control not in ("quality", "bitrate") or bit_depth not in ("8", "10"):
             raise ValueError("Unsupported video encoder settings.")
+        bit_depth = video_save.bit_depth_for(codec, bit_depth)
         images, audio = require(pipe, "images", "audio")
         fps = pipe["settings"].get("timing", {}).get("fps", pipe["settings"]["format"]["fps"])
         root = folder_paths.get_output_directory() if save else folder_paths.get_temp_directory()
@@ -788,8 +790,11 @@ class H3FirstPassPreview(io.ComfyNode):
         elif pipe["artifacts"].get("latent") is None:
             return io.NodeOutput(pipe)
         else:
-            preview = decode(pipe, **{**pipe["settings"].get("decode", {}), "decode_with": decode_with})
-        saved = H3PreviewSave.execute(preview, save=save, filename_prefix=filename_prefix)
+            preview = decode(pipe, **{**pipe["settings"].get("decode", {}), "decode_with": decode_with},
+                             keep_models=pipe["settings"].get("speedup", {}).get("keep_models_for_first_pass", False))
+        # a look at the first pass, so it encodes fast: about 40x less encoder time than the final's x265 slow, and 8-bit h264 plays in every browser
+        saved = H3PreviewSave.execute(preview, save=save, filename_prefix=filename_prefix, codec="h264 (cpu x264)", speed="fast",
+                                      quality=18, bit_depth="8", audio_bitrate_kbps=192)
         return io.NodeOutput(pipe, ui=saved.ui)
 
 

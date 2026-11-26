@@ -425,7 +425,7 @@
       ],
       "size": [
         640,
-        876
+        940
       ],
       "flags": {},
       "order": 5,
@@ -472,7 +472,15 @@
           "role": "reference",
           "index": 1,
           "enabled": true,
-          "description": ""
+          "description": "",
+          "focus": "",
+          "focus_crop": true,
+          "focus_background": "keep",
+          "focus_padding": 0.15,
+          "focus_threshold": 0.5,
+          "focus_grow": 0,
+          "focus_feather": 2,
+          "sam3_checkpoint": "auto"
         }
       },
       "widgets_values": [
@@ -480,7 +488,15 @@
         "reference",
         1,
         true,
-        ""
+        "",
+        "",
+        true,
+        "keep",
+        0.15,
+        0.5,
+        0,
+        2,
+        "auto"
       ],
       "color": "#2a6b5f",
       "bgcolor": "#1b403a"
@@ -494,7 +510,7 @@
       ],
       "size": [
         640,
-        876
+        940
       ],
       "flags": {},
       "order": 6,
@@ -541,7 +557,15 @@
           "role": "reference",
           "index": 2,
           "enabled": true,
-          "description": ""
+          "description": "",
+          "focus": "",
+          "focus_crop": true,
+          "focus_background": "keep",
+          "focus_padding": 0.15,
+          "focus_threshold": 0.5,
+          "focus_grow": 0,
+          "focus_feather": 2,
+          "sam3_checkpoint": "auto"
         }
       },
       "widgets_values": [
@@ -549,7 +573,15 @@
         "reference",
         2,
         true,
-        ""
+        "",
+        "",
+        true,
+        "keep",
+        0.15,
+        0.5,
+        0,
+        2,
+        "auto"
       ],
       "color": "#2a6b5f",
       "bgcolor": "#1b403a"
@@ -559,7 +591,7 @@
       "type": "PROMPTFORGE_V2_SUBJECT_MASK",
       "pos": [
         1758,
-        1008
+        1072
       ],
       "size": [
         369,
@@ -624,7 +656,7 @@
       "type": "PROMPTFORGE_V2_MASK_PREPARE",
       "pos": [
         1758,
-        1230
+        1294
       ],
       "size": [
         360,
@@ -673,7 +705,7 @@
       "type": "PROMPTFORGE_V2_SUBJECT_MASK",
       "pos": [
         1758,
-        1408
+        1472
       ],
       "size": [
         369,
@@ -1019,7 +1051,7 @@
       ],
       "size": [
         420,
-        506
+        514
       ],
       "flags": {},
       "order": 14,
@@ -2045,7 +2077,7 @@
         1062,
         0,
         1912,
-        1598
+        1662
       ],
       "color": "#27564f",
       "font_size": 24,

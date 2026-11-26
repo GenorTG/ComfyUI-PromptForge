@@ -125,7 +125,15 @@
       "pipe": [
         "5",
         0
-      ]
+      ],
+      "focus": "",
+      "focus_crop": true,
+      "focus_background": "keep",
+      "focus_padding": 0.15,
+      "focus_threshold": 0.5,
+      "focus_grow": 0,
+      "focus_feather": 2,
+      "sam3_checkpoint": "auto"
     },
     "_meta": {
       "title": "Reference 1"
@@ -142,7 +150,15 @@
       "pipe": [
         "6",
         0
-      ]
+      ],
+      "focus": "",
+      "focus_crop": true,
+      "focus_background": "keep",
+      "focus_padding": 0.15,
+      "focus_threshold": 0.5,
+      "focus_grow": 0,
+      "focus_feather": 2,
+      "sam3_checkpoint": "auto"
     },
     "_meta": {
       "title": "Reference 2"

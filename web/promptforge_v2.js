@@ -357,6 +357,17 @@ function mediaUI(node, kind) {
   return refresh;
 }
 
+// what each encoder_preset writes into the encoder widgets
+export const ENCODER_PRESETS = Object.fromEntries(Object.entries({
+  "high quality": ["h265 (cpu x265)", "slow", 17, "10", 320],
+  "balanced": ["h264 (cpu x264)", "balanced", 18, "8", 192],
+  "small file": ["h265 (cpu x265)", "balanced", 24, "10", 160],
+  "lossless-ish": ["h265 (cpu x265)", "slow", 10, "10", 320],
+  "fast (GPU)": ["h265 (nvenc)", "balanced", 19, "10", 192],
+  "compatible": ["h264 (nvenc)", "slow", 19, "8", 192],
+}).map(([name, [codec, speed, quality, bit_depth, audio_bitrate_kbps]]) =>
+  [name, { codec, speed, rate_control: "quality", quality, bit_depth, audio_bitrate_kbps }]));
+
 function encoderPresetUI(node) {
   const preset = widget(node, "encoder_preset");
   if (!preset) return;

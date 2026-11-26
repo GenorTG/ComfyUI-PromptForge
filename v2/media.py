@@ -19,7 +19,7 @@ from comfy_extras import nodes_audio
 
 from ..frame_interpolation import PROMPTFORGE_FrameInterpolate, _checkpoints, BLEND
 from .contracts import schema as nodes_schema, PIPE, ensure_pipe, evolve, require
-from . import rtx
+from . import focus as reference_focus, rtx
 
 Pipe = io.Custom(PIPE)
 CATEGORY = "PromptForge V2/References"
@@ -62,7 +62,15 @@ class LoadImage(io.ComfyNode):
         return nodes_schema("LOAD", "IMAGE", "Load Reference Image", inputs=[Pipe.Input("pipe", optional=True), io.String.Input("filename", default=""),
                                  io.Combo.Input("role", options=["reference", "first_frame", "last_frame"]),
                                  io.Int.Input("index", default=1, min=1, max=1024), io.Boolean.Input("enabled", default=True),
-                                 io.String.Input("description", default="", multiline=True)],
+                                 io.String.Input("description", default="", multiline=True),
+                                 io.String.Input("focus", default="", optional=True, tooltip="Words for what to zoom in on, for example 'face, hair, neck' or 'person'. SAM3 finds it and the picture is cropped to its box. Empty uses the whole picture."),
+                                 io.Boolean.Input("focus_crop", default=True, optional=True, tooltip="Cut the picture to the focused subject."),
+                                 io.Combo.Input("focus_background", options=list(reference_focus.BACKGROUNDS), default="keep", optional=True, tooltip="keep: a plain rectangle crop of the picture. A colour also cuts the subject out and paints everything else."),
+                                 io.Float.Input("focus_padding", default=0.15, min=0.0, max=2.0, step=0.05, optional=True, tooltip="Margin around the subject when cropping, as a share of its size."),
+                                 io.Float.Input("focus_threshold", default=0.5, min=0.0, max=1.0, step=0.01, optional=True, tooltip="SAM3 confidence needed. Lower finds more."),
+                                 io.Int.Input("focus_grow", default=0, min=-128, max=128, optional=True, tooltip="Widen (or shrink, below 0) the mask, in pixels."),
+                                 io.Int.Input("focus_feather", default=2, min=0, max=128, optional=True, tooltip="Soften the mask edge, in pixels."),
+                                 io.Combo.Input("sam3_checkpoint", options=reference_focus.checkpoints(), default="auto", optional=True)],
                          outputs=[Pipe.Output(), io.Image.Output(), io.Mask.Output()])
 
     @classmethod
@@ -70,7 +78,8 @@ class LoadImage(io.ComfyNode):
         return changed(filename, enabled)
 
     @classmethod
-    def execute(cls, pipe=None, filename=None, role="reference", index=1, enabled=True, description=""):
+    def execute(cls, pipe=None, filename=None, role="reference", index=1, enabled=True, description="", focus="", focus_crop=True,
+                focus_background="keep", focus_padding=0.15, focus_threshold=0.5, focus_grow=0, focus_feather=2, sam3_checkpoint="auto", loaded=None):
         pipe = ensure_pipe(pipe)
         if not enabled:
             return io.NodeOutput(pipe, None, None)
@@ -80,9 +89,12 @@ class LoadImage(io.ComfyNode):
             frame = node_helpers.pillow(ImageOps.exif_transpose, opened)
             image = torch.from_numpy(np.array(frame.convert("RGB"), dtype=np.float32) / 255.0)[None]
             mask = 1.0 - torch.from_numpy(np.array(frame.getchannel("A"), dtype=np.float32) / 255.0)[None] if "A" in frame.getbands() else torch.zeros(image.shape[:3])
+        if str(focus).strip():
+            image, mask = reference_focus.apply(input_path(filename), image, {"focus": focus, "focus_crop": focus_crop, "focus_background": focus_background,
+                "focus_padding": focus_padding, "focus_threshold": focus_threshold, "focus_grow": focus_grow, "focus_feather": focus_feather}, sam3_checkpoint, loaded)
         artifacts = {"source_image": image, "source_mask": mask}
         refs = dict(pipe["settings"].get("media", {}))
-        refs[f"{role}:{index}"] = {"filename": filename, "description": description}
+        refs[f"{role}:{index}"] = {"filename": filename, "description": description, **({"focus": focus} if str(focus).strip() else {})}
         if role == "reference":
             bank = dict(pipe["artifacts"].get("reference_image_bank", {}))
             bank[index] = image

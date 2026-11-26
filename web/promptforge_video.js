@@ -2,6 +2,46 @@ import { app } from "../../scripts/app.js";
 
 // Save Video: ComfyUI shows the saved video itself; here are its facts (size, frames, codec) under it and the show / loop / autoplay switches
 const NODES = ["PROMPTFORGE_SaveVideo"];
+const ENCODERS = ["PROMPTFORGE_SaveVideo", "PROMPTFORGE_V2_H3_PREVIEW_SAVE"];
+
+// h264 nvenc has no 10-bit: while it is picked, the bit depth list offers 8 only
+app.registerExtension({
+  name: "PromptForge.VideoBitDepth",
+  beforeRegisterNodeDef(nodeType, nodeData) {
+    if (!ENCODERS.includes(nodeData.name)) return;
+    const limit = (node) => {
+      const codec = node.widgets?.find((widget) => widget.name === "codec");
+      const depth = node.widgets?.find((widget) => widget.name === "bit_depth");
+      if (!codec || !depth) return;
+      const only8 = codec.value === "h264 (nvenc)";
+      depth.options.values = only8 ? ["8"] : ["8", "10"];
+      if (only8) depth.value = "8";
+    };
+    const created = nodeType.prototype.onNodeCreated;
+    nodeType.prototype.onNodeCreated = function () {
+      const result = created?.apply(this, arguments);
+      const node = this;
+      const codec = node.widgets?.find((widget) => widget.name === "codec");
+      if (codec) {
+        const callback = codec.callback;
+        codec.callback = function () {
+          const answer = callback?.apply(this, arguments);
+          limit(node);
+          return answer;
+        };
+      }
+      limit(node);
+      return result;
+    };
+    // loading a workflow sets the values without calling the widget callbacks
+    const configure = nodeType.prototype.onConfigure;
+    nodeType.prototype.onConfigure = function () {
+      const result = configure?.apply(this, arguments);
+      limit(this);
+      return result;
+    };
+  },
+});
 
 app.registerExtension({
   name: "PromptForge.SaveVideo",

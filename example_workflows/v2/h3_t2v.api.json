@@ -79,6 +79,26 @@
     }
   },
   "5": {
+    "class_type": "PROMPTFORGE_V2_H3_SPEEDUP",
+    "inputs": {
+      "sol_attention": true,
+      "sol_tau": 1.3,
+      "sol_start_percent": 0.2,
+      "sol_end_percent": 1.0,
+      "sol_extra_tokens": 256,
+      "attention_backend": "as loaded",
+      "keep_models_for_first_pass": false,
+      "log_to_console": true,
+      "pipe": [
+        "4",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Speedup"
+    }
+  },
+  "6": {
     "class_type": "PROMPTFORGE_V2_H3_FORMAT",
     "inputs": {
       "width": 960,
@@ -88,7 +108,7 @@
       "megapixels": 0.5,
       "orientation": "as selected",
       "pipe": [
-        "4",
+        "5",
         0
       ]
     },
@@ -96,14 +116,14 @@
       "title": "Format"
     }
   },
-  "6": {
+  "7": {
     "class_type": "PROMPTFORGE_V2_H3_REFERENCES",
     "inputs": {
       "mode": "t2v",
       "ref_image_size": "match",
       "frame_fit": "match first frame",
       "pipe": [
-        "5",
+        "6",
         0
       ]
     },
@@ -111,7 +131,7 @@
       "title": "References"
     }
   },
-  "7": {
+  "8": {
     "class_type": "PROMPTFORGE_V2_WRITER_MODEL",
     "inputs": {
       "model": "[gguf] [LOCAL Q4] [VISION] Qwen3.8-9B Heretic GGUF [9B, vision]",
@@ -124,7 +144,7 @@
       "title": "Writer Model"
     }
   },
-  "8": {
+  "9": {
     "class_type": "PROMPTFORGE_V2_H3_PROMPT",
     "inputs": {
       "source": "raw",
@@ -142,7 +162,7 @@
       "music": "N/A",
       "generation": "minimax",
       "pipe": [
-        "6",
+        "7",
         0
       ]
     },
@@ -150,7 +170,7 @@
       "title": "Prompt"
     }
   },
-  "9": {
+  "10": {
     "class_type": "PROMPTFORGE_V2_H3_PROMPT_WRITER",
     "inputs": {
       "writer_preset": "auto",
@@ -166,15 +186,15 @@
       "checks": "strict",
       "retries": "1",
       "pipe": [
-        "8",
+        "9",
         0
       ],
       "writer_model": [
-        "7",
+        "8",
         0
       ],
       "text": [
-        "8",
+        "9",
         1
       ],
       "length_words": 0
@@ -183,15 +203,15 @@
       "title": "Prompt Writer"
     }
   },
-  "10": {
+  "11": {
     "class_type": "PROMPTFORGE_V2_PROMPT_INSPECT",
     "inputs": {
       "pipe": [
-        "9",
+        "10",
         0
       ],
       "text": [
-        "9",
+        "10",
         1
       ]
     },
@@ -199,7 +219,7 @@
       "title": "Prompt Review"
     }
   },
-  "11": {
+  "12": {
     "class_type": "PROMPTFORGE_V2_H3_SAMPLING_SETTINGS",
     "inputs": {
       "seed": 0,
@@ -215,7 +235,7 @@
       "refine_scheduler": "linear from start",
       "start_sigma": 0.9035,
       "pipe": [
-        "10",
+        "11",
         0
       ]
     },
@@ -223,7 +243,7 @@
       "title": "Sampling First And Refine"
     }
   },
-  "12": {
+  "13": {
     "class_type": "PROMPTFORGE_V2_H3_UPSCALE_SETTINGS",
     "inputs": {
       "upscale_model": "<SELECT_H3_FP32_LATENT_UPSCALER>",
@@ -232,7 +252,7 @@
       "percent": 200.0,
       "megapixels": 1.0,
       "pipe": [
-        "11",
+        "12",
         0
       ]
     },
@@ -240,16 +260,16 @@
       "title": "Upscale Settings"
     }
   },
-  "13": {
+  "14": {
     "class_type": "PROMPTFORGE_V2_H3_ENCODE",
     "inputs": {
       "clip_skip": -1,
       "pipe": [
-        "12",
+        "13",
         0
       ],
       "text": [
-        "8",
+        "9",
         1
       ],
       "clip": [
@@ -265,7 +285,7 @@
       "title": "Encode"
     }
   },
-  "14": {
+  "15": {
     "class_type": "PROMPTFORGE_V2_H3_SAMPLE",
     "inputs": {
       "pipe_settings": true,
@@ -276,19 +296,19 @@
       "shift_video": 0.0,
       "shift_audio": 0.0,
       "pipe": [
-        "13",
+        "14",
         0
       ],
       "positive": [
-        "13",
+        "14",
         1
       ],
       "negative": [
-        "13",
+        "14",
         2
       ],
       "latent": [
-        "13",
+        "14",
         3
       ]
     },
@@ -296,14 +316,14 @@
       "title": "Sample First"
     }
   },
-  "15": {
+  "16": {
     "class_type": "PROMPTFORGE_V2_H3_FIRST_PASS_PREVIEW",
     "inputs": {
       "enabled": true,
       "save": true,
       "filename_prefix": "video/PromptForge/h3_t2v_first_pass",
       "pipe": [
-        "14",
+        "15",
         0
       ],
       "decode_with": "decode vae"
@@ -312,16 +332,16 @@
       "title": "First Pass Preview"
     }
   },
-  "16": {
+  "17": {
     "class_type": "PROMPTFORGE_V2_H3_LATENT_UPSCALE",
     "inputs": {
       "enabled": true,
       "pipe": [
-        "15",
+        "16",
         0
       ],
       "latent": [
-        "14",
+        "15",
         1
       ]
     },
@@ -329,16 +349,16 @@
       "title": "Latent Upscale"
     }
   },
-  "17": {
+  "18": {
     "class_type": "PROMPTFORGE_V2_H3_REFINE",
     "inputs": {
       "enabled": true,
       "pipe": [
-        "16",
+        "17",
         0
       ],
       "latent": [
-        "16",
+        "17",
         1
       ]
     },
@@ -346,7 +366,7 @@
       "title": "Sample Refine"
     }
   },
-  "18": {
+  "19": {
     "class_type": "PROMPTFORGE_V2_H3_DECODE",
     "inputs": {
       "tile_size": 256,
@@ -355,7 +375,7 @@
       "audio_normalize": false,
       "audio_gain_db": 0.0,
       "pipe": [
-        "17",
+        "18",
         0
       ],
       "vae": [
@@ -363,7 +383,7 @@
         3
       ],
       "latent": [
-        "17",
+        "18",
         1
       ],
       "audio_from": "second pass",
@@ -373,7 +393,7 @@
       "title": "Decode"
     }
   },
-  "19": {
+  "20": {
     "class_type": "PROMPTFORGE_V2_FRAME_INTERPOLATE",
     "inputs": {
       "enabled": true,
@@ -383,7 +403,7 @@
       "overlap": 2,
       "scale": 1.0,
       "pipe": [
-        "18",
+        "19",
         0
       ]
     },
@@ -391,7 +411,7 @@
       "title": "Optional Rife"
     }
   },
-  "20": {
+  "21": {
     "class_type": "PROMPTFORGE_V2_VIDEO_CLEANUP",
     "inputs": {
       "enabled": false,
@@ -400,11 +420,11 @@
       "deblur": false,
       "deblur_quality": "Low",
       "pipe": [
-        "19",
+        "20",
         0
       ],
       "images": [
-        "19",
+        "20",
         1
       ]
     },
@@ -412,7 +432,7 @@
       "title": "Optional Cleanup"
     }
   },
-  "21": {
+  "22": {
     "class_type": "PROMPTFORGE_V2_H3_PREVIEW_SAVE",
     "inputs": {
       "save": true,
@@ -432,15 +452,15 @@
       "loop_preview": true,
       "autoplay_preview": true,
       "pipe": [
-        "20",
+        "21",
         0
       ],
       "images": [
-        "20",
+        "21",
         1
       ],
       "audio": [
-        "18",
+        "19",
         2
       ]
     },
@@ -448,14 +468,14 @@
       "title": "Save Video"
     }
   },
-  "22": {
+  "23": {
     "class_type": "PROMPTFORGE_V2_PRESETS",
     "inputs": {
       "preset_name": "",
       "presets": "{\"schema_version\":2,\"presets\":{}}",
       "include_text": false,
       "pipe": [
-        "21",
+        "22",
         0
       ]
     },
@@ -463,11 +483,11 @@
       "title": "Presets"
     }
   },
-  "23": {
+  "24": {
     "class_type": "PROMPTFORGE_V2_RUN_INSPECT",
     "inputs": {
       "pipe": [
-        "22",
+        "23",
         0
       ]
     },
