@@ -12,6 +12,8 @@ import torch.nn.functional as F
 
 import comfy.model_management as mm
 
+from .. import frame_buffer
+
 QUALITIES = ["Low", "Medium", "High", "Ultra"]
 
 
@@ -47,7 +49,7 @@ def clean(frames, denoise=False, denoise_quality="High", deblur=False, deblur_qu
     passes = " + ".join(name for name, on in (("denoise", denoise), ("deblur", deblur)) if on)
     print(f"[PromptForge] RTX cleanup {passes} on {count} frames at {width}x{height}", flush=True)
     padded = aligned_width(width)
-    out = torch.empty((count, height, width, 3), device=frames.device, dtype=frames.dtype)
+    out = frame_buffer.empty((count, height, width, 3), frames.dtype, frames.device)
     with contextlib.ExitStack() as stack:
         effects = [stack.enter_context(effect) for effect in
                    _passes(denoise, denoise_quality, deblur, deblur_quality, device)]

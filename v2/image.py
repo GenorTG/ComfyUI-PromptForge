@@ -12,7 +12,7 @@ from comfy import supported_models
 from .. import unified_loader as loader
 from .contracts import schema as nodes_schema, PIPE, new_pipe, ensure_pipe, evolve, require, take
 from .krea import encode_grounded, patch_model
-from .shared import expand_tokens
+from .shared import expand_tokens, retry_unloaded
 from .upscale import upscale_latent
 
 Pipe = io.Custom(PIPE)
@@ -206,10 +206,11 @@ def refine(pipe, latent):
     if pipe["family"] == "krea2" and (pipe["artifacts"].get("krea_source_latents") or sampling.get("use_nag")):
         model = patch_model(model, pipe["artifacts"]["negative"], pipe["artifacts"].get("krea_source_latents", []),
                             {**pipe["settings"].get("krea_edit", {}), "masks": pipe["artifacts"].get("krea_masks")}, sampling)
-    latent = nodes.common_ksampler(model, (sampling.get("seed", 0) + 1) % 2**64, sampling.get("refine_steps", 4),
+    upscaled = latent
+    latent = retry_unloaded("refining", lambda: nodes.common_ksampler(model, (sampling.get("seed", 0) + 1) % 2**64, sampling.get("refine_steps", 4),
                                    sampling.get("cfg", 1.0), sampling.get("sampler_name", "euler"),
-                                   sampling.get("scheduler", "simple"), positive, negative, latent,
-                                   denoise=sampling.get("refine_denoise", 0.25))[0]
+                                   sampling.get("scheduler", "simple"), positive, negative, upscaled,
+                                   denoise=sampling.get("refine_denoise", 0.25))[0])
     fmt = pipe["settings"].get("format")
     if fmt:
         ratio = latent.get("downscale_ratio_spacial") or 8
@@ -310,8 +311,8 @@ class ImageSample(io.ComfyNode):
         if pipe["family"] == "krea2" and (a.get("krea_source_latents") or s.get("use_nag")):
             model = patch_model(model, a["negative"], a.get("krea_source_latents", []),
                                 {**pipe["settings"].get("krea_edit", {}), "masks": a.get("krea_masks")}, s)
-        latent = nodes.common_ksampler(model, s["seed"], s["steps"], s["cfg"], s["sampler_name"],
-                                      s["scheduler"], a["positive"], a["negative"], a["latent"], denoise=s["denoise"])[0]
+        latent = retry_unloaded("sampling", lambda: nodes.common_ksampler(model, s["seed"], s["steps"], s["cfg"], s["sampler_name"],
+                                      s["scheduler"], a["positive"], a["negative"], a["latent"], denoise=s["denoise"])[0])
         return io.NodeOutput(evolve(pipe, artifacts={"latent": latent}, invalidate=("images",)), latent)
 
 

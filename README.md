@@ -256,12 +256,16 @@ Standalone output node; it never generates a prompt.
 - Scans every locally available GGUF/safetensors model (or one selected model) and prints the recommended settings for this GPU.
 - `OUTPUT_NODE`-only: queue it on its own (or use its button) to inspect configs without running the image workflow.
 
+### Long clips and low memory
+
+Decode, Frame Interpolate, Join and Video Cleanup do not fail when a clip is larger than the free RAM. They first release the model copies ComfyUI keeps pinned in RAM; if that is not enough, the frames go to a file in ComfyUI's temp folder (slower, same pictures; it needs that much free disk). Large clips are kept as float16. When sampling, encoding or latent upscaling runs out of GPU memory, everything is unloaded and the stage runs once more. Other node packs that copy a whole clip can still run out of memory.
+
 ### PromptForge Frame Interpolate (`PROMPTFORGE_FrameInterpolate`)
 
 RIFE / FILM frame interpolation for large frames (for example the 2x-decoded MiniMax output) that backs off by itself instead of crashing ComfyUI. It uses ComfyUI's own interpolation models, so no other node pack is needed.
 
 - **`ckpt_name`**: every model in `models/frame_interpolation` (RIFE 4.25+, FILM), plus `blend`, a plain cross-fade that needs no model and is instant (ghosts on motion). Older RIFE `.pth` files (rife47 / 49 / 417) are not supported by ComfyUI's loader.
-- **`batch_size`, `overlap`, `scale`, `clear_cache`**: the whole clip runs in one piece by default (`batch_size 0`), which gives the cleanest motion. If memory is tight, `batch_size` splits it, `overlap` shares context frames and cross-fades the seam, `scale` interpolates smaller and scales back, and `clear_cache` releases memory between runs. OOM still backs off automatically (down to 4 frames), then cross-fades.
+- **`batch_size`, `overlap`, `scale`, `clear_cache`**: the clip always runs in short pieces sized from the frame size (`batch_size 0`); RIFE and FILM only look at neighbouring frames, so the result is the same as one run. `batch_size` caps the piece, `overlap` shares extra frames, `scale` interpolates smaller and scales back, `clear_cache` releases GPU memory between pieces. On out of GPU memory it unloads the other models and shortens the pieces; only a pair of frames that still does not fit is cross-faded.
 
 ### PromptForge Save Video (`PROMPTFORGE_SaveVideo`)
 
@@ -270,7 +274,6 @@ A faster stand-in for VHS Video Combine. Frames are converted to BT.709 YUV on t
 - **Codecs**: h264 / h265 / av1 on nvenc (GPU) or x264 / x265 / SVT-AV1 (CPU), `speed` preset, `quality` (crf/cq) or `bitrate`, 8 or 10-bit (h264 nvenc is 8-bit only).
 - **Options**: `film_grain` (fine grain added while encoding, 0.005-0.01 is subtle), `pingpong`, `save_output` (off writes to temp), `save_metadata` (workflow in the file), optional `audio` with `audio_bitrate_kbps`.
 - Odd sizes are padded by one pixel to an even size. No separate `ffmpeg` install is needed. nvenc rejects very small frames (under about 150 px); use a CPU codec for those.
-- Keep the interpolation node's `output_precision` on float32 when feeding this node or VHS.
 
 ### PromptForge Loader (`PROMPTFORGE_Loader`)
 

@@ -37,7 +37,7 @@ from comfy_extras import nodes_audio, nodes_minimax_h3
 from comfy_extras.nodes_sparse_attention import BlockSparseAttention
 from comfy_extras.nodes_model_advanced import ModelAttentionBackend
 
-from . import empty_latent, h3_actions, h3_settings, h3_upscaler, minimax_decode, preview_override, sampler
+from . import frame_buffer, empty_latent, h3_actions, h3_settings, h3_upscaler, minimax_decode, preview_override, sampler
 
 SPARSE_DENSE_BLOCKS = "0, 1"
 FPS = 24
@@ -557,7 +557,11 @@ class PROMPTFORGE_H3Generate:
         """The frames of an existing video at the size of the new parts."""
         if frames.shape[1:3] == like.shape[1:3]:
             return frames
-        return comfy.utils.common_upscale(frames.movedim(-1, 1), like.shape[2], like.shape[1], "lanczos", "center").movedim(1, -1)
+        out = frame_buffer.empty((frames.shape[0], like.shape[1], like.shape[2], 3), torch.float16)
+        for start in range(0, frames.shape[0], 16):
+            part = frames[start:start + 16, ..., :3].movedim(-1, 1)
+            out[start:start + 16] = comfy.utils.common_upscale(part, like.shape[2], like.shape[1], "lanczos", "center").movedim(1, -1)
+        return out
 
     @staticmethod
     def _resample(audio, channels, rate, frames):
@@ -580,7 +584,7 @@ class PROMPTFORGE_H3Generate:
         dtype = torch.float32 if size * 4 < min(0.4 * psutil.virtual_memory().available, 2 << 30) else torch.float16
         if dtype == torch.float16:
             print("[PromptForge] endless video: the video is large, so the frames are returned as float16 to save RAM.")
-        video = torch.empty((count, *parts[0].shape[1:]), dtype=dtype)
+        video = frame_buffer.empty((count, *parts[0].shape[1:]), dtype)
         position = 0
         while parts:
             part = parts.pop(0)

@@ -3,7 +3,6 @@
 Reference banks contain ordered entries {name, kind, data, audio}; selection
 uses comma-separated names and preserves that order. Video references are 24fps.
 """
-import gc
 import math
 import re
 import os
@@ -16,13 +15,12 @@ import comfy.audio
 import comfy.utils
 import comfy.samplers
 import comfy.model_management
-import comfy_aimdo.model_vbar as comfy_aimdo_model_vbar
 from comfy_api.latest import io, ui, InputImpl
 from comfy_extras import nodes_minimax_h3 as core
 from comfy_extras import nodes_hunyuan, nodes_custom_sampler, nodes_audio
-from .. import minimax_decode, video_save, unified_loader as loader
+from .. import frame_buffer, minimax_decode, video_save, unified_loader as loader
 from .contracts import schema as nodes_schema, PIPE, new_pipe, ensure_pipe, evolve, require, take
-from .shared import expand_tokens
+from .shared import expand_tokens, free_vram, retry_unloaded
 # the sequence nodes use these same encode/sample/upscale/refine/decode/join services
 from .h3_sequence import H3Parts, H3Continuity, H3Sequence
 
@@ -186,7 +184,7 @@ def video_at_24(frames, fps):
         raise ValueError("Reference video frame rate must be positive.")
     count = max(1, round(frames.shape[0] * 24 / fps))
     indices = torch.arange(count, device=frames.device).mul(fps / 24).floor().long().clamp(max=frames.shape[0] - 1)
-    return frames[indices]
+    return torch.index_select(frames, 0, indices, out=frame_buffer.empty((count, *frames.shape[1:]), frames.dtype, frames.device))
 
 
 _SECTIONS = {"t2v": ("integrated_multimodal_description", "overall_soundscape", "non_diegetic_music"),
@@ -283,7 +281,7 @@ class H3Encode(io.ComfyNode):
             pipe = evolve(pipe, artifacts={"text": text})
             if not pipe["settings"].get("prompt"):
                 pipe = evolve(pipe, section="prompt", settings={"source": "raw", "text": text, "negative": ""})
-        result = encode(pipe)
+        result = retry_unloaded("encoding", lambda: encode(pipe))
         return io.NodeOutput(result, *require(result, "positive", "negative", "latent"))
 
 
@@ -337,7 +335,7 @@ def sample(pipe, seed=0, steps=30, cfg=1.0, sampler_name="euler", scheduler="sim
         audio_shift = shift_audio or original.audio_shift or original.shift
         model = core.MiniMaxH3SigmaShift.execute(model, video_shift, audio_shift).args[0]
     if start_sigma is None and scheduler != "beta57":
-        output = nodes.common_ksampler(model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent)[0]
+        output = retry_unloaded("sampling", lambda: nodes.common_ksampler(model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent)[0])
     else:
         if scheduler == "beta57":
             sigmas = comfy.samplers.beta_scheduler(model.get_model_object("model_sampling"), steps, alpha=0.5, beta=0.7)
@@ -351,7 +349,7 @@ def sample(pipe, seed=0, steps=30, cfg=1.0, sampler_name="euler", scheduler="sim
             sigmas = nodes_custom_sampler.BasicScheduler.execute(model, scheduler, steps, 1.0).args[0]
             sigmas = sigmas * (start_sigma / float(sigmas[0]))
         sampler = comfy.samplers.sampler_object(sampler_name)
-        output = nodes_custom_sampler.SamplerCustom.execute(model, True, seed, cfg, positive, negative, sampler, sigmas, latent).args[0]
+        output = retry_unloaded("sampling", lambda: nodes_custom_sampler.SamplerCustom.execute(model, True, seed, cfg, positive, negative, sampler, sigmas, latent).args[0])
     settings = dict(pipe["settings"].get("sampling", {}))
     settings["refine" if start_sigma is not None else "first"] = dict(seed=seed, steps=steps, cfg=cfg, sampler_name=sampler_name,
         scheduler=scheduler, shift_video=shift_video, shift_audio=shift_audio, **({"start_sigma": start_sigma} if start_sigma is not None else {}))
@@ -475,11 +473,7 @@ class H3LatentUpscale(io.ComfyNode):
         # the upscaler loads its own checkpoint; give it every byte the sampler held
         free_vram()
         model = nodes_hunyuan.LatentUpscaleModelLoader.execute(settings["model"]).args[0]
-        try:
-            latent = core.MiniMaxH3LatentUpscaleWithModel.execute(model, source, width, height).args[0]
-        except torch.cuda.OutOfMemoryError:
-            free_vram()
-            latent = core.MiniMaxH3LatentUpscaleWithModel.execute(model, source, width, height).args[0]
+        latent = retry_unloaded("upscaling", lambda: core.MiniMaxH3LatentUpscaleWithModel.execute(model, source, width, height).args[0])
         free_vram()
         video = latent["samples"].tensors[0] if latent["samples"].is_nested else latent["samples"]
         height, width = video.shape[-2] * 16, video.shape[-1] * 16
@@ -488,18 +482,6 @@ class H3LatentUpscale(io.ComfyNode):
             megapixels=round(width * height / 1e6, 2)))
         result = evolve(pipe, artifacts={"latent": latent, "first_pass_audio": source["samples"].unbind()[1]}, invalidate=OUTPUTS)
         return io.NodeOutput(result, latent)
-
-
-def free_vram():
-    """Hard release: unload every model, then empty the CUDA allocator."""
-    comfy.model_management.unload_all_models()
-    comfy.model_management.free_memory(1e30, comfy.model_management.get_torch_device(), for_dynamic=True)
-    gc.collect()
-    comfy.model_management.soft_empty_cache(force=True)
-    try:
-        comfy_aimdo_model_vbar.vbars_reset_watermark_limits()
-    except Exception:
-        pass
 
 
 def decode(pipe, tile_size=256, frames_per_pass=0, output_device="auto", audio_normalize=False, audio_gain_db=0.0, audio_from="second pass", decode_with=DECODE_VAE, keep_models=False):
@@ -627,16 +609,23 @@ def join(previous, current, overlap_frames=0, transition="crossfade", level=True
     if left.shape[1:] != right.shape[1:]:
         raise ValueError("Join requires matching decoded dimensions.")
     n = min(max(0, overlap_frames), left.shape[0], right.shape[0])
-    right = right.to(left)
+    kept = left.shape[0] - n
+    images = frame_buffer.empty((kept + right.shape[0], *left.shape[1:]), left.dtype, left.device)
+    # only the start of the new part is ever corrected or blended, so only that is held a second time
+    edge = n or min(4, left.shape[0], right.shape[0])
+    fade = max(2 * edge, 24)
+    changed = min(right.shape[0], max(n + 36, edge + fade) if level else n)
+    head = right[:changed].to(left, copy=True)
     if level:
-        right = repair_stalls(deflicker(right, n + 36), n + 36)
-        edge = n or min(4, left.shape[0], right.shape[0])
-        right = match_levels(left[-edge:], right, max(2 * edge, 24))
+        head = match_levels(left[-edge:], repair_stalls(deflicker(head, n + 36), n + 36), fade)
+    images[:kept] = left[:kept]
     if n and transition == "crossfade":
         weight = torch.linspace(0, 1, n, device=left.device, dtype=left.dtype).view(-1, 1, 1, 1)
-        images = torch.cat((left[:-n], left[-n:] * (1 - weight) + right[:n] * weight, right[n:]))
+        images[kept:left.shape[0]] = left[kept:] * (1 - weight) + head[:n] * weight
     else:
-        images = torch.cat((left, right[n:]))
+        images[kept:left.shape[0]] = left[kept:]
+    images[left.shape[0]:kept + changed] = head[n:]
+    images[kept + changed:] = right[changed:]
     rate = la["sample_rate"]
     lw = la["waveform"]
     rw = ra["waveform"]
