@@ -44,12 +44,15 @@ function panel(node, name, minHeight, maxHeight) {
     event.stopPropagation();
     node.setSize([Math.max(320, drag.w + event.clientX - drag.x), Math.max(220, drag.h + event.clientY - drag.y)]);
   });
-  const release = () => { drag = null; };
+  // the grip swallows the mouse events ComfyUI watches, so it records the new size itself or a page reload loses it
+  const release = () => { if (drag) remember(); drag = null; };
   grip.addEventListener("pointerup", release);
   grip.addEventListener("pointercancel", release);
   node.addDOMWidget(name, "promptforge_v2", frame, { serialize: false, getMinHeight: () => 200 });
   return { frame, content };
 }
+// puts the graph as it is now into ComfyUI's draft, which is what a page reload restores
+const remember = () => app.extensionManager?.workflow?.activeWorkflow?.changeTracker?.captureCanvasState?.();
 function change(node, action) {
   node.graph?.beforeChange();
   try { action(); } finally { node.graph?.afterChange(); }
@@ -130,11 +133,17 @@ function promptUI(node, fallback) {
       item.callback?.(area.value);
     });
     areas.set(name, area);
-    // dragging the textarea grip grows the node instead of scrolling the panel
-    area.addEventListener("pointerup", () => {
-      const needed = node.computeSize?.()[1] || 0;
-      if (needed > (node.size?.[1] || 0)) node.setSize?.([node.size[0], needed]);
-    });
+    // a box dragged to a new height keeps it in the workflow; the pointer may be released outside the box
+    area.addEventListener("pointerdown", () => window.addEventListener("pointerup", () => {
+      const height = parseInt(area.style.height, 10);
+      if (!height || node.properties?.promptforge_heights?.[name] === height) return;
+      change(node, () => {
+        node.properties = { ...node.properties, promptforge_heights: { ...node.properties?.promptforge_heights, [name]: height } };
+        const needed = node.computeSize?.()[1] || 0;
+        if (needed > (node.size?.[1] || 0)) node.setSize?.([node.size[0], needed]);
+      });
+      remember();
+    }, { once: true, capture: true }));
     return area;
   }
   function line(name, placeholder) {
@@ -154,6 +163,9 @@ function promptUI(node, fallback) {
     for (const [name, area] of areas) {
       const value = widget(node, name)?.value ?? "";
       if (area.value !== value) area.value = value;
+      if (area.tagName !== "TEXTAREA") continue;
+      const height = node.properties?.promptforge_heights?.[name];
+      area.style.height = height ? `${height}px` : "";
     }
   }
 

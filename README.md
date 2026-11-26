@@ -1,22 +1,99 @@
 # ComfyUI PromptForge
 
-**PromptForge 1.31.0 adds the V2 image and video suite.** It runs alongside the
-existing nodes, preserving saved workflows and legacy behavior. ACE and
-audio-only workflows remain unchanged. See [legacy compatibility](LEGACY.md),
-[the V2 guide and node catalog](docs/V2.md), and [the implementation plan and
-audit](docs/V2_PLAN.md).
+Image and video generation for **Krea 2, MOSS Image, Anima and MiniMax H3**: model and LoRA loading, prompt
+writing, references, sampling, upscaling, interpolation and saving.
 
-V2 provides 50 nodes and 15 blank workflow templates for Krea 2, MOSS Image,
-Anima, and MiniMax H3. Workflows separate model and LoRA loading, prompt choice
-and writing, reference selection, format and sampling, encoding, generation,
-refinement, interpolation, and saving. They depend on PromptForge and supported
-ComfyUI core APIs; model files and any needed checkpoints must be supplied by
-the user.
+The current nodes are the **V2** suite (node names `PROMPTFORGE_V2_*`). **They work best together, in the sample
+workflows that ship with this pack.** Start from one of those rather than from an empty canvas. The older nodes
+remain so that saved workflows keep running.
 
-The workflows are the ones you keep in ComfyUI's own workflow folder; each one is
-built from the same `PROMPTFORGE_V2_*` nodes and is blank (no prompts, no media
-paths). The optional LoRA Manager integration
-enhances browsing when installed; it is not required.
+- [Getting started](#getting-started)
+- [Sample workflows](#sample-workflows)
+- [V2 guide and node catalog](docs/V2.md)
+- [Legacy compatibility](LEGACY.md)
+
+## Getting started
+
+1. **Install.** Clone into `ComfyUI/custom_nodes` and install the requirements into the Python environment that
+   runs ComfyUI (not the system Python):
+
+   ```bash
+   cd ComfyUI/custom_nodes
+   git clone https://github.com/GenorTG/ComfyUI-PromptForge
+   python -m pip install transformers huggingface-hub hf_xet psutil numpy Pillow bitsandbytes accelerate \
+       llama-cpp-python av "gguf>=0.13.0" flash-linear-attention
+   ```
+
+   Build or install `llama-cpp-python` with CUDA for the GGUF writer engine ([Dependencies](#dependencies)). Use a
+   current ComfyUI: V2 was built on 0.44.0 and needs its native H3, Krea, SAM3 and V3 node APIs. Restart ComfyUI.
+2. **Open a sample workflow.** In ComfyUI choose **Workflow → Browse Templates**, pick **ComfyUI-PromptForge**
+   and open a `V2_...` template.
+3. **Choose your files.** Templates are blank. Replace every `<SELECT_...>` and `<INPUT_...>` value with your own
+   model, encoder, VAE, picture or video (see [what to put where](#what-to-put-where)). No model weights ship
+   with the pack.
+4. **Write the prompt** in the Prompt node. `source` decides how it is used:
+   - `raw` (default): your text is used exactly as written.
+   - `idea`: a local writer model expands your idea into a full prompt for that model family.
+   - `action`: starts from an action preset.
+
+   `idea` and `action` use the **Writer Model** node; a catalog model that is not on disk is downloaded the first
+   time you use it.
+5. **Queue.** Then check **Prompt Inspect** for the final prompt and its warnings. Save your copy under a new name.
+
+## Sample workflows
+
+They are in [`example_workflows/`](example_workflows) and appear in ComfyUI's template browser.
+[`example_workflows/v2/`](example_workflows/v2) holds the same workflows with, for each, an API (`/prompt`) JSON
+for scripts and a manifest listing the values you must fill in.
+
+| Template | What it does | Pictures or video you supply |
+|---|---|---|
+| `V2_krea_t2i` | Krea 2 text to image | none |
+| `V2_krea_edit` | Krea 2 identity edit | one reference |
+| `V2_krea_ref2i_multi` | Krea 2 image from two references | two references |
+| `V2_krea_transfer` | Krea 2 transfer between two pictures | two pictures |
+| `V2_moss_t2i` | MOSS Image text to image | none |
+| `V2_anima_t2i` | Anima text to image | none |
+| `V2_h3_t2v` | H3 text to video | none |
+| `V2_h3_i2v` | H3 from a first frame | first frame |
+| `V2_h3_l2v` | H3 toward a last frame | last frame |
+| `V2_h3_fl2v` | H3 between two frames | first and last frame |
+| `V2_h3_ref2v` | H3 from references | add them on the Reference Manager |
+| `V2_h3_multipart_t2v` | Long H3 video in parts | none; fill in the parts |
+| `V2_h3_multipart_references` | Long H3 video in parts, with references | references and parts |
+| `V2_h3_continue_existing` | Extends an existing video | source video |
+
+The H3 templates generate at 0.5 MP (16:9), upscale the latent to twice the pixels, refine it and double the frame
+rate with RIFE. Each of those stages has its own switch.
+They also include **Experimental Speedup** with Sol attention (`sol_attention`) on: it skips low-scoring attention
+blocks, so generation is faster and the result differs from dense attention. Switch it off or bypass the node to
+compare. On a GPU without the kernel, attention stays dense.
+
+### What to put where
+
+| Value | Folder under `ComfyUI/models` |
+|---|---|
+| Diffusion model | `diffusion_models` |
+| Text encoder | `text_encoders` |
+| Image, video and audio VAE | `vae` |
+| LoRAs (add them in **LoRA Stack**; Krea edit needs its identity/edit LoRA) | `loras` |
+| H3 latent upscaler (H3 second pass) | `latent_upscale_models` |
+| Frame interpolation model (H3 templates ask for `rife_v4.26.safetensors`) | `frame_interpolation` |
+| SAM3 checkpoint with its text encoder (Krea reference masks, reference focus) | `sam3` or `checkpoints` |
+
+## Using the V2 nodes
+
+- **Follow the pipe.** The `pipe` connection carries the model, settings, prompt and results from stage to stage.
+  Nodes also work with ordinary ComfyUI sockets, but the pipe is what lets them cooperate.
+- **Leave the `model` input on Encode, Sample and Refine unconnected** when you use the pipe. A model wired there
+  replaces the pipe's model, so the LoRA, Performance, speedup and live preview settings are silently skipped.
+- **Order matters for the writer:** Format and References come before the Prompt Writer, so it knows the output
+  shape, clip length and what each reference is.
+- **Sampler settings** follow the model you pick (the `auto` checkbox on the Model node); resolution and length are
+  always yours to set in Format.
+- **Seeds** are set to randomize in the templates. Fix them when you want to compare two settings.
+- **Workflow Presets** saves and restores the settings of the connected nodes; **Run Inspect** shows what a run used.
+- A saved video or image carries its workflow: drag it back onto the canvas to restore it.
 
 ## Legacy workflow notes
 
@@ -190,7 +267,7 @@ RIFE / FILM frame interpolation for large frames (for example the 2x-decoded Min
 
 A faster stand-in for VHS Video Combine. Frames are converted to BT.709 YUV on the GPU while the encoder runs (PyAV, which ComfyUI ships), and video, audio and the embedded workflow are written in one pass.
 
-- **Codecs**: h264 / h265 / av1 on nvenc (GPU) or x264 / x265 / SVT-AV1 (CPU), `speed` preset, `quality` (crf/cq) or `bitrate`, 8 or 10-bit.
+- **Codecs**: h264 / h265 / av1 on nvenc (GPU) or x264 / x265 / SVT-AV1 (CPU), `speed` preset, `quality` (crf/cq) or `bitrate`, 8 or 10-bit (h264 nvenc is 8-bit only).
 - **Options**: `film_grain` (fine grain added while encoding, 0.005-0.01 is subtle), `pingpong`, `save_output` (off writes to temp), `save_metadata` (workflow in the file), optional `audio` with `audio_bitrate_kbps`.
 - Odd sizes are padded by one pixel to an even size. No separate `ffmpeg` install is needed. nvenc rejects very small frames (under about 150 px); use a CPU codec for those.
 - Keep the interpolation node's `output_precision` on float32 when feeding this node or VHS.

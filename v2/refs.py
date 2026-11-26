@@ -6,7 +6,7 @@ import json
 from comfy_api.latest import io
 
 from .contracts import schema, PIPE, ensure_pipe, evolve
-from . import media
+from . import focus, media
 from .h3 import DIRTY, grown, video_at_24
 
 Pipe = io.Custom(PIPE)
@@ -25,13 +25,14 @@ def parse(items):
     return [item for item in data if isinstance(item, dict)]
 
 
-def _load(pipe, item):
+def _load(pipe, item, sam3_checkpoint="auto", loaded=None):
     kind = item.get("kind")
     file = item.get("file") or ""
     if kind not in KINDS or not file:
         raise ValueError("Every reference needs a kind and a file.")
     if kind == "image":
-        result = media.LoadImage.execute(pipe=pipe, filename=file, role="reference", enabled=True).args
+        result = media.LoadImage.execute(pipe=pipe, filename=file, role="reference", enabled=True, sam3_checkpoint=sam3_checkpoint, loaded=loaded,
+                                         **{name: item[name] for name in focus.DEFAULTS if name in item}).args
         return result[0], {"kind": "image", "data": result[1]}, None
     if kind == "video":
         result = media.LoadVideo.execute(pipe=pipe, filename=file, role="reference", enabled=True).args
@@ -54,7 +55,8 @@ class ReferenceManager(io.ComfyNode):
                               io.String.Input("items", default="[]", multiline=True),
                               io.String.Input("names", default="", tooltip="Comma-separated reference names to use this run; empty uses every enabled reference."),
                               io.Float.Input("extra_video_fps", default=24.0, min=0.01, max=1000, tooltip="Frame rate of the videos connected to extra_videos."),
-                              grown(io.Image, "extra_images"), grown(io.Image, "extra_videos"), grown(io.Audio, "extra_audios")],
+                              grown(io.Image, "extra_images"), grown(io.Image, "extra_videos"), grown(io.Audio, "extra_audios"),
+                              io.Combo.Input("sam3_checkpoint", options=focus.checkpoints(), default="auto", optional=True, tooltip="Used by rows whose Focus is on.")],
                       outputs=[Pipe.Output()])
 
     @classmethod
@@ -68,13 +70,14 @@ class ReferenceManager(io.ComfyNode):
         return "|".join(stamps)
 
     @classmethod
-    def execute(cls, pipe=None, items="[]", names="", extra_video_fps=24.0, extra_images=None, extra_videos=None, extra_audios=None):
+    def execute(cls, pipe=None, items="[]", names="", extra_video_fps=24.0, extra_images=None, extra_videos=None, extra_audios=None, sam3_checkpoint="auto"):
         pipe = ensure_pipe(pipe)
         entries = []
+        loaded = {}
         for item in parse(items):
             if item.get("enabled") is False:
                 continue
-            pipe, entry, _ = _load(pipe, item)
+            pipe, entry, _ = _load(pipe, item, sam3_checkpoint, loaded)
             entries.append({**entry, "name": item.get("name") or "", "description": item.get("description", "")})
         for batch in _sockets(extra_images):
             entries += [{"kind": "image", "data": batch[index:index + 1], "name": "", "description": ""} for index in range(batch.shape[0])]

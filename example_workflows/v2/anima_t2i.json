@@ -488,7 +488,7 @@
       ],
       "size": [
         420,
-        506
+        514
       ],
       "flags": {},
       "order": 6,
@@ -575,7 +575,7 @@
       "type": "PROMPTFORGE_V2_PROMPT_INSPECT",
       "pos": [
         1668,
-        638
+        646
       ],
       "size": [
         440,
@@ -629,7 +629,7 @@
       "type": "PROMPTFORGE_V2_IMAGE_ENCODE",
       "pos": [
         44,
-        1364
+        1370
       ],
       "size": [
         322,
@@ -739,7 +739,7 @@
       "type": "PROMPTFORGE_V2_IMAGE_SAMPLE",
       "pos": [
         406,
-        1364
+        1370
       ],
       "size": [
         560,
@@ -833,7 +833,7 @@
       "type": "PROMPTFORGE_V2_IMAGE_LATENT_UPSCALE",
       "pos": [
         1078,
-        1364
+        1370
       ],
       "size": [
         372,
@@ -897,7 +897,7 @@
       "type": "PROMPTFORGE_V2_IMAGE_DECODE",
       "pos": [
         1078,
-        1562
+        1568
       ],
       "size": [
         264,
@@ -959,7 +959,7 @@
       "type": "PROMPTFORGE_V2_IMAGE_SAVE",
       "pos": [
         2178,
-        1364
+        1370
       ],
       "size": [
         440,
@@ -1017,7 +1017,7 @@
       "type": "PROMPTFORGE_V2_PRESETS",
       "pos": [
         2178,
-        1916
+        1922
       ],
       "size": [
         420,
@@ -1067,7 +1067,7 @@
       "type": "PROMPTFORGE_V2_RUN_INSPECT",
       "pos": [
         2658,
-        1364
+        1370
       ],
       "size": [
         440,
@@ -1398,7 +1398,7 @@
         1652,
         0,
         472,
-        1180
+        1188
       ],
       "color": "#3a5a2a",
       "font_size": 24,
@@ -1420,7 +1420,7 @@
       "title": "06 Encode & Sample",
       "bounding": [
         28,
-        1288,
+        1294,
         954,
         740
       ],
@@ -1432,7 +1432,7 @@
       "title": "07 Refine & Decode",
       "bounding": [
         1062,
-        1288,
+        1294,
         404,
         380
       ],
@@ -1444,7 +1444,7 @@
       "title": "09 Inspect & Save",
       "bounding": [
         2162,
-        1288,
+        1294,
         952,
         1048
       ],

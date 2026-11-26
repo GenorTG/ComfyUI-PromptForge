@@ -1,6 +1,6 @@
 {
-  "last_node_id": 25,
-  "last_link_id": 41,
+  "last_node_id": 26,
+  "last_link_id": 42,
   "nodes": [
     {
       "id": 1,
@@ -53,8 +53,8 @@
           "name": "vae",
           "type": "VAE",
           "links": [
-            21,
-            32
+            22,
+            33
           ],
           "slot_index": 3
         },
@@ -150,7 +150,7 @@
           "name": "clip",
           "type": "CLIP",
           "links": [
-            20
+            21
           ],
           "slot_index": 2
         },
@@ -328,14 +328,14 @@
     },
     {
       "id": 5,
-      "type": "PROMPTFORGE_V2_H3_FORMAT",
+      "type": "PROMPTFORGE_V2_H3_SPEEDUP",
       "pos": [
-        3134,
-        76
+        3634,
+        908
       ],
       "size": [
-        425,
-        262
+        420,
+        280
       ],
       "flags": {},
       "order": 4,
@@ -346,6 +346,78 @@
           "type": "PROMPTFORGE_V2_PIPE",
           "link": 6,
           "shape": 7
+        },
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "PROMPTFORGE_V2_PIPE",
+          "type": "PROMPTFORGE_V2_PIPE",
+          "links": [
+            7
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [],
+          "slot_index": 1
+        }
+      ],
+      "title": "Speedup",
+      "properties": {
+        "Node name for S&R": "PROMPTFORGE_V2_H3_SPEEDUP",
+        "promptforge_role": "speedup",
+        "promptforge_v2_widget_values": {
+          "sol_attention": true,
+          "sol_tau": 1.3,
+          "sol_start_percent": 0.2,
+          "sol_end_percent": 1.0,
+          "sol_extra_tokens": 256,
+          "attention_backend": "as loaded",
+          "keep_models_for_first_pass": false,
+          "log_to_console": true
+        }
+      },
+      "widgets_values": [
+        true,
+        1.3,
+        0.2,
+        1.0,
+        256,
+        "as loaded",
+        false,
+        true
+      ],
+      "color": "#5a5a8a",
+      "bgcolor": "#33334d"
+    },
+    {
+      "id": 6,
+      "type": "PROMPTFORGE_V2_H3_FORMAT",
+      "pos": [
+        3134,
+        76
+      ],
+      "size": [
+        425,
+        262
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pipe",
+          "type": "PROMPTFORGE_V2_PIPE",
+          "link": 7,
+          "shape": 7
         }
       ],
       "outputs": [
@@ -353,7 +425,7 @@
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            7
+            8
           ],
           "slot_index": 0
         },
@@ -389,7 +461,7 @@
       "bgcolor": "#4a3b1b"
     },
     {
-      "id": 6,
+      "id": 7,
       "type": "PROMPTFORGE_V2_LOAD_IMAGE",
       "pos": [
         674,
@@ -397,73 +469,7 @@
       ],
       "size": [
         640,
-        876
-      ],
-      "flags": {},
-      "order": 5,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "pipe",
-          "type": "PROMPTFORGE_V2_PIPE",
-          "link": 7,
-          "shape": 7
-        }
-      ],
-      "outputs": [
-        {
-          "name": "PROMPTFORGE_V2_PIPE",
-          "type": "PROMPTFORGE_V2_PIPE",
-          "links": [
-            8
-          ],
-          "slot_index": 0
-        },
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [],
-          "slot_index": 1
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": [],
-          "slot_index": 2
-        }
-      ],
-      "title": "First Frame",
-      "properties": {
-        "Node name for S&R": "PROMPTFORGE_V2_LOAD_IMAGE",
-        "promptforge_role": "first_frame",
-        "promptforge_v2_widget_values": {
-          "filename": "<INPUT_FIRST_FRAME.png>",
-          "role": "first_frame",
-          "index": 1,
-          "enabled": true,
-          "description": ""
-        }
-      },
-      "widgets_values": [
-        "<INPUT_FIRST_FRAME.png>",
-        "first_frame",
-        1,
-        true,
-        ""
-      ],
-      "color": "#2a6b5f",
-      "bgcolor": "#1b403a"
-    },
-    {
-      "id": 7,
-      "type": "PROMPTFORGE_V2_LOAD_IMAGE",
-      "pos": [
-        1354,
-        76
-      ],
-      "size": [
-        640,
-        876
+        940
       ],
       "flags": {},
       "order": 6,
@@ -498,6 +504,88 @@
           "slot_index": 2
         }
       ],
+      "title": "First Frame",
+      "properties": {
+        "Node name for S&R": "PROMPTFORGE_V2_LOAD_IMAGE",
+        "promptforge_role": "first_frame",
+        "promptforge_v2_widget_values": {
+          "filename": "<INPUT_FIRST_FRAME.png>",
+          "role": "first_frame",
+          "index": 1,
+          "enabled": true,
+          "description": "",
+          "focus": "",
+          "focus_crop": true,
+          "focus_background": "keep",
+          "focus_padding": 0.15,
+          "focus_threshold": 0.5,
+          "focus_grow": 0,
+          "focus_feather": 2,
+          "sam3_checkpoint": "auto"
+        }
+      },
+      "widgets_values": [
+        "<INPUT_FIRST_FRAME.png>",
+        "first_frame",
+        1,
+        true,
+        "",
+        "",
+        true,
+        "keep",
+        0.15,
+        0.5,
+        0,
+        2,
+        "auto"
+      ],
+      "color": "#2a6b5f",
+      "bgcolor": "#1b403a"
+    },
+    {
+      "id": 8,
+      "type": "PROMPTFORGE_V2_LOAD_IMAGE",
+      "pos": [
+        1354,
+        76
+      ],
+      "size": [
+        640,
+        940
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pipe",
+          "type": "PROMPTFORGE_V2_PIPE",
+          "link": 9,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "PROMPTFORGE_V2_PIPE",
+          "type": "PROMPTFORGE_V2_PIPE",
+          "links": [
+            10
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [],
+          "slot_index": 1
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [],
+          "slot_index": 2
+        }
+      ],
       "title": "Last Frame",
       "properties": {
         "Node name for S&R": "PROMPTFORGE_V2_LOAD_IMAGE",
@@ -507,7 +595,15 @@
           "role": "last_frame",
           "index": 1,
           "enabled": true,
-          "description": ""
+          "description": "",
+          "focus": "",
+          "focus_crop": true,
+          "focus_background": "keep",
+          "focus_padding": 0.15,
+          "focus_threshold": 0.5,
+          "focus_grow": 0,
+          "focus_feather": 2,
+          "sam3_checkpoint": "auto"
         }
       },
       "widgets_values": [
@@ -515,13 +611,21 @@
         "last_frame",
         1,
         true,
-        ""
+        "",
+        "",
+        true,
+        "keep",
+        0.15,
+        0.5,
+        0,
+        2,
+        "auto"
       ],
       "color": "#2a6b5f",
       "bgcolor": "#1b403a"
     },
     {
-      "id": 8,
+      "id": 9,
       "type": "PROMPTFORGE_V2_H3_REFERENCES",
       "pos": [
         2034,
@@ -532,13 +636,13 @@
         162
       ],
       "flags": {},
-      "order": 7,
+      "order": 8,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 9,
+          "link": 10,
           "shape": 7
         },
         {
@@ -571,7 +675,7 @@
           "name": "PROMPTFORGE_V2_PIPE",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            10
+            11
           ],
           "slot_index": 0
         }
@@ -595,7 +699,7 @@
       "bgcolor": "#1b403a"
     },
     {
-      "id": 9,
+      "id": 10,
       "type": "PROMPTFORGE_V2_WRITER_MODEL",
       "pos": [
         44,
@@ -606,7 +710,7 @@
         190
       ],
       "flags": {},
-      "order": 8,
+      "order": 9,
       "mode": 0,
       "inputs": [
         {
@@ -621,7 +725,7 @@
           "name": "writer_model",
           "type": "PROMPTFORGE_V2_WRITER_MODEL",
           "links": [
-            12
+            13
           ],
           "slot_index": 0
         },
@@ -655,7 +759,7 @@
       "bgcolor": "#1d3347"
     },
     {
-      "id": 10,
+      "id": 11,
       "type": "PROMPTFORGE_V2_H3_PROMPT",
       "pos": [
         2034,
@@ -666,13 +770,13 @@
         616
       ],
       "flags": {},
-      "order": 9,
+      "order": 10,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 10,
+          "link": 11,
           "shape": 7
         },
         {
@@ -687,7 +791,7 @@
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            11
+            12
           ],
           "slot_index": 0
         },
@@ -695,8 +799,8 @@
           "name": "text",
           "type": "STRING",
           "links": [
-            13,
-            19
+            14,
+            20
           ],
           "slot_index": 1
         }
@@ -742,7 +846,7 @@
       "bgcolor": "#1b403a"
     },
     {
-      "id": 11,
+      "id": 12,
       "type": "PROMPTFORGE_V2_H3_PROMPT_WRITER",
       "pos": [
         2624,
@@ -750,28 +854,28 @@
       ],
       "size": [
         420,
-        506
+        514
       ],
       "flags": {},
-      "order": 10,
+      "order": 11,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 11,
+          "link": 12,
           "shape": 7
         },
         {
           "name": "writer_model",
           "type": "PROMPTFORGE_V2_WRITER_MODEL",
-          "link": 12,
+          "link": 13,
           "shape": 7
         },
         {
           "name": "text",
           "type": "STRING",
-          "link": 13,
+          "link": 14,
           "shape": 7
         }
       ],
@@ -780,7 +884,7 @@
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            14
+            15
           ],
           "slot_index": 0
         },
@@ -788,7 +892,7 @@
           "name": "text",
           "type": "STRING",
           "links": [
-            15
+            16
           ],
           "slot_index": 1
         }
@@ -833,30 +937,30 @@
       "bgcolor": "#2c4421"
     },
     {
-      "id": 12,
+      "id": 13,
       "type": "PROMPTFORGE_V2_PROMPT_INSPECT",
       "pos": [
         2624,
-        638
+        646
       ],
       "size": [
         440,
         518
       ],
       "flags": {},
-      "order": 11,
+      "order": 12,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 14,
+          "link": 15,
           "shape": 7
         },
         {
           "name": "text",
           "type": "STRING",
-          "link": 15,
+          "link": 16,
           "shape": 7
         }
       ],
@@ -865,7 +969,7 @@
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            16
+            17
           ],
           "slot_index": 0
         },
@@ -887,7 +991,7 @@
       "bgcolor": "#2c4421"
     },
     {
-      "id": 13,
+      "id": 14,
       "type": "PROMPTFORGE_V2_H3_SAMPLING_SETTINGS",
       "pos": [
         3134,
@@ -898,13 +1002,13 @@
         362
       ],
       "flags": {},
-      "order": 12,
+      "order": 13,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 16,
+          "link": 17,
           "shape": 7
         }
       ],
@@ -913,7 +1017,7 @@
           "name": "PROMPTFORGE_V2_PIPE",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            17
+            18
           ],
           "slot_index": 0
         }
@@ -956,7 +1060,7 @@
       "bgcolor": "#4a3b1b"
     },
     {
-      "id": 14,
+      "id": 15,
       "type": "PROMPTFORGE_V2_H3_UPSCALE_SETTINGS",
       "pos": [
         3134,
@@ -967,13 +1071,13 @@
         170
       ],
       "flags": {},
-      "order": 13,
+      "order": 14,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 17,
+          "link": 18,
           "shape": 7
         }
       ],
@@ -982,7 +1086,7 @@
           "name": "PROMPTFORGE_V2_PIPE",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            18
+            19
           ],
           "slot_index": 0
         }
@@ -1010,7 +1114,7 @@
       "bgcolor": "#4a3b1b"
     },
     {
-      "id": 15,
+      "id": 16,
       "type": "PROMPTFORGE_V2_H3_ENCODE",
       "pos": [
         44,
@@ -1021,13 +1125,13 @@
         174
       ],
       "flags": {},
-      "order": 14,
+      "order": 15,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 18,
+          "link": 19,
           "shape": 7
         },
         {
@@ -1039,19 +1143,19 @@
         {
           "name": "text",
           "type": "STRING",
-          "link": 19,
+          "link": 20,
           "shape": 7
         },
         {
           "name": "clip",
           "type": "CLIP",
-          "link": 20,
+          "link": 21,
           "shape": 7
         },
         {
           "name": "vae",
           "type": "VAE",
-          "link": 21,
+          "link": 22,
           "shape": 7
         },
         {
@@ -1066,7 +1170,7 @@
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            22
+            23
           ],
           "slot_index": 0
         },
@@ -1074,7 +1178,7 @@
           "name": "positive",
           "type": "CONDITIONING",
           "links": [
-            23
+            24
           ],
           "slot_index": 1
         },
@@ -1082,7 +1186,7 @@
           "name": "negative",
           "type": "CONDITIONING",
           "links": [
-            24
+            25
           ],
           "slot_index": 2
         },
@@ -1090,7 +1194,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            25
+            26
           ],
           "slot_index": 3
         }
@@ -1110,7 +1214,7 @@
       "bgcolor": "#4a2222"
     },
     {
-      "id": 16,
+      "id": 17,
       "type": "PROMPTFORGE_V2_H3_SAMPLE",
       "pos": [
         44,
@@ -1121,13 +1225,13 @@
         321
       ],
       "flags": {},
-      "order": 15,
+      "order": 16,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 22,
+          "link": 23,
           "shape": 7
         },
         {
@@ -1139,19 +1243,19 @@
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 23,
+          "link": 24,
           "shape": 7
         },
         {
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 24,
+          "link": 25,
           "shape": 7
         },
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 25,
+          "link": 26,
           "shape": 7
         },
         {
@@ -1166,7 +1270,7 @@
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            26
+            27
           ],
           "slot_index": 0
         },
@@ -1174,7 +1278,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            28
+            29
           ],
           "slot_index": 1
         }
@@ -1206,7 +1310,7 @@
       "bgcolor": "#4a2222"
     },
     {
-      "id": 17,
+      "id": 18,
       "type": "PROMPTFORGE_V2_H3_FIRST_PASS_PREVIEW",
       "pos": [
         674,
@@ -1217,13 +1321,13 @@
         574
       ],
       "flags": {},
-      "order": 16,
+      "order": 17,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 26,
+          "link": 27,
           "shape": 7
         }
       ],
@@ -1232,7 +1336,7 @@
           "name": "PROMPTFORGE_V2_PIPE",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            27
+            28
           ],
           "slot_index": 0
         }
@@ -1258,7 +1362,7 @@
       "bgcolor": "#3d2248"
     },
     {
-      "id": 18,
+      "id": 19,
       "type": "PROMPTFORGE_V2_H3_LATENT_UPSCALE",
       "pos": [
         1333,
@@ -1269,19 +1373,19 @@
         94
       ],
       "flags": {},
-      "order": 17,
+      "order": 18,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 27,
+          "link": 28,
           "shape": 7
         },
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 28,
+          "link": 29,
           "shape": 7
         }
       ],
@@ -1290,7 +1394,7 @@
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            29
+            30
           ],
           "slot_index": 0
         },
@@ -1298,7 +1402,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            30
+            31
           ],
           "slot_index": 1
         }
@@ -1318,7 +1422,7 @@
       "bgcolor": "#3d2248"
     },
     {
-      "id": 19,
+      "id": 20,
       "type": "PROMPTFORGE_V2_H3_REFINE",
       "pos": [
         1333,
@@ -1329,13 +1433,13 @@
         112
       ],
       "flags": {},
-      "order": 18,
+      "order": 19,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 29,
+          "link": 30,
           "shape": 7
         },
         {
@@ -1347,7 +1451,7 @@
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 30,
+          "link": 31,
           "shape": 7
         }
       ],
@@ -1356,7 +1460,7 @@
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            31
+            32
           ],
           "slot_index": 0
         },
@@ -1364,7 +1468,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            33
+            34
           ],
           "slot_index": 1
         }
@@ -1384,7 +1488,7 @@
       "bgcolor": "#3d2248"
     },
     {
-      "id": 20,
+      "id": 21,
       "type": "PROMPTFORGE_V2_H3_DECODE",
       "pos": [
         1333,
@@ -1395,25 +1499,25 @@
         300
       ],
       "flags": {},
-      "order": 19,
+      "order": 20,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 31,
+          "link": 32,
           "shape": 7
         },
         {
           "name": "vae",
           "type": "VAE",
-          "link": 32,
+          "link": 33,
           "shape": 7
         },
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 33,
+          "link": 34,
           "shape": 7
         }
       ],
@@ -1422,7 +1526,7 @@
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            34
+            35
           ],
           "slot_index": 0
         },
@@ -1436,7 +1540,7 @@
           "name": "audio",
           "type": "AUDIO",
           "links": [
-            39
+            40
           ],
           "slot_index": 2
         }
@@ -1468,7 +1572,7 @@
       "bgcolor": "#3d2248"
     },
     {
-      "id": 21,
+      "id": 22,
       "type": "PROMPTFORGE_V2_FRAME_INTERPOLATE",
       "pos": [
         2624,
@@ -1479,13 +1583,13 @@
         234
       ],
       "flags": {},
-      "order": 20,
+      "order": 21,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 34,
+          "link": 35,
           "shape": 7
         }
       ],
@@ -1494,7 +1598,7 @@
           "name": "PROMPTFORGE_V2_PIPE",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            35
+            36
           ],
           "slot_index": 0
         },
@@ -1502,7 +1606,7 @@
           "name": "frames",
           "type": "IMAGE",
           "links": [
-            36
+            37
           ],
           "slot_index": 1
         },
@@ -1538,7 +1642,7 @@
       "bgcolor": "#333333"
     },
     {
-      "id": 22,
+      "id": 23,
       "type": "PROMPTFORGE_V2_VIDEO_CLEANUP",
       "pos": [
         2624,
@@ -1549,19 +1653,19 @@
         190
       ],
       "flags": {},
-      "order": 21,
+      "order": 22,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 35,
+          "link": 36,
           "shape": 7
         },
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 36,
+          "link": 37,
           "shape": 7
         }
       ],
@@ -1570,7 +1674,7 @@
           "name": "PROMPTFORGE_V2_PIPE",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            37
+            38
           ],
           "slot_index": 0
         },
@@ -1578,7 +1682,7 @@
           "name": "frames",
           "type": "IMAGE",
           "links": [
-            38
+            39
           ],
           "slot_index": 1
         }
@@ -1606,7 +1710,7 @@
       "bgcolor": "#333333"
     },
     {
-      "id": 23,
+      "id": 24,
       "type": "PROMPTFORGE_V2_H3_PREVIEW_SAVE",
       "pos": [
         3134,
@@ -1617,25 +1721,25 @@
         1028
       ],
       "flags": {},
-      "order": 22,
+      "order": 23,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 37,
+          "link": 38,
           "shape": 7
         },
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 38,
+          "link": 39,
           "shape": 7
         },
         {
           "name": "audio",
           "type": "AUDIO",
-          "link": 39,
+          "link": 40,
           "shape": 7
         }
       ],
@@ -1644,7 +1748,7 @@
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            40
+            41
           ],
           "slot_index": 0
         },
@@ -1700,7 +1804,7 @@
       "bgcolor": "#223d48"
     },
     {
-      "id": 24,
+      "id": 25,
       "type": "PROMPTFORGE_V2_PRESETS",
       "pos": [
         4033,
@@ -1711,13 +1815,13 @@
         396
       ],
       "flags": {},
-      "order": 23,
+      "order": 24,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 40,
+          "link": 41,
           "shape": 7
         }
       ],
@@ -1726,7 +1830,7 @@
           "name": "PROMPTFORGE_V2_PIPE",
           "type": "PROMPTFORGE_V2_PIPE",
           "links": [
-            41
+            42
           ],
           "slot_index": 0
         }
@@ -1750,7 +1854,7 @@
       "bgcolor": "#223d48"
     },
     {
-      "id": 25,
+      "id": 26,
       "type": "PROMPTFORGE_V2_RUN_INSPECT",
       "pos": [
         4033,
@@ -1761,13 +1865,13 @@
         518
       ],
       "flags": {},
-      "order": 24,
+      "order": 25,
       "mode": 0,
       "inputs": [
         {
           "name": "pipe",
           "type": "PROMPTFORGE_V2_PIPE",
-          "link": 41,
+          "link": 42,
           "shape": 7
         }
       ],
@@ -1873,13 +1977,13 @@
       10,
       8,
       0,
-      10,
+      9,
       0,
       "PROMPTFORGE_V2_PIPE"
     ],
     [
       11,
-      10,
+      9,
       0,
       11,
       0,
@@ -1887,43 +1991,43 @@
     ],
     [
       12,
-      9,
-      0,
       11,
+      0,
+      12,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      13,
+      10,
+      0,
+      12,
       1,
       "PROMPTFORGE_V2_WRITER_MODEL"
     ],
     [
-      13,
-      10,
-      1,
+      14,
       11,
+      1,
+      12,
       2,
       "STRING"
     ],
     [
-      14,
-      11,
-      0,
-      12,
-      0,
-      "PROMPTFORGE_V2_PIPE"
-    ],
-    [
       15,
-      11,
-      1,
-      12,
-      1,
-      "STRING"
-    ],
-    [
-      16,
       12,
       0,
       13,
       0,
       "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      16,
+      12,
+      1,
+      13,
+      1,
+      "STRING"
     ],
     [
       17,
@@ -1943,30 +2047,6 @@
     ],
     [
       19,
-      10,
-      1,
-      15,
-      2,
-      "STRING"
-    ],
-    [
-      20,
-      2,
-      2,
-      15,
-      3,
-      "CLIP"
-    ],
-    [
-      21,
-      1,
-      3,
-      15,
-      4,
-      "VAE"
-    ],
-    [
-      22,
       15,
       0,
       16,
@@ -1974,36 +2054,60 @@
       "PROMPTFORGE_V2_PIPE"
     ],
     [
-      23,
-      15,
+      20,
+      11,
       1,
       16,
       2,
-      "CONDITIONING"
+      "STRING"
     ],
     [
-      24,
-      15,
+      21,
+      2,
       2,
       16,
       3,
-      "CONDITIONING"
+      "CLIP"
     ],
     [
-      25,
-      15,
+      22,
+      1,
       3,
       16,
       4,
-      "LATENT"
+      "VAE"
     ],
     [
-      26,
+      23,
       16,
       0,
       17,
       0,
       "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      24,
+      16,
+      1,
+      17,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      25,
+      16,
+      2,
+      17,
+      3,
+      "CONDITIONING"
+    ],
+    [
+      26,
+      16,
+      3,
+      17,
+      4,
+      "LATENT"
     ],
     [
       27,
@@ -2015,14 +2119,6 @@
     ],
     [
       28,
-      16,
-      1,
-      18,
-      1,
-      "LATENT"
-    ],
-    [
-      29,
       18,
       0,
       19,
@@ -2030,44 +2126,52 @@
       "PROMPTFORGE_V2_PIPE"
     ],
     [
-      30,
-      18,
+      29,
+      17,
       1,
       19,
-      2,
+      1,
       "LATENT"
+    ],
+    [
+      30,
+      19,
+      0,
+      20,
+      0,
+      "PROMPTFORGE_V2_PIPE"
     ],
     [
       31,
       19,
-      0,
-      20,
-      0,
-      "PROMPTFORGE_V2_PIPE"
-    ],
-    [
-      32,
-      1,
-      3,
-      20,
-      1,
-      "VAE"
-    ],
-    [
-      33,
-      19,
       1,
       20,
       2,
       "LATENT"
     ],
     [
-      34,
+      32,
       20,
       0,
       21,
       0,
       "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      33,
+      1,
+      3,
+      21,
+      1,
+      "VAE"
+    ],
+    [
+      34,
+      20,
+      1,
+      21,
+      2,
+      "LATENT"
     ],
     [
       35,
@@ -2079,14 +2183,6 @@
     ],
     [
       36,
-      21,
-      1,
-      22,
-      1,
-      "IMAGE"
-    ],
-    [
-      37,
       22,
       0,
       23,
@@ -2094,7 +2190,7 @@
       "PROMPTFORGE_V2_PIPE"
     ],
     [
-      38,
+      37,
       22,
       1,
       23,
@@ -2102,26 +2198,42 @@
       "IMAGE"
     ],
     [
-      39,
-      20,
-      2,
-      23,
-      2,
-      "AUDIO"
-    ],
-    [
-      40,
+      38,
       23,
       0,
       24,
       0,
       "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      39,
+      23,
+      1,
+      24,
+      1,
+      "IMAGE"
+    ],
+    [
+      40,
+      21,
+      2,
+      24,
+      2,
+      "AUDIO"
     ],
     [
       41,
       24,
       0,
       25,
+      0,
+      "PROMPTFORGE_V2_PIPE"
+    ],
+    [
+      42,
+      25,
+      0,
+      26,
       0,
       "PROMPTFORGE_V2_PIPE"
     ]
@@ -2145,7 +2257,7 @@
         658,
         0,
         1912,
-        976
+        1040
       ],
       "color": "#27564f",
       "font_size": 24,
@@ -2157,7 +2269,7 @@
         2608,
         0,
         472,
-        1180
+        1188
       ],
       "color": "#3a5a2a",
       "font_size": 24,
@@ -2229,7 +2341,7 @@
         3618,
         0,
         452,
-        876
+        1212
       ],
       "color": "#4a4a6b",
       "font_size": 24,

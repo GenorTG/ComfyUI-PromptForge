@@ -1,3 +1,6 @@
+import logging
+
+from comfy.ldm.modules.attention import get_attention_function
 from comfy_api.latest import io
 from comfy_extras.nodes_model_advanced import ModelAttentionBackend
 from comfy_extras.nodes_sparse_attention import BlockSparseAttention
@@ -73,6 +76,51 @@ class PreviewSettings(io.ComfyNode):
                                                         "preview_frames": preview_frames, "preview_fps": preview_fps, "tiny_vae": tiny_vae}, {"model": model}))
 
 
-NODES = [Performance, PreviewSettings]
+# label -> the name ComfyUI registers the attention function under; only those installed here are offered
+BACKENDS = {"pytorch attention": "pytorch", "comfy kitchen int8": "comfy_kitchen_int8", "sage attention": "sage", "sage attention 3": "sage3"}
+
+
+class H3Speedup(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        backends = ["as loaded", *(label for label, name in BACKENDS.items() if get_attention_function(name, None) is not None)]
+        return nodes_schema("H3", "SPEEDUP", "Experimental Speedup", description="Optional MiniMax H3 speedups, all off by default. Place it after Performance and Live Preview and before Encode, with no model wire into Encode, Sample or Refine. Compare the same seed with it bypassed.",
+                            inputs=[Pipe.Input("pipe", optional=True), io.Model.Input("model", optional=True),
+                                    io.Boolean.Input("sol_attention", default=False, tooltip="Sol-Attn block-sparse attention (ComfyUI's Model Sparse Attention, training-free). Skips low-scoring attention blocks, so the result differs from dense attention."),
+                                    io.Float.Input("sol_tau", default=1.3, min=0.0, max=4.0, step=0.05, tooltip="Higher is sparser and faster: 1.0 keeps about 16% of blocks exact, 1.5 about 7%, 2.0 about 2.7%. Lower is closer to dense."),
+                                    io.Float.Input("sol_start_percent", default=0.2, min=0.0, max=1.0, step=0.01, tooltip="Attention stays dense before this point of the schedule, where the composition forms."),
+                                    io.Float.Input("sol_end_percent", default=1.0, min=0.0, max=1.0, step=0.01),
+                                    io.Int.Input("sol_extra_tokens", default=256, min=0, max=256, step=64, tooltip="Extra top-scoring tokens kept per block. 256 is closest to dense."),
+                                    io.Combo.Input("attention_backend", options=backends, default="as loaded", tooltip="Dense attention implementation, also used wherever sparse attention is inactive. The int8 and Sage backends are approximations."),
+                                    io.Boolean.Input("keep_models_for_first_pass", default=False, tooltip="First Pass Preview decodes without unloading the sampling model first, so the refine pass need not load it again. Same output; may be slower or run low on VRAM with a large decode VAE."),
+                                    io.Boolean.Input("log_to_console", default=True, tooltip="Print whether each attention shape really ran sparse, and why not.")],
+                            outputs=[Pipe.Output(), io.Model.Output("model")])
+
+    @classmethod
+    def execute(cls, pipe=None, sol_attention=False, sol_tau=1.3, sol_start_percent=0.2, sol_end_percent=1.0, sol_extra_tokens=256,
+                attention_backend="as loaded", keep_models_for_first_pass=False, log_to_console=True, model=None):
+        pipe = evolve(ensure_pipe(pipe, family="minimax_h3", model=model), artifacts={"model": model} if model is not None else None)
+        if pipe["family"] != "minimax_h3":
+            raise ValueError("Experimental Speedup is for MiniMax H3.")
+        model = require(pipe, "model")
+        if attention_backend != "as loaded":
+            function = get_attention_function(BACKENDS.get(attention_backend), None)
+            if function is None:
+                raise ValueError(f"The attention backend '{attention_backend}' is not available on this machine.")
+            model = model.clone()
+            model.set_model_optimized_attention(function)
+        if sol_attention:
+            if pipe["settings"].get("performance", {}).get("sparse_attention"):
+                raise ValueError("Turn off sparse_attention on the Performance node to use Sol attention: one sparse method at a time.")
+            model = BlockSparseAttention.execute(model, {"selection": "sol-attn", "tau": sol_tau}, sol_start_percent, sol_end_percent,
+                                                 extra_tokens=sol_extra_tokens, sink_conditioning="exact_kv_and_rows", verbose=log_to_console).args[0]
+        settings = {"sol_attention": sol_attention, "sol_tau": sol_tau, "sol_start_percent": sol_start_percent, "sol_end_percent": sol_end_percent,
+                    "sol_extra_tokens": sol_extra_tokens, "attention_backend": attention_backend, "keep_models_for_first_pass": keep_models_for_first_pass}
+        if log_to_console:
+            logging.info("[PromptForge] experimental speedup: " + ", ".join(f"{key}={value}" for key, value in settings.items()))
+        return io.NodeOutput(evolve(pipe, "speedup", settings, {"model": model}, invalidate=("images", "audio", "video")), model)
+
+
+NODES = [Performance, PreviewSettings, H3Speedup]
 NODE_CLASS_MAPPINGS = {node.define_schema().node_id: node for node in NODES}
 NODE_DISPLAY_NAME_MAPPINGS = {node.define_schema().node_id: node.define_schema().display_name for node in NODES}

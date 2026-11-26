@@ -559,7 +559,8 @@ function buildUI(node) {
     event.stopPropagation();
     node.setSize([Math.max(320, drag.w + event.clientX - drag.x), Math.max(220, drag.h + event.clientY - drag.y)]);
   });
-  const release = () => { drag = null; };
+  // the grip swallows the mouse events ComfyUI watches, so it records the new size itself or a page reload loses it
+  const release = () => { if (drag) app.extensionManager?.workflow?.activeWorkflow?.changeTracker?.captureCanvasState?.(); drag = null; };
   grip.addEventListener("pointerup", release);
   grip.addEventListener("pointercancel", release);
   const frameWidget = node.addDOMWidget("lora_stack_editor", "promptforge_v2", frame, {

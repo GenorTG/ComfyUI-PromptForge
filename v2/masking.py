@@ -43,38 +43,49 @@ class SubjectMask(io.ComfyNode):
             raise ValueError("Select a SAM3 checkpoint first.")
         if image is None:
             raise ValueError("Connect an image to mask.")
-        if checkpoint.startswith("sam3::"):
-            root = (Path(folder_paths.models_dir) / "sam3").resolve()
-            path = (root / checkpoint.removeprefix("sam3::")).resolve()
-            if root not in path.parents or not path.is_file():
-                raise ValueError("Select an existing SAM3 checkpoint inside models/sam3.")
-        else:
-            path = folder_paths.get_full_path_or_raise("checkpoints", checkpoint)
-        model, clip, *_ = comfy.sd.load_checkpoint_guess_config(str(path), output_vae=False, output_clip=True,
-                                                               embedding_directory=folder_paths.get_folder_paths("embeddings"))
-        if model.model.model_config.unet_config.get("image_model") not in ("SAM3", "SAM31") or clip is None:
-            raise ValueError("Subject Mask requires a native SAM3/SAM3.1 checkpoint with its text encoder.")
-        conditioning = clip.encode_from_tokens_scheduled(clip.tokenize(subject))
-        # SAM3's masked cross-attention is unsupported by some xformers builds,
-        # including the current Blackwell kernels. Use ComfyUI's PyTorch path.
-        import comfy.ldm.sam3.detector as detector
-        from comfy.ldm.modules.attention import attention_pytorch
-        height, width = image.shape[1:3]
-        scale = min(1.0, SAM3_MAX_SIDE / max(height, width))
-        small = image if scale == 1.0 else comfy.utils.common_upscale(image.movedim(-1, 1), round(width * scale), round(height * scale), "area", "disabled").movedim(1, -1)
-        with _SAM3_ATTENTION_LOCK:
-            previous = detector.optimized_attention
-            detector.optimized_attention = attention_pytorch
-            try:
-                mask = SAM3_Detect.execute(model, small, conditioning=conditioning, threshold=threshold,
-                                          refine_iterations=refine_iterations, individual_masks=False).args[0]
-            finally:
-                detector.optimized_attention = previous
-        if scale != 1.0:
-            mask = F.interpolate(mask.reshape(-1, 1, *mask.shape[-2:]).float(), size=(height, width), mode="bilinear")[:, 0]
+        mask = segment(*load_sam3(checkpoint), image, subject, threshold, refine_iterations)
         out = evolve(pipe, "mask", {"checkpoint": checkpoint, "subject": subject, "threshold": threshold,
                                        "refine_iterations": refine_iterations}, {"source_mask": mask})
         return io.NodeOutput(out, mask)
+
+
+def load_sam3(checkpoint):
+    """(model, clip) of a SAM3 checkpoint picked from the list."""
+    if checkpoint.startswith("sam3::"):
+        root = (Path(folder_paths.models_dir) / "sam3").resolve()
+        path = (root / checkpoint.removeprefix("sam3::")).resolve()
+        if root not in path.parents or not path.is_file():
+            raise ValueError("Select an existing SAM3 checkpoint inside models/sam3.")
+    else:
+        path = folder_paths.get_full_path_or_raise("checkpoints", checkpoint)
+    model, clip, *_ = comfy.sd.load_checkpoint_guess_config(str(path), output_vae=False, output_clip=True,
+                                                           embedding_directory=folder_paths.get_folder_paths("embeddings"))
+    if model.model.model_config.unet_config.get("image_model") not in ("SAM3", "SAM31") or clip is None:
+        raise ValueError("Subject Mask requires a native SAM3/SAM3.1 checkpoint with its text encoder.")
+    return model, clip
+
+
+def segment(model, clip, image, subject, threshold=0.5, refine_iterations=2):
+    """The mask of every `subject` SAM3 finds in the image, at the image's size."""
+    conditioning = clip.encode_from_tokens_scheduled(clip.tokenize(subject))
+    # SAM3's masked cross-attention is unsupported by some xformers builds,
+    # including the current Blackwell kernels. Use ComfyUI's PyTorch path.
+    import comfy.ldm.sam3.detector as detector
+    from comfy.ldm.modules.attention import attention_pytorch
+    height, width = image.shape[1:3]
+    scale = min(1.0, SAM3_MAX_SIDE / max(height, width))
+    small = image if scale == 1.0 else comfy.utils.common_upscale(image.movedim(-1, 1), round(width * scale), round(height * scale), "area", "disabled").movedim(1, -1)
+    with _SAM3_ATTENTION_LOCK:
+        previous = detector.optimized_attention
+        detector.optimized_attention = attention_pytorch
+        try:
+            mask = SAM3_Detect.execute(model, small, conditioning=conditioning, threshold=threshold,
+                                      refine_iterations=refine_iterations, individual_masks=False).args[0]
+        finally:
+            detector.optimized_attention = previous
+    if scale != 1.0:
+        mask = F.interpolate(mask.reshape(-1, 1, *mask.shape[-2:]).float(), size=(height, width), mode="bilinear")[:, 0]
+    return mask
 
 
 NODE_CLASS_MAPPINGS = {"PROMPTFORGE_V2_SUBJECT_MASK": SubjectMask}

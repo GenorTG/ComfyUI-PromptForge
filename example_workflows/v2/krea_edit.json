@@ -425,7 +425,7 @@
       ],
       "size": [
         640,
-        876
+        940
       ],
       "flags": {},
       "order": 5,
@@ -472,7 +472,15 @@
           "role": "reference",
           "index": 1,
           "enabled": true,
-          "description": ""
+          "description": "",
+          "focus": "",
+          "focus_crop": true,
+          "focus_background": "keep",
+          "focus_padding": 0.15,
+          "focus_threshold": 0.5,
+          "focus_grow": 0,
+          "focus_feather": 2,
+          "sam3_checkpoint": "auto"
         }
       },
       "widgets_values": [
@@ -480,7 +488,15 @@
         "reference",
         1,
         true,
-        ""
+        "",
+        "",
+        true,
+        "keep",
+        0.15,
+        0.5,
+        0,
+        2,
+        "auto"
       ],
       "color": "#2a6b5f",
       "bgcolor": "#1b403a"
@@ -836,7 +852,7 @@
       ],
       "size": [
         420,
-        506
+        514
       ],
       "flags": {},
       "order": 11,
@@ -923,7 +939,7 @@
       "type": "PROMPTFORGE_V2_PROMPT_INSPECT",
       "pos": [
         2757,
-        638
+        646
       ],
       "size": [
         440,
@@ -1814,7 +1830,7 @@
         1062,
         0,
         1641,
-        976
+        1040
       ],
       "color": "#27564f",
       "font_size": 24,
@@ -1826,7 +1842,7 @@
         2741,
         0,
         472,
-        1180
+        1188
       ],
       "color": "#3a5a2a",
       "font_size": 24,

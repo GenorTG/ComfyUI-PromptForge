@@ -34,8 +34,18 @@ SPEEDS = ("fastest", "fast", "balanced", "slow")
 # BT.709 RGB -> Y, Cb, Cr rows
 BT709 = ((0.2126, 0.7152, 0.0722), (-0.1146, -0.3854, 0.5), (0.5, -0.4542, -0.0458))
 CHUNK_BYTES = 256 * 1024 ** 2
+# h264 10-bit is refused by most GPUs and players, so that pair is never offered
+EIGHT_BIT_ONLY = "h264 (nvenc)"
 AUDIO_LAYOUTS = {1: "mono", 2: "stereo", 6: "5.1", 8: "7.1"}
 BT709_TAG, LIMITED_RANGE = 1, 1  # ffmpeg's numbers for BT.709 matrix / primaries / transfer and for tv range
+
+
+def bit_depth_for(codec, bit_depth):
+    """The bit depth the codec can be saved with; an unsupported choice falls back to 8-bit instead of failing the run."""
+    if codec == EIGHT_BIT_ONLY and bit_depth == "10":
+        print(f"[PromptForge] Save Video: {codec} has no 10-bit, saving 8-bit.")
+        return "8"
+    return bit_depth
 
 
 def _to_yuv(frames, bit_depth, device, grain=0.0):
@@ -97,7 +107,7 @@ class PROMPTFORGE_SaveVideo:
                 "rate_control": (["quality", "bitrate"], {"default": "quality", "tooltip": "quality uses crf/cq, bitrate uses bitrate_mbit."}),
                 "quality": ("INT", {"default": 19, "min": 0, "max": 63, "tooltip": "crf / cq: lower is better quality and a bigger file. Used when rate_control is quality."}),
                 "bitrate_mbit": ("INT", {"default": 15, "min": 1, "max": 999, "tooltip": "Used when rate_control is bitrate."}),
-                "bit_depth": (["8", "10"], {"default": "8", "tooltip": "10-bit needs h265/av1 on nvenc and is not supported by every player."}),
+                "bit_depth": (["8", "10"], {"default": "8", "tooltip": "10-bit is not offered for h264 nvenc and is not supported by every player."}),
                 "save_output": ("BOOLEAN", {"default": True, "tooltip": "Off writes to the temp folder (preview only)."}),
                 "pingpong": ("BOOLEAN", {"default": False}),
                 "save_metadata": ("BOOLEAN", {"default": True, "tooltip": "Embed the workflow in the file."}),
@@ -127,10 +137,8 @@ class PROMPTFORGE_SaveVideo:
         count, height, width = (int(size) for size in images.shape[:3])
         if speed != "slow":
             print(f"[PromptForge] quality: the {speed} encoder preset bands gradients more than slow.")
-        bits = int(bit_depth)
+        bits = int(bit_depth_for(codec, bit_depth))
         encoder, presets, quality_flag, pix_fmt_10 = CODECS[codec]
-        if bits == 10 and encoder == "h264_nvenc":
-            raise ValueError("[PromptForge] h264 nvenc cannot encode 10-bit; use h265/av1 nvenc or a cpu codec.")
         order = list(range(count)) + (list(range(count - 2, 0, -1)) if pingpong else [])
         out_width, out_height = width + width % 2, height + height % 2
 

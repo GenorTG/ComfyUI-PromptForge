@@ -90,11 +90,98 @@ function iconButton(glyph, title, action, danger = false) {
   return button;
 }
 
+const FOCUS = [["", "Whole picture"], ["face, hair, neck", "Face and hair"], ["face", "Face only"], ["person", "Whole person"], ["custom", "Own words…"]];
+const FOCUS_NUMBERS = [["focus_padding", "Margin", 0.15, 0.05], ["focus_threshold", "Threshold", 0.5, 0.01], ["focus_grow", "Grow px", 0, 1], ["focus_feather", "Feather px", 2, 1]];
+const FOCUS_NAMES = ["focus", "focus_crop", "focus_background", ...FOCUS_NUMBERS.map(([name]) => name)];
+const CONTROL = "font:12px sans-serif;padding:4px 6px;border-radius:5px;border:1px solid #fff2;background:#0004;color:inherit;min-width:0";
+
+async function previewFocus(node, item) {
+  const backdrop = element("div");
+  backdrop.style.cssText = "position:fixed;inset:0;z-index:10002;background:#000c;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;color:#eee;font:14px sans-serif;cursor:pointer";
+  const status = element("div", { textContent: "Masking… the first time loads SAM3." });
+  backdrop.append(status);
+  backdrop.addEventListener("pointerdown", (event) => event.stopPropagation());
+  let url = null;
+  backdrop.addEventListener("click", () => { if (url) URL.revokeObjectURL(url); backdrop.remove(); });
+  document.body.append(backdrop);
+  const settings = Object.fromEntries(FOCUS_NAMES.filter((name) => item[name] !== undefined).map((name) => [name, item[name]]));
+  try {
+    const response = await api.fetchApi("/promptforge/v2/focus-preview", { method: "POST", body: JSON.stringify({ file: item.file, settings, checkpoint: widget(node, "sam3_checkpoint")?.value || "auto" }) });
+    if (!response.ok) throw new Error(await response.text());
+    url = URL.createObjectURL(await response.blob());
+    const picture = element("img", { src: url, alt: "What the model receives" });
+    picture.style.cssText = "max-width:92vw;max-height:85vh;object-fit:contain;border:1px solid #fff4";
+    status.textContent = "This is what the model receives. Click to close.";
+    backdrop.append(picture);
+  } catch (error) { status.textContent = `${error.message} (click to close)`; }
+}
+
+function focusControls(node, item, index, redraw) {
+  const box = element("div");
+  box.style.cssText = "display:flex;flex-direction:column;gap:4px";
+  const set = (changes) => {
+    const items = read(node);
+    Object.assign(items[index], changes);
+    write(node, items);
+    redraw();
+  };
+  const labelled = (text, control) => {
+    const label = element("label");
+    label.style.cssText = "display:flex;gap:5px;align-items:center;justify-content:space-between;white-space:nowrap";
+    label.append(element("span", { textContent: text }), control);
+    return label;
+  };
+  const preset = element("select");
+  preset.style.cssText = `${CONTROL};flex:1`;
+  for (const [value, title] of FOCUS) preset.append(new Option(title, value));
+  const current = item.focus || "";
+  const own = item.focus_own || (current && !FOCUS.some(([value]) => value === current));
+  preset.value = own ? "custom" : current;
+  preset.addEventListener("change", () => set(preset.value === "custom" ? { focus_own: true } : { focus_own: false, focus: preset.value }));
+  box.append(labelled("Focus", preset));
+  if (own) {
+    const words = element("input", { value: current, placeholder: "what to keep, e.g. torso, red jacket, dog" });
+    words.style.cssText = CONTROL;
+    words.addEventListener("change", () => set({ focus: words.value }));
+    box.append(words);
+  }
+  if (!current) return box;
+  const details = element("details", { open: Boolean(item.focus_open) });
+  const summary = element("summary", { textContent: "Crop options" });
+  summary.style.cssText = "cursor:pointer;opacity:.8";
+  // remembered without a redraw, which would rebuild the card under the pointer
+  summary.addEventListener("click", () => { const items = read(node); items[index].focus_open = !details.open; write(node, items); });
+  const grid = element("div");
+  grid.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;padding-top:4px";
+  const crop = element("input", { type: "checkbox", checked: item.focus_crop !== false });
+  crop.addEventListener("change", () => set({ focus_crop: crop.checked }));
+  const background = element("select");
+  background.style.cssText = CONTROL;
+  for (const [value, title] of [["keep", "keep (crop only)"], ["grey", "cut out on grey"], ["white", "cut out on white"], ["black", "cut out on black"]]) background.append(new Option(title, value));
+  background.value = item.focus_background || "keep";
+  background.addEventListener("change", () => set({ focus_background: background.value }));
+  grid.append(labelled("Crop", crop), labelled("Background", background));
+  // the mask edge only shows when the subject is cut out
+  const numbers = background.value === "keep" ? FOCUS_NUMBERS.filter(([name]) => name !== "focus_grow" && name !== "focus_feather") : FOCUS_NUMBERS;
+  for (const [name, title, fallback, step] of numbers) {
+    const input = element("input", { type: "number", step, value: item[name] ?? fallback });
+    input.style.cssText = `${CONTROL};width:72px`;
+    input.addEventListener("change", () => set({ [name]: input.value === "" ? fallback : Number(input.value) }));
+    grid.append(labelled(title, input));
+  }
+  details.append(summary, grid);
+  const preview = element("button", { type: "button", textContent: "Preview what the model receives" });
+  preview.style.cssText = `${CONTROL};cursor:pointer`;
+  preview.addEventListener("click", () => previewFocus(node, read(node)[index]));
+  box.append(details, preview);
+  return box;
+}
+
 function card(node, item, index, redraw) {
   const box = element("div");
   box.style.cssText = "display:flex;flex-direction:column;gap:4px;padding:5px;border-radius:8px;background:#0003;border:1px solid #fff2;min-width:0";
   // a card drags only from its picture or its empty space: on text and controls the mouse selects as usual
-  box.addEventListener("pointerdown", (event) => { box.draggable = !event.target.closest("input, button, video, audio, [data-text]"); });
+  box.addEventListener("pointerdown", (event) => { box.draggable = !event.target.closest("input, select, summary, label, button, video, audio, [data-text]"); });
   box.addEventListener("dragstart", (event) => { if (box.draggable) event.dataTransfer.setData(CARD, String(index)); });
   box.addEventListener("dragend", () => { box.draggable = false; });
   box.addEventListener("pointerup", () => { box.draggable = false; });
@@ -168,7 +255,7 @@ function card(node, item, index, redraw) {
   const swap = iconButton("⇄", "Replace this file; name and description stay", () => replace(node, index, item.kind, redraw));
   swap.style.cssText += ";position:absolute;top:5px;right:5px;background:#000a;z-index:2";
   preview.append(swap);
-  box.append(preview, tools, name, description, file);
+  box.append(preview, tools, name, description, ...(item.kind === "image" ? [focusControls(node, item, index, redraw)] : []), file);
   return box;
 }
 
