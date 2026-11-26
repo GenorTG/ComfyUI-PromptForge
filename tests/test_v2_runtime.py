@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
+import sys
 from unittest.mock import patch
 
 
@@ -300,6 +301,32 @@ class RuntimeTests(unittest.TestCase):
         torch.testing.assert_close(interpolated[1], torch.lerp(frames[0], frames[1], 1/3))
         self.assertEqual(out["settings"]["timing"]["duration"], len(frames)/24)
         self.assertIs(self.v2.media.FrameInterpolate.execute(pipe, enabled=False).args[0], pipe)
+
+    def test_clip_buffers_go_to_disk_when_ram_is_short(self):
+        torch = self.torch
+        frame_buffer = sys.modules[self.runtime.pack.__name__ + ".frame_buffer"]
+        frames = torch.rand(9, 8, 8, 3)
+        pipe = self.v2.contracts.evolve(self.pipe("minimax_h3", images=frames), "format", {"fps": 24})
+        roomy = self.v2.media.FrameInterpolate.execute(pipe, enabled=True, multiplier=2, batch_size=3).args[1]
+        short = SimpleNamespace(virtual_memory=lambda: SimpleNamespace(available=1))
+        with patch.object(frame_buffer, "psutil", short):
+            tight = self.v2.media.FrameInterpolate.execute(pipe, enabled=True, multiplier=2, batch_size=3).args[1]
+        self.assertEqual(tight.dtype, torch.float16)
+        self.assertEqual(len(tight), 18)
+        torch.testing.assert_close(tight, roomy.half(), atol=1e-3, rtol=0)
+        self.assertEqual(list((self.runtime.base / "temp").glob("promptforge_frames_*")), [])
+
+    def test_out_of_memory_unloads_and_retries_once(self):
+        shared = self.v2.shared
+        outcomes = [self.torch.cuda.OutOfMemoryError("CUDA out of memory"), "done"]
+        def work():
+            result = outcomes.pop(0)
+            if isinstance(result, Exception):
+                raise result
+            return result
+        with patch.object(shared, "free_vram") as release:
+            self.assertEqual(shared.retry_unloaded("testing", work), "done")
+        release.assert_called_once()
 
     def test_h3_encode_mode_dispatch(self):
         h3, torch = self.v2.h3, self.torch
