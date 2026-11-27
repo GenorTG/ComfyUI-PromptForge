@@ -37,6 +37,8 @@ def _library(name):
 
 
 _store = _library("v2.action_store")
+_advanced = _library("v2.idea_advanced")
+_library("v2.prompt_presets")  # registers the preset routes
 _QUOTED = re.compile(r'"[^"\n]*"|“[^”\n]*”|(?<!\w)\'[^\'\n]*\'(?!\w)')
 _QUOTE_CONTEXT = re.compile(
     r'(?:says?|speaks?|whispers?|shouts?|replies|asks?|reads?|reading|written|'
@@ -150,6 +152,16 @@ def _action_catalog():
                 "aspect": entry.get("aspect", ""),
                 "nsfw": _store.nsfw(family, label)}
     return catalog
+
+
+@PromptServer.instance.routes.post("/promptforge/v2/idea-advanced")
+async def _advanced_preview(request):
+    body = await request.json()
+    try:
+        text = _advanced.compose(body.get("advanced", ""), bool(body.get("video")), "", str(body.get("soundscape", "")), str(body.get("music", "")))[0]
+    except ValueError as error:
+        return web.json_response({"error": str(error)}, status=400)
+    return web.json_response({"text": text})
 
 
 @PromptServer.instance.routes.get("/promptforge/v2/actions")
@@ -302,7 +314,7 @@ class ImagePrompt(io.ComfyNode):
 
     @classmethod
     def define_schema(cls):
-        return nodes_schema("H3" if cls.H3 else "IMAGE", "PROMPT", "H3 Prompt" if cls.H3 else "Image Prompt", inputs=[Pipe.Input("pipe", optional=True), io.Combo.Input("source", options=["raw", "idea", "action"], default="raw"),
+        return nodes_schema("H3" if cls.H3 else "IMAGE", "PROMPT", "H3 Prompt" if cls.H3 else "Image Prompt", inputs=[Pipe.Input("pipe", optional=True), io.Combo.Input("source", options=["raw", "idea", "action", "advanced"], default="raw"),
                     io.String.Input("text", default="", multiline=True), io.String.Input("text_in", optional=True, force_input=True),
                     io.String.Input("negative", default="", multiline=True),
                     io.Combo.Input("action", options=_action_options()),
@@ -316,19 +328,26 @@ class ImagePrompt(io.ComfyNode):
                     io.String.Input("soundscape", default="", multiline=True, tooltip="Minimax generation only, raw mode: overall_soundscape line (room tone, dialogue, effects)."),
                     io.String.Input("music", default="N/A", tooltip="Minimax generation only, raw mode: non_diegetic_music. N/A when there is no score."),
                     # last, so workflows saved before it existed keep their value positions; "" is the old empty slot
-                    io.Combo.Input("generation", options=["image", "minimax", ""], default=cls.GENERATION)],
+                    io.Combo.Input("generation", options=["image", "minimax", ""], default=cls.GENERATION),
+                    io.String.Input("idea_advanced", default="", optional=True, tooltip="The things added in Idea Advanced, edited by the node's own menu.")],
             outputs=[Pipe.Output("pipe"), io.String.Output("text")])
 
     @classmethod
     def execute(cls, pipe=None, source="raw", text="", negative="", action="", subject_1="", subject_2="", subject_3="",
                 camera="auto", notes="", text_in=None, soundscape="", music="N/A", generation=None,
-                shot="auto", angle="auto"):
+                shot="auto", angle="auto", idea_advanced=""):
         pipe = ensure_pipe(pipe, family="minimax_h3" if cls.H3 else "image")
         audio = (generation or cls.GENERATION) == "minimax"
         if text_in:
             text = text_in
         if cls.H3 and pipe["family"] != "minimax_h3":
             raise ValueError("H3 Prompt requires a minimax_h3 pipe.")
+        if source == "advanced":
+            # written out as a request, then handled by the writer like any idea
+            request, facts, speech = _advanced.compose(idea_advanced, audio, text_in or "", soundscape, music)
+            result = _store_prompt(pipe, "idea", request, negative, origin="advanced", facts=facts, speech=speech,
+                                   **({"soundscape": soundscape, "music": music} if audio else {}))
+            return io.NodeOutput(result, request)
         if source == "action":
             frame = " and ".join(part for part in (shot if shot != "auto" else "", angle if angle != "auto" else "") if part)
             text = _action_text(action, (subject_1, subject_2, subject_3), notes, camera)
@@ -631,6 +650,14 @@ def _late_shots(text, seconds):
     return [start for start in (int(minutes) * 60 + float(rest) for minutes, rest in re.findall(r"\[Shot \d+\]\s*At (\d{1,2}):(\d{2}(?:\.\d+)?)", text)) if start >= seconds]
 
 
+def _missing_speech(lines, text):
+    """Spoken lines the prompt does not carry word for word; case and punctuation are free."""
+    def words(value):
+        return " " + " ".join(re.findall(r"\w+", value.lower())) + " "
+    written = words(text)
+    return [line for line in lines if words(line) not in written]
+
+
 def _h3_issues(text, mode, context):
     sections = _services()._MINIMAX_SECTIONS[mode]
     positions = []
@@ -878,7 +905,7 @@ def _system_text(service, preset, context, style_prefix="", sections=None, negat
                  "Add nothing that covers a face or body (helmet, mask, hood, shadow) unless the request names it.")
     if idea.strip():
         parts.append("# Priority\nEvery fact the request states appears in the prompt: each person and how many, the place, body state, expression, posture and each detail it names. "
-                     "Nudity is stated in plain words: when the request says naked, nude, topless or bare, the prompt says so and names the bare skin; clothing is never invented, and a photo's clothes are replaced. "
+                     + ("Nudity is stated in plain words: when the request says naked, nude, topless or bare, the prompt says so and names the bare skin; clothing is never invented, and a photo's clothes are replaced. " if explicit else "") +
                      "The rules above for size, camera and anatomy shape how those facts are written; they never replace one."
                      + (" When words run short, shorten the rule-driven detail, never the request." if length else ""))
     if explicit and context["family"] != "minimax_h3":
@@ -987,6 +1014,8 @@ class ImagePromptWriter(io.ComfyNode):
                              "Where it says to keep something unchanged, keep it.\n\nRequest:\n" + user_text)
             if not explicit:
                 user_text += "\n\nName what each person wears, with colour and material." if pipe["family"] != "anima" else "\n\nTag every garment each person wears."
+        if prompt.get("origin") == "advanced":
+            user_text = _advanced.INSTRUCTION + (_advanced.VIDEO_INSTRUCTION if cls.H3 else "") + "\n\n" + user_text
         if cls.H3:
             user_text += "\n\n" + _clip_length_line(float(context.get("duration") or 5))
         encoder.resident = {}
@@ -1027,16 +1056,17 @@ class ImagePromptWriter(io.ComfyNode):
                         issues.append("female anatomy written onto the man's scrotum: write it as a loose rounded pouch hanging below the shaft")
                     if prompt.get("source") == "action" and _LEAVES_THE_BODY.search(text) and _library("h3_actions").penetration_modes(str(prompt.get("action", "")).split(": ", 1)[-1]):
                         issues.append("the shaft leaves the body during the stroke: keep it inside through the whole stroke")
+                    issues.extend(f'spoken line missing, write it word for word: "{line}"' for line in _missing_speech(prompt.get("speech") or (), text))
                 records.append({"seed": attempt_seed, "text": text, "validation": issues, "request": request, "thinking": thought})
                 if prompt.get("source") == "idea" and checks != "off":
                     # measured, never enforced: the report lists what the prompt left out so a weak template shows up instead of costing retries
-                    dropped = _dropped_facts(prompt.get("text", ""), text)
+                    dropped = _dropped_facts(prompt.get("facts") or prompt.get("text", ""), text)
                     if len(dropped) >= 3:
                         records[-1]["dropped_facts"] = dropped
                 conflict = _shot_conflict(text) if pipe["family"] == "anima" and checks != "off" else ""
                 # negative wording alone is a blemish, not a failure: after the last retry the text is used and the warning stays in the report
                 last = index == attempts - 1
-                blemish = all(issue.startswith(("negative wording", "the shaft leaves", "female anatomy written", "a shot starts after")) for issue in issues)
+                blemish = all(issue.startswith(("negative wording", "the shaft leaves", "female anatomy written", "a shot starts after", "spoken line missing")) for issue in issues)
                 if (not issues or last and blemish) and (not conflict or last):
                     result = evolve(pipe, artifacts={"text": text, "writer": {
                         "status": "valid", "validation": issues, "attempts": records, "max_tokens": reply_tokens, "length_words": length_words,
@@ -1045,6 +1075,7 @@ class ImagePromptWriter(io.ComfyNode):
                     return io.NodeOutput(result, text)
                 feedback = ("Rewrite affirmatively: drop these words and replace each with what is visible in the scene: "
                             "no, not, never, without, avoid. Failures: " + "; ".join(issues + [conflict] if conflict else issues))
+                feedback += "".join("\n" + issue for issue in issues if issue.startswith("spoken line missing"))
                 if any(issue.startswith("a shot starts after") for issue in issues):
                     feedback += "\n" + _clip_length_line(float(context.get("duration") or 5))
             dump = Path(folder_paths.get_temp_directory()) / "PromptForge_writer_failed.json"

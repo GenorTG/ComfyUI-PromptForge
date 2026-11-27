@@ -706,7 +706,8 @@
           "notes": "",
           "soundscape": "",
           "music": "N/A",
-          "generation": "minimax"
+          "generation": "minimax",
+          "idea_advanced": ""
         }
       },
       "widgets_values": [
@@ -723,7 +724,8 @@
         "",
         "",
         "N/A",
-        "minimax"
+        "minimax",
+        ""
       ],
       "color": "#2a6b5f",
       "bgcolor": "#1b403a"

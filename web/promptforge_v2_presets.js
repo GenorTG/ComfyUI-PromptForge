@@ -82,7 +82,7 @@ function excluded(name, includeText, widget, value) {
   if (["presets", "preset_name", "include_text"].includes(name)) return true;
   if (typeof value === "string" && /^(data:|blob:)/i.test(value)) return true;
   const prose = typeof value === "string" && widget?.type !== "combo" && !Array.isArray(widget?.options?.values)
-    && /(^|_)(prompt|prompts|positive|negative|text|description|descriptions|caption|captions|notes|instructions|entries|subject_[123])$/.test(name);
+    && /(^|_)(prompt|prompts|positive|negative|text|description|descriptions|caption|captions|notes|instructions|entries|idea_advanced|subject_[123])$/.test(name);
   return !includeText && prose;
 }
 const connected = (node, name) => node.inputs?.some((input) => (input.name === name || input.widget?.name === name) && input.link != null);

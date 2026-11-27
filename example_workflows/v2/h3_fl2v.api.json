@@ -214,7 +214,8 @@
       "pipe": [
         "9",
         0
-      ]
+      ],
+      "idea_advanced": ""
     },
     "_meta": {
       "title": "Prompt"
