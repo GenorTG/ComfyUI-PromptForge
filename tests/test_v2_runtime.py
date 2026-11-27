@@ -405,6 +405,23 @@ class RuntimeTests(unittest.TestCase):
                 masking.remembered_mask("sam", image, str(index), 0.5, 2)
             self.assertEqual(len(masking._MASKS), masking.KEPT_MASKS)
 
+    def test_easycache_switch_wraps_the_model_only_when_on(self):
+        torch = self.torch
+        image = importlib.import_module(self.v2.__name__ + ".image")
+        cached = SimpleNamespace(model_options={"transformer_options": {"easycache": object()}})
+        plain = SimpleNamespace(model_options={"transformer_options": {}})
+        wrapped = object()
+        for model, on, expected, calls in ((plain, False, plain, 0), (plain, True, wrapped, 1), (cached, True, cached, 0)):
+            pipe = self.pipe(model=model, positive=[], negative=[], latent={"samples": torch.zeros(1, 4, 2, 2)})
+            pipe = image.ImageSamplingSettings.execute(pipe, easycache=on, easycache_threshold=0.3).args[0]
+            with patch.object(image.EasyCacheNode, "execute", return_value=SimpleNamespace(args=(wrapped,))) as cache, \
+                    patch.object(image.nodes, "common_ksampler", return_value=({"samples": torch.ones(1, 4, 2, 2)},)) as sampler:
+                image.ImageSample.execute(pipe)
+            self.assertEqual(cache.call_count, calls)
+            self.assertIs(sampler.call_args.args[0], expected)
+            if calls:
+                self.assertEqual(cache.call_args.args, (plain, 0.3, 0.15, 0.95, False))
+
     def test_out_of_memory_unloads_and_retries_once(self):
         shared = self.v2.shared
         outcomes = [self.torch.cuda.OutOfMemoryError("CUDA out of memory"), "done"]
