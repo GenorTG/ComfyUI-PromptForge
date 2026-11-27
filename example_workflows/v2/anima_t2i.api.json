@@ -65,30 +65,6 @@
     }
   },
   "4": {
-    "class_type": "PROMPTFORGE_V2_IMAGE_SAMPLING_SETTINGS",
-    "inputs": {
-      "seed": 0,
-      "steps": 30,
-      "cfg": 4.5,
-      "sampler_name": "er_sde",
-      "scheduler": "simple",
-      "denoise": 1.0,
-      "refine_denoise": 0.25,
-      "refine_steps": 4,
-      "use_nag": false,
-      "nag_phi": 4.0,
-      "nag_tau": 2.5,
-      "nag_alpha": 0.25,
-      "pipe": [
-        "3",
-        0
-      ]
-    },
-    "_meta": {
-      "title": "Sampling First"
-    }
-  },
-  "5": {
     "class_type": "PROMPTFORGE_V2_WRITER_MODEL",
     "inputs": {
       "model": "[gguf] [LOCAL Q4] [VISION] Qwen3.8-9B Heretic GGUF [9B, vision]",
@@ -101,7 +77,7 @@
       "title": "Writer Model"
     }
   },
-  "6": {
+  "5": {
     "class_type": "PROMPTFORGE_V2_IMAGE_PROMPT",
     "inputs": {
       "source": "raw",
@@ -119,7 +95,7 @@
       "music": "N/A",
       "generation": "image",
       "pipe": [
-        "4",
+        "3",
         0
       ],
       "idea_advanced": ""
@@ -128,7 +104,7 @@
       "title": "Prompt"
     }
   },
-  "7": {
+  "6": {
     "class_type": "PROMPTFORGE_V2_IMAGE_PROMPT_WRITER",
     "inputs": {
       "writer_preset": "auto",
@@ -144,15 +120,15 @@
       "checks": "strict",
       "retries": "1",
       "pipe": [
-        "6",
-        0
-      ],
-      "writer_model": [
         "5",
         0
       ],
+      "writer_model": [
+        "4",
+        0
+      ],
       "text": [
-        "6",
+        "5",
         1
       ],
       "length_words": 0
@@ -161,15 +137,15 @@
       "title": "Prompt Writer"
     }
   },
-  "8": {
+  "7": {
     "class_type": "PROMPTFORGE_V2_PROMPT_INSPECT",
     "inputs": {
       "pipe": [
-        "7",
+        "6",
         0
       ],
       "text": [
-        "7",
+        "6",
         1
       ]
     },
@@ -177,7 +153,7 @@
       "title": "Prompt Review"
     }
   },
-  "9": {
+  "8": {
     "class_type": "PROMPTFORGE_V2_IMAGE_ENCODE",
     "inputs": {
       "task": "t2i",
@@ -187,7 +163,7 @@
       "height": 1024,
       "batch_size": 1,
       "pipe": [
-        "8",
+        "7",
         0
       ],
       "model": [
@@ -195,7 +171,7 @@
         1
       ],
       "text": [
-        "6",
+        "5",
         1
       ],
       "clip": [
@@ -215,6 +191,30 @@
       "title": "Encode"
     }
   },
+  "9": {
+    "class_type": "PROMPTFORGE_V2_IMAGE_SAMPLING_SETTINGS",
+    "inputs": {
+      "seed": 0,
+      "steps": 30,
+      "cfg": 4.5,
+      "sampler_name": "er_sde",
+      "scheduler": "simple",
+      "denoise": 1.0,
+      "refine_denoise": 0.25,
+      "refine_steps": 4,
+      "use_nag": false,
+      "nag_phi": 4.0,
+      "nag_tau": 2.5,
+      "nag_alpha": 0.25,
+      "pipe": [
+        "8",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Sampling First"
+    }
+  },
   "10": {
     "class_type": "PROMPTFORGE_V2_IMAGE_SAMPLE",
     "inputs": {
@@ -229,15 +229,15 @@
         0
       ],
       "positive": [
-        "9",
+        "8",
         1
       ],
       "negative": [
-        "9",
+        "8",
         2
       ],
       "latent": [
-        "9",
+        "8",
         3
       ],
       "model": [

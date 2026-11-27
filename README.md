@@ -42,6 +42,13 @@ remain so that saved workflows keep running.
    time you use it.
 5. **Queue.** Then check **Prompt Inspect** for the final prompt and its warnings. Save your copy under a new name.
 
+## Faster repeat image generations
+
+The image templates wire the `pipe` as Format → Encode → Sampling Settings → Sample. With that order a new seed or
+step count reuses the encoded prompt, so the text encoder is not reloaded; the picture is the same. Changing anything
+upstream (the prompt, or a LoRA seed set to randomize) encodes again. In your own workflows, move Sampling Settings
+after Encode to get the same.
+
 ## Idea Advanced
 
 For finer control than one long description. The menu starts empty; press **+ Add** under a group and fill in
@@ -108,7 +115,7 @@ compare. On a GPU without the kernel, attention stays dense.
 | LoRAs (add them in **LoRA Stack**; Krea edit needs its identity/edit LoRA) | `loras` |
 | H3 latent upscaler (H3 second pass) | `latent_upscale_models` |
 | Frame interpolation model (H3 templates ask for `rife_v4.26.safetensors`) | `frame_interpolation` |
-| SAM3 checkpoint with its text encoder (Krea reference masks, reference focus) | `sam3` or `checkpoints` |
+| SAM3 checkpoint with its text encoder (Krea reference masks, reference focus); the list shows only SAM3 files | `sam3` or `checkpoints` |
 
 ## Using the V2 nodes
 
