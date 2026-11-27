@@ -8,6 +8,7 @@ import comfy.samplers
 import nodes
 from comfy_api.latest import io
 from comfy import supported_models
+from comfy_extras.nodes_easycache import EasyCacheNode
 
 from .. import unified_loader as loader
 from .contracts import schema as nodes_schema, PIPE, new_pipe, ensure_pipe, evolve, require, take
@@ -183,17 +184,23 @@ class ImageSamplingSettings(io.ComfyNode):
             io.Boolean.Input("use_nag", default=False),
             io.Float.Input("nag_phi", default=4.0, min=0.0, max=20.0),
             io.Float.Input("nag_tau", default=2.5, min=0.01, max=20.0),
-            io.Float.Input("nag_alpha", default=0.25, min=0.0, max=1.0)])
+            io.Float.Input("nag_alpha", default=0.25, min=0.0, max=1.0),
+            io.Boolean.Input("easycache", default=False, optional=True,
+                             tooltip="Experimental: ComfyUI's EasyCache reuses earlier results to skip steps in the first pass. Faster on some models, and the picture changes."),
+            io.Float.Input("easycache_threshold", default=0.2, min=0.0, max=3.0, step=0.01, optional=True,
+                           tooltip="How much change EasyCache lets a skipped step hide. Higher skips more and drifts further from the normal picture.")])
 
     @classmethod
     def execute(cls, pipe=None, seed=0, steps=10, cfg=1.0, sampler_name="euler", scheduler="simple", denoise=1.0,
-                refine_denoise=0.25, refine_steps=4, use_nag=False, nag_phi=4.0, nag_tau=2.5, nag_alpha=0.25, model=None):
+                refine_denoise=0.25, refine_steps=4, use_nag=False, nag_phi=4.0, nag_tau=2.5, nag_alpha=0.25, model=None,
+                easycache=False, easycache_threshold=0.2):
         pipe = image_pipe(ensure_pipe(pipe, model=model))
         if use_nag and (pipe["family"] != "krea2" or cfg != 1.0):
             raise ValueError("Krea NAG requires family krea2 and CFG 1.")
         settings = {"seed": seed, "steps": steps, "cfg": cfg, "sampler_name": sampler_name, "scheduler": scheduler,
                         "denoise": denoise, "refine_denoise": refine_denoise, "refine_steps": refine_steps,
-                        "use_nag": use_nag, "nag_phi": nag_phi, "nag_tau": nag_tau, "nag_alpha": nag_alpha}
+                        "use_nag": use_nag, "nag_phi": nag_phi, "nag_tau": nag_tau, "nag_alpha": nag_alpha,
+                        "easycache": easycache, "easycache_threshold": easycache_threshold}
         return io.NodeOutput(evolve(pipe, section="sampling", settings=settings, invalidate=("images",)))
 
 
@@ -310,6 +317,9 @@ class ImageSample(io.ComfyNode):
         a = pipe["artifacts"]
         s = pipe["settings"]["sampling"]
         model = a["model"]
+        # before the Krea patch, so the cache wraps it; a model that arrives with its own EasyCache keeps that one
+        if s.get("easycache") and "easycache" not in model.model_options["transformer_options"]:
+            model = EasyCacheNode.execute(model, s.get("easycache_threshold", 0.2), 0.15, 0.95, False).args[0]
         if pipe["family"] == "krea2" and (a.get("krea_source_latents") or s.get("use_nag")):
             model = patch_model(model, a["negative"], a.get("krea_source_latents", []),
                                 {**pipe["settings"].get("krea_edit", {}), "masks": a.get("krea_masks")}, s)

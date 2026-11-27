@@ -49,6 +49,11 @@ step count reuses the encoded prompt, so the text encoder is not reloaded; the p
 upstream (the prompt, or a LoRA seed set to randomize) encodes again. In your own workflows, move Sampling Settings
 after Encode to get the same.
 
+**EasyCache** (experimental, off by default) is on the image **Sampling Settings** node: `easycache` lets ComfyUI
+reuse earlier results and skip steps in the first pass, and `easycache_threshold` (0.2) sets how freely. The picture
+changes. In a laptop test it was about 8% faster on Krea 2 text to image and 18% on Anima, with no gain on MOSS;
+it has not been measured on Krea edits.
+
 ## Idea Advanced
 
 For finer control than one long description. The menu starts empty; press **+ Add** under a group and fill in
