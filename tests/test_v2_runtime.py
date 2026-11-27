@@ -363,6 +363,48 @@ class RuntimeTests(unittest.TestCase):
         with patch.object(interp.model_management, "load_models_gpu", side_effect=RuntimeError("broken")), self.assertRaisesRegex(RuntimeError, "broken"):
             interp._stream(patcher, frames, 2, out, None)
 
+    def test_reference_bias_equals_a_dense_mask(self):
+        import math
+        torch = self.torch
+        krea = importlib.import_module(self.v2.__name__ + ".krea")
+        torch.manual_seed(0)
+        slens, targets, text = [6, 8], 5, 3
+        length = text + sum(slens) + targets
+        q, k, v = (torch.randn(2, 4, length, 16, dtype=torch.float64) for _ in range(3))
+        for boosts, masks in (([1.0, 2.0], [None, None]), ([0.5, 4.0], [None, torch.eye(4)[:2][None]]), ([0.0, 1.0], [None, None])):
+            bias = krea._ref_attn_bias(boosts, masks, slens, targets, [(2, 3), (2, 4)], "cpu")
+            dense = torch.zeros(length, length, dtype=torch.float64)
+            dense[length - targets:, length - len(bias.keys):] = bias.keys.double()
+            expected = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=dense).transpose(1, 2).reshape(2, length, 64)
+            torch.testing.assert_close(krea.biased_attention(q.clone(), k.clone(), v.clone(), bias), expected, atol=1e-6, rtol=1e-6)
+        previous = krea.krea2_model.optimized_attention_masked
+        calls = []
+        with patch.object(krea.krea2_model, "optimized_attention_masked", lambda *args, **kwargs: calls.append(kwargs.get("mask"))):
+            with krea._biased_blocks():
+                krea.krea2_model.optimized_attention_masked(None, None, None, 4, mask=None)
+        self.assertEqual(calls, [None])
+        self.assertIs(krea.krea2_model.optimized_attention_masked, previous)
+
+    def test_subject_mask_is_reused_for_the_same_picture(self):
+        import tempfile
+        torch = self.torch
+        masking = importlib.import_module(self.v2.__name__ + ".masking")
+        image = torch.rand(1, 8, 8, 3)
+        with tempfile.NamedTemporaryFile(suffix=".safetensors") as file, \
+                patch.object(masking, "sam3_path", return_value=Path(file.name)), patch.object(masking, "load_sam3", return_value=(None, None)) as load, \
+                patch.object(masking, "segment", side_effect=lambda model, clip, picture, *rest: picture[..., 0].clone()):
+            masking._MASKS.clear()
+            first = masking.remembered_mask("sam", image, "face", 0.5, 2)
+            first[:] = 7
+            torch.testing.assert_close(masking.remembered_mask("sam", image.clone(), "face", 0.5, 2), image[..., 0])
+            self.assertEqual(load.call_count, 1)
+            masking.remembered_mask("sam", image, "hair", 0.5, 2)
+            masking.remembered_mask("sam", 1 - image, "face", 0.5, 2)
+            self.assertEqual(load.call_count, 3)
+            for index in range(masking.KEPT_MASKS + 3):
+                masking.remembered_mask("sam", image, str(index), 0.5, 2)
+            self.assertEqual(len(masking._MASKS), masking.KEPT_MASKS)
+
     def test_out_of_memory_unloads_and_retries_once(self):
         shared = self.v2.shared
         outcomes = [self.torch.cuda.OutOfMemoryError("CUDA out of memory"), "done"]
@@ -484,6 +526,7 @@ class RuntimeTests(unittest.TestCase):
                 clip = self.clip()
                 model = SimpleNamespace(model=SimpleNamespace(model_config=SimpleNamespace(unet_config={"image_model":family})))
                 pipe = self.pipe(model=base_model)
+                module._MASKS.clear()
                 with patch.object(module.comfy.sd,"load_checkpoint_guess_config",return_value=(model,clip,None,None)) as load, \
                      patch.object(module.SAM3_Detect,"execute",return_value=io.NodeOutput(mask)) as detect:
                     out, result = module.SubjectMask.execute(pipe,image,checkpoint.name,"hair",.37,4).args
@@ -496,11 +539,12 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual(detect.call_args.kwargs["refine_iterations"],4)
                 self.assertFalse(detect.call_args.kwargs["individual_masks"])
                 self.assertEqual(tuple(detect.call_args.kwargs["conditioning"][0][0].shape),(1,1,64))
-                self.assertIs(result,mask)
-                self.assertIs(out["artifacts"]["source_mask"],mask)
+                torch.testing.assert_close(result,mask)
+                self.assertIs(out["artifacts"]["source_mask"],result)
                 self.assertIs(out["artifacts"]["model"],base_model)
                 self.assertNotIn("source_mask",pipe["artifacts"])
         wrong = SimpleNamespace(model=SimpleNamespace(model_config=SimpleNamespace(unet_config={"image_model":"krea2"})))
+        module._MASKS.clear()
         with patch.object(module.comfy.sd,"load_checkpoint_guess_config",return_value=(wrong,self.clip(),None,None)), \
              patch.object(module.SAM3_Detect,"execute") as detect:
             with self.assertRaisesRegex(ValueError,"SAM3"):
