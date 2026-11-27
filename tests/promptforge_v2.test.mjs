@@ -437,3 +437,27 @@ test('idea advanced names subjects like the request does and forgets removed one
   assert.equal(data.sound[0].speaker, '');
   assert.deepEqual(advanced.parseAdvanced('not json').characters, []);
 });
+
+test('video preview switches hide the player, set loop and only start or stop it on a change', async () => {
+  globalThis.__pfApp = { registerExtension() {} };
+  let code = await readFile(new URL('../web/promptforge_video.js', import.meta.url), 'utf8');
+  code = code.replace('import { app } from "../../scripts/app.js";', 'const app = globalThis.__pfApp;');
+  const { applyPreviewSwitches } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+  const values = { show_preview: true, loop_preview: false, autoplay_preview: false };
+  const node = { size: [300, 700], widgets: Object.keys(values).map((name) => ({ name, get value() { return values[name]; } })), computeSize: () => [300, 400], setSize(size) { this.size = size; } };
+  const calls = [];
+  const video = { src: 'a', play: () => { calls.push('play'); return Promise.resolve(); }, pause: () => calls.push('pause') };
+  const preview = { computeLayoutSize: () => 'full', element: {} };
+  applyPreviewSwitches(node, video, preview);
+  applyPreviewSwitches(node, video, preview);
+  assert.deepEqual([video.loop, video.autoplay, calls], [false, false, ['pause']]);
+  values.autoplay_preview = true;
+  applyPreviewSwitches(node, video, preview);
+  assert.deepEqual(calls, ['pause', 'play']);
+  values.show_preview = false;
+  applyPreviewSwitches(node, video, preview);
+  assert.deepEqual([preview.hidden, video.hidden, node.size[1], calls.at(-1)], [true, true, 400, 'pause']);
+  values.show_preview = true;
+  applyPreviewSwitches(node, video, preview);
+  assert.deepEqual([preview.hidden, video.hidden, node.size[1], preview.computeLayoutSize()], [false, false, 700, 'full']);
+});
