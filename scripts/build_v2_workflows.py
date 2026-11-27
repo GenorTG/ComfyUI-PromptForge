@@ -438,7 +438,7 @@ def h3_graph(catalogue, name, mode, multipart=False):
         if mode == "continue":
             result = graph.add("H3_JOIN", "join_source", GROUPS[5], {"overlap_frames": 22},
                                {"previous": (source_clip, 0), "images": (decoded, 1), "audio": (decoded, 2)})
-    interpolated = graph.add("FRAME_INTERPOLATE", "optional_rife", GROUPS[6], {"enabled": True, "multiplier": 2})
+    interpolated = graph.add("FRAME_INTERPOLATE", "optional_rife", GROUPS[6], {"enabled": True, "multiplier": 2, "auto": True})
     cleaned = graph.add("VIDEO_CLEANUP", "optional_cleanup", GROUPS[6],
                         {"enabled": False, "denoise_quality": "Ultra", "deblur_quality": "Low"},
                         connections={"images": (interpolated, 1)})

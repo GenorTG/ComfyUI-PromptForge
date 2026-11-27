@@ -335,6 +335,34 @@ class RuntimeTests(unittest.TestCase):
                     patch.object(masking.folder_paths, "models_dir", folder):
                 self.assertEqual(masking.sam3_checkpoints(), ["(select SAM3 checkpoint)", "sam3_old.pt", "segmenter.safetensors"])
 
+    def test_auto_interpolation_streams_pairs_and_blends_what_never_fits(self):
+        import torch
+        interp = importlib.import_module(self.v2.__name__.rsplit(".", 1)[0] + ".frame_interpolation")
+
+        class Net:
+            def extract_features(self, frame):
+                return frame
+
+            def memory_used_forward(self, shape, dtype):
+                return 0
+
+            def __call__(self, first, second, timestep, cache):
+                return first + (second - first) * timestep[:, :, :1, :1]
+
+        patcher = SimpleNamespace(load_device=torch.device("cpu"), model=Net(), model_dtype=lambda: torch.float32)
+        frames = torch.rand(4, 8, 8, 3)
+        out = torch.empty(10, 8, 8, 3)
+        with patch.object(interp.model_management, "load_models_gpu"):
+            interp._stream(patcher, frames, 3, out, None)
+        torch.testing.assert_close(out, interp._blend(frames, 3))
+        out = torch.empty(7, 8, 8, 3)
+        with patch.object(interp.model_management, "load_models_gpu", side_effect=torch.cuda.OutOfMemoryError("out of memory")), \
+                patch.object(interp.model_management, "unload_all_models"), patch.object(interp.model_management, "soft_empty_cache"):
+            interp._stream(patcher, frames, 2, out, (4, 4))
+        torch.testing.assert_close(out, interp._blend(frames, 2))
+        with patch.object(interp.model_management, "load_models_gpu", side_effect=RuntimeError("broken")), self.assertRaisesRegex(RuntimeError, "broken"):
+            interp._stream(patcher, frames, 2, out, None)
+
     def test_out_of_memory_unloads_and_retries_once(self):
         shared = self.v2.shared
         outcomes = [self.torch.cuda.OutOfMemoryError("CUDA out of memory"), "done"]
