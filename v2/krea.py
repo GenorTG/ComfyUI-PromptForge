@@ -231,19 +231,19 @@ SOFTWARE.
 
 """
 import math
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from threading import Lock
 
 import torch
 import torch.nn.functional as F
+import comfy.ops
 import comfy.patcher_extension
 import comfy.utils
 import comfy.ldm.krea2.model as krea2_model
-from comfy.ldm.modules.attention import attention_pytorch
 from comfy.ldm.flux.layers import timestep_embedding
 from comfy.ldm.flux.math import apply_rope
 from comfy.ldm.krea2.model import SingleStreamDiT
-from comfy.ldm.modules.attention import AttentionTensorContainer, optimized_attention_masked
+from comfy.ldm.modules.attention import AttentionTensorContainer
 from comfy_api.latest import io
 
 from .contracts import schema as nodes_schema, PIPE, ensure_pipe, evolve, require
@@ -325,14 +325,18 @@ def _fit_encode_image(image, vae, H, W, cache, key, fit_mode="crop"):
     return cache[key]
 
 
-def _ref_attn_bias(boosts, boost_masks, txtlen, slens, tgtlen, mask_hw, device, dtype):
-    nsrc = len(slens)
-    offs = [txtlen]
+class ReferenceBias:
+    """ref_boost as the attention sees it: `keys` is added to the scores the last `targets` queries give the last len(keys) keys."""
+
+    def __init__(self, keys, targets):
+        self.keys, self.targets = keys, targets
+
+
+def _ref_attn_bias(boosts, boost_masks, slens, tgtlen, mask_hw, device):
+    offs = [0]
     for sl in slens:
         offs.append(offs[-1] + sl)
-    rows0 = offs[-1]
-    L = rows0 + tgtlen
-    bias = torch.zeros(1, 1, L, L, device=device, dtype=dtype)
+    keys = torch.zeros(offs[-1] + tgtlen, device=device, dtype=torch.float32)
     for i, b in enumerate(boosts):
         if b == 1.0:
             continue
@@ -345,8 +349,32 @@ def _ref_attn_bias(boosts, boost_masks, txtlen, slens, tgtlen, mask_hw, device, 
             cols = off + torch.nonzero(mask.reshape(-1) > 0.5, as_tuple=True)[0].to(device)
         else:
             cols = torch.arange(off, off + sl, device=device)
-        bias[:, :, rows0:, cols] = math.log(max(b, 1e-4))
-    return bias
+        keys[cols] = math.log(max(b, 1e-4))
+    return ReferenceBias(keys, tgtlen)
+
+
+BIAS_WIDTH = 8  # extra head dimensions that carry the bias; fused attention kernels want multiples of 8
+
+
+def biased_attention(q, k, v, bias):
+    """Attention over [B, heads, length, dim] with a ReferenceBias added to the scores, without a mask.
+
+    A dense length x length mask costs hundreds of MB and keeps torch off its fused kernels. Only the target queries are
+    biased, so the other rows run as they are. The target queries get one extra feature of 1 and the keys one that holds
+    the bias, so that their product adds it to the score; the values are padded with zeros and the padding is cut off.
+    """
+    batch, heads, length, dim = q.shape
+    split, scale = length - bias.targets, dim ** -0.5
+    others = comfy.ops.scaled_dot_product_attention(q[:, :, :split], k, v, scale=scale)
+    q = F.pad(q[:, :, split:], (0, BIAS_WIDTH))
+    q[..., dim] = 1
+    # one at a time, so each unpadded copy is freed before the next is made
+    k = F.pad(k, (0, BIAS_WIDTH))
+    v = F.pad(v, (0, BIAS_WIDTH))
+    k[:, :, length - len(bias.keys):, dim] = (bias.keys / scale).to(k.dtype)
+    targets = comfy.ops.scaled_dot_product_attention(q, k, v, scale=scale)[..., :dim]
+    return torch.cat((others, targets), dim=2).transpose(1, 2).reshape(batch, length, heads * dim)
+
 
 def normalized_attention_guidance(
     positive: torch.Tensor,
@@ -402,10 +430,38 @@ def _raw_attention(attn, x, freqs, options, mask):
     repeat = attn.heads // attn.kvheads
     if repeat != 1:
         k, v = k.repeat_interleave(repeat, 1), v.repeat_interleave(repeat, 1)
-    out = optimized_attention_masked(AttentionTensorContainer(q), AttentionTensorContainer(k), AttentionTensorContainer(v),
+    out = krea2_model.optimized_attention_masked(AttentionTensorContainer(q), AttentionTensorContainer(k), AttentionTensorContainer(v),
                                      attn.heads, mask=mask, skip_reshape=True,
                                      preferred_attention=attn.comfy_attention, transformer_options=options)
     return out, attn.gate(x)
+
+
+def _blocks(model, combined, vec, pos_len, offset, options, sampling, positive, negative):
+    """Runs the transformer blocks. `negative` is (text, freqs, mask) for NAG, else None."""
+    pos_freqs, pos_mask = positive
+    if negative is not None:
+        negative_text, neg_freqs, neg_mask = negative
+        neg_len = negative_text.shape[1]
+    for index, block in enumerate(model.blocks):
+        options["block_index"] = index
+        if negative is None:
+            combined = block(combined, vec, pos_freqs, pos_mask, transformer_options=options)
+            continue
+        prescale, preshift, pregate, postscale, postshift, postgate = block.mod(vec)
+        negative_combined = torch.cat((negative_text, combined[:, pos_len:]), dim=1)
+        pos_raw, pos_gate = _raw_attention(block.attn, (1 + prescale) * block.prenorm(combined) + preshift,
+                                         pos_freqs, options, pos_mask)
+        neg_raw, neg_gate = _raw_attention(block.attn, (1 + prescale) * block.prenorm(negative_combined) + preshift,
+                                         neg_freqs, options, neg_mask)
+        start = pos_len + offset
+        guided = normalized_attention_guidance(pos_raw[:, start:], neg_raw[:, neg_len + offset:],
+                                               sampling["nag_phi"], sampling["nag_tau"], sampling["nag_alpha"])
+        raw = torch.cat((pos_raw[:, :start], guided), dim=1)
+        combined = combined + pregate * block.attn.wo(raw * pos_gate.sigmoid())
+        negative_text = negative_text + pregate * block.attn.wo(neg_raw[:, :neg_len] * neg_gate[:, :neg_len].sigmoid())
+        combined = combined + postgate * block.mlp((1 + postscale) * block.postnorm(combined) + postshift)
+        negative_text = negative_text + postgate * block.mlp((1 + postscale) * block.postnorm(negative_text) + postshift)
+    return combined
 
 
 def _forward(model, x, timesteps, context, sources, negative, edit, sampling, options):
@@ -446,8 +502,8 @@ def _forward(model, x, timesteps, context, sources, negative, edit, sampling, op
         ids = torch.cat((torch.zeros(batch, length, 3, device=x.device, dtype=torch.float32), image_ids), dim=1)
         mask = None
         if sources and any(boost != 1.0 for boost in boosts):
-            mask = _ref_attn_bias(boosts, edit.get("masks") or [None] * len(sources), length, source_lengths, target.shape[1],
-                                  source_grids, image.device, image.dtype)
+            mask = _ref_attn_bias(boosts, edit.get("masks") or [None] * len(sources), source_lengths, target.shape[1],
+                                  source_grids, image.device)
         return model.pe_embedder(ids), mask
 
     pos_len = positive_text.shape[1]
@@ -458,25 +514,9 @@ def _forward(model, x, timesteps, context, sources, negative, edit, sampling, op
     options.update(total_blocks=len(model.blocks), block_type="single", reference_image_num_tokens=source_lengths,
                    img_slice=[pos_len + offset, pos_len + image.shape[1]])
     combined = torch.cat((positive_text, image), dim=1)
-    for index, block in enumerate(model.blocks):
-        options["block_index"] = index
-        if not use_nag:
-            combined = block(combined, vec, pos_freqs, pos_mask, transformer_options=options)
-            continue
-        prescale, preshift, pregate, postscale, postshift, postgate = block.mod(vec)
-        negative_combined = torch.cat((negative_text, combined[:, pos_len:]), dim=1)
-        pos_raw, pos_gate = _raw_attention(block.attn, (1 + prescale) * block.prenorm(combined) + preshift,
-                                         pos_freqs, options, pos_mask)
-        neg_raw, neg_gate = _raw_attention(block.attn, (1 + prescale) * block.prenorm(negative_combined) + preshift,
-                                         neg_freqs, options, neg_mask)
-        start = pos_len + offset
-        guided = normalized_attention_guidance(pos_raw[:, start:], neg_raw[:, neg_len + offset:],
-                                               sampling["nag_phi"], sampling["nag_tau"], sampling["nag_alpha"])
-        raw = torch.cat((pos_raw[:, :start], guided), dim=1)
-        combined = combined + pregate * block.attn.wo(raw * pos_gate.sigmoid())
-        negative_text = negative_text + pregate * block.attn.wo(neg_raw[:, :neg_len] * neg_gate[:, :neg_len].sigmoid())
-        combined = combined + postgate * block.mlp((1 + postscale) * block.postnorm(combined) + postshift)
-        negative_text = negative_text + postgate * block.mlp((1 + postscale) * block.postnorm(negative_text) + postshift)
+    with _biased_blocks() if pos_mask is not None else nullcontext():
+        combined = _blocks(model, combined, vec, positive_text.shape[1], offset, options, sampling, (pos_freqs, pos_mask),
+                           (negative_text, neg_freqs, neg_mask) if use_nag else None)
     output = model.last(combined, t)[:, pos_len + offset:]
     p = model.patch
     output = output.reshape(batch, gh, gw, model.channels, p, p).permute(0, 3, 1, 4, 2, 5)
@@ -491,11 +531,17 @@ _ATTENTION_LOCK = Lock()
 
 
 @contextmanager
-def _pytorch_attention():
-    """Force the torch attention path while a reference bias mask is in use."""
+def _biased_blocks():
+    """Sends the block calls that carry a ReferenceBias to biased_attention; every other call keeps the model's attention."""
     with _ATTENTION_LOCK:
         previous = krea2_model.optimized_attention_masked
-        krea2_model.optimized_attention_masked = attention_pytorch
+
+        def attention(q, k, v, heads, mask=None, **kwargs):
+            if not isinstance(mask, ReferenceBias):
+                return previous(q, k, v, heads, mask=mask, **kwargs)
+            return biased_attention(q.take(), k.take(), v.take(), mask)
+
+        krea2_model.optimized_attention_masked = attention
         try:
             yield
         finally:
@@ -512,19 +558,13 @@ def patch_model(model, negative, sources, edit, sampling):
     sources = [model.model.process_latent_in(source) for source in sources]
     negative_context = negative[0][0] if sampling.get("use_nag") else None
 
-    boosted = any(boost != 1.0 for boost in (edit.get("ref_boost", 1.0), edit.get("ref_boost_a", 1.0))) or any(mask is not None for mask in edit.get("masks") or ())
-
     def wrapper(executor, x, timesteps, context, attention_mask=None, ref_latents=None, transformer_options=None, **kwargs):
         options = transformer_options or {}
         if sampling.get("use_nag") and any(branch != 0 for branch in options.get("cond_or_uncond", [0])):
             raise ValueError("Krea NAG needs the positive CFG branch only.")
         if attention_mask is not None or ref_latents:
             raise ValueError("Use Krea Edit Prepare for references; this adapter does not consume native reference conditioning or text masks.")
-        if not boosted:
-            return _forward(executor.class_obj, x, timesteps, context, sources, negative_context, edit, sampling, options)
-        # a reference bias is a dense mask, which the xformers kernel rejects at these shapes
-        with _pytorch_attention():
-            return _forward(executor.class_obj, x, timesteps, context, sources, negative_context, edit, sampling, options)
+        return _forward(executor.class_obj, x, timesteps, context, sources, negative_context, edit, sampling, options)
 
     patched = model.clone()
     patched.add_wrapper_with_key(comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL, "promptforge_v2_krea", wrapper)

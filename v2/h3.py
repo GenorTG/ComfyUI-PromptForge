@@ -84,7 +84,8 @@ class H3Format(io.ComfyNode):
         return schema("FORMAT", "Format", [Pipe.Input("pipe", optional=True), io.Int.Input("width", default=1344, min=32, max=16384, step=32),
             io.Int.Input("height", default=768, min=32, max=16384, step=32),
             io.Float.Input("seconds", default=5.0, min=0.01, max=3600),
-            io.Combo.Input("aspect", options=["custom", "16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], default="custom"),
+            io.Combo.Input("aspect", options=["custom", "16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "9:21", "5:4", "4:5", "6:5", "5:6", "7:5", "5:7", "3:2", "2:3",
+                                               "16:10", "10:16", "5:3", "3:5", "2:1", "1:2", "12:5", "5:12", "5:2", "2:5", "3:1", "1:3", "32:9", "9:32"], default="custom"),
             io.Float.Input("megapixels", default=1.0, min=0.01, max=64),
             io.Combo.Input("orientation", options=["as selected", "landscape", "portrait"], default="as selected")],
             [Pipe.Output("pipe"), io.Latent.Output("latent")])

@@ -68,7 +68,9 @@ class ImageModel(io.ComfyNode):
         return io.NodeOutput(pipe, model_obj, clip_obj, vae_obj, result[5])
 
 
-ASPECTS = {"1:1": 1.0, "4:3": 4/3, "3:2": 3/2, "16:9": 16/9, "21:9": 21/9}
+# landscape ratios, narrowest to widest; orientation turns them around
+ASPECTS = {name: int(name.split(":")[0]) / int(name.split(":")[1]) for name in (
+    "1:1", "6:5", "5:4", "4:3", "7:5", "3:2", "16:10", "5:3", "16:9", "2:1", "21:9", "12:5", "5:2", "3:1", "32:9")}
 
 # named sizes: (width, height, aspect, orientation). Presets only use the aspect keys above so switching to
 # megapixels with the same choice lands on the same frame.
