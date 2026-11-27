@@ -1,4 +1,5 @@
 """Run in a fresh process with ComfyUI's Python; see scripts/check_v2_runtime.py."""
+import importlib
 import importlib.util
 import json
 from pathlib import Path
@@ -315,6 +316,24 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(len(tight), 18)
         torch.testing.assert_close(tight, roomy.half(), atol=1e-3, rtol=0)
         self.assertEqual(list((self.runtime.base / "temp").glob("promptforge_frames_*")), [])
+
+    def test_sam3_list_holds_only_sam3_files(self):
+        import struct, tempfile
+        masking = importlib.import_module(self.v2.__name__ + ".masking")
+        wanted = ["model.detector.backbone.vision_backbone.trunk.blocks.0.attn.qkv.weight", "model.detector.transformer.decoder.query_embed.weight"]
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for name, keys in (("segmenter.safetensors", wanted), ("video.safetensors", ["blocks.0.attn.qkv_proj.weight"])):
+                header = json.dumps({key: {} for key in keys}).encode()
+                (root / name).write_bytes(struct.pack("<Q", len(header)) + header)
+            (root / "broken.safetensors").write_bytes(struct.pack("<Q", 4) + b"{no}")
+            for name in ("sam3_old.pt", "other.ckpt"):
+                (root / name).write_bytes(b"x")
+            names = sorted(path.name for path in root.iterdir())
+            with patch.object(masking.folder_paths, "get_filename_list", return_value=names), \
+                    patch.object(masking.folder_paths, "get_full_path", side_effect=lambda _, name: str(root / name)), \
+                    patch.object(masking.folder_paths, "models_dir", folder):
+                self.assertEqual(masking.sam3_checkpoints(), ["(select SAM3 checkpoint)", "sam3_old.pt", "segmenter.safetensors"])
 
     def test_out_of_memory_unloads_and_retries_once(self):
         shared = self.v2.shared

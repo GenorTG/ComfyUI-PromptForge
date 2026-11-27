@@ -326,7 +326,6 @@ def image_graph(catalogue, name, family, task="t2i"):
     if family == "moss_image":
         baseline = {"steps": 20, "cfg": 2.0, "sampler_name": "euler", "scheduler": "normal"} if task == "edit" else \
                    {"steps": 8, "cfg": 1.0, "sampler_name": "er_sde", "scheduler": "bong_tangent"}
-    graph.add("IMAGE_SAMPLING_SETTINGS", "sampling_first", GROUPS[3], baseline)
     loaded = []
     for index in range(2 if task in ("transfer", "multi") else 1 if task == "edit" else 0):
         loaded.append(graph.add("LOAD_IMAGE", f"reference_{index+1}", GROUPS[1],
@@ -363,6 +362,8 @@ def image_graph(catalogue, name, family, task="t2i"):
     encode = graph.add("IMAGE_ENCODE", "encode", GROUPS[4], {"task": "edit" if loaded else "t2i"},
                        connections={"clip": clip_out, "vae": (model, 3), "model": model_out, "text": (prompt, 1),
                                   "latent": (format_node, 1)})
+    # after Encode, so a new seed or step count reuses the encoded prompt instead of reloading the text encoder
+    graph.add("IMAGE_SAMPLING_SETTINGS", "sampling_first", GROUPS[3], baseline)
     sample = graph.add("IMAGE_SAMPLE", "sample_first", GROUPS[4],
                        connections={"model": model_out, "positive": (encode, 1), "negative": (encode, 2), "latent": (encode, 3)})
     upscaled = graph.add("IMAGE_LATENT_UPSCALE", "latent_upscale", GROUPS[5],
