@@ -302,6 +302,7 @@ RIFE / FILM frame interpolation for large frames (for example the 2x-decoded Min
 
 - **`ckpt_name`**: every model in `models/frame_interpolation` (RIFE 4.25+, FILM), plus `blend`, a plain cross-fade that needs no model and is instant (ghosts on motion). Older RIFE `.pth` files (rife47 / 49 / 417) are not supported by ComfyUI's loader.
 - **`batch_size`, `overlap`, `scale`, `clear_cache`**: the clip always runs in short pieces sized from the frame size (`batch_size 0`); RIFE and FILM only look at neighbouring frames, so the result is the same as one run. `batch_size` caps the piece, `overlap` shares extra frames, `scale` interpolates smaller and scales back, `clear_cache` releases GPU memory between pieces. On out of GPU memory it unloads the other models and shortens the pieces; only a pair of frames that still does not fit is cross-faded.
+- **`auto`** (off by default on the node, on in the H3 templates; also on the V2 Frame Interpolate node): nothing to tune. It streams one pair of frames at a time through the model on the GPU, so `batch_size`, `overlap` and `clear_cache` are not used. For 2688×1536 clips with RIFE 4.26 it measured 37 ms per pair on an RTX 5080 against 97 ms with `batch_size` 24 (about 13 s against 35 s for 359 pairs), and 102 ms against 188 ms on an RTX 3080 Laptop. Larger batches of pairs were slower and took more memory. The frames match the batched mode within the model's own half precision noise.
 
 ### PromptForge Save Video (`PROMPTFORGE_SaveVideo`)
 

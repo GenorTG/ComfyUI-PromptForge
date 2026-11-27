@@ -14,7 +14,7 @@ from server import PromptServer
 from comfy_api.latest import io, InputImpl
 from comfy_extras import nodes_audio
 
-from ..frame_interpolation import PROMPTFORGE_FrameInterpolate, _checkpoints, BLEND
+from ..frame_interpolation import AUTO_TOOLTIP, PROMPTFORGE_FrameInterpolate, _checkpoints, BLEND
 from .contracts import schema as nodes_schema, PIPE, ensure_pipe, evolve, require
 from . import focus as reference_focus, rtx
 
@@ -197,11 +197,12 @@ class FrameInterpolate(io.ComfyNode):
                                  io.Combo.Input("model_name", options=list(_checkpoints()) + [BLEND]),
                                  io.Int.Input("batch_size", default=0, min=0, max=240),
                                  io.Int.Input("overlap", default=2, min=1, max=12),
-                                 io.Float.Input("scale", default=1.0, min=0.25, max=1.0, step=0.05)],
+                                 io.Float.Input("scale", default=1.0, min=0.25, max=1.0, step=0.05),
+                                 io.Boolean.Input("auto", default=False, optional=True, tooltip=AUTO_TOOLTIP)],
                          outputs=[Pipe.Output(), io.Image.Output("frames"), io.Float.Output("fps")])
 
     @classmethod
-    def execute(cls, pipe=None, enabled=False, multiplier=2, model_name=BLEND, batch_size=0, overlap=2, scale=1.0):
+    def execute(cls, pipe=None, enabled=False, multiplier=2, model_name=BLEND, batch_size=0, overlap=2, scale=1.0, auto=False):
         pipe = ensure_pipe(pipe)
         frames = require(pipe, "images")
         fmt = pipe["settings"].get("format", {})
@@ -213,7 +214,7 @@ class FrameInterpolate(io.ComfyNode):
         if count < 2:
             return io.NodeOutput(pipe, frames, fps)
         # (N-1)*M+1 interpolated frames; the last one is held up to N*M so playback duration and audio length stay unchanged
-        result = PROMPTFORGE_FrameInterpolate().interpolate(frames, multiplier, model_name, batch_size, overlap, scale, hold=multiplier - 1)[0]
+        result = PROMPTFORGE_FrameInterpolate().interpolate(frames, multiplier, model_name, batch_size, overlap, scale, auto=auto, hold=multiplier - 1)[0]
         fps *= multiplier
         out = evolve(pipe, "timing", {"fps": fps, "native_fps": timing.get("native_fps", fmt.get("fps", 24)),
                                      "frames": len(result), "duration": len(result) / fps}, {"images": result})
