@@ -406,7 +406,8 @@
       "pipe": [
         "19",
         0
-      ]
+      ],
+      "auto": true
     },
     "_meta": {
       "title": "Optional Rife"

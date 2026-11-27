@@ -1734,7 +1734,8 @@
           "model_name": "rife_v4.26.safetensors",
           "batch_size": 0,
           "overlap": 2,
-          "scale": 1.0
+          "scale": 1.0,
+          "auto": true
         }
       },
       "widgets_values": [
@@ -1743,7 +1744,8 @@
         "rife_v4.26.safetensors",
         0,
         2,
-        1.0
+        1.0,
+        true
       ],
       "color": "#5a5a5a",
       "bgcolor": "#333333"

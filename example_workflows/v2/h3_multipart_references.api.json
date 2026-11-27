@@ -354,7 +354,8 @@
       "pipe": [
         "18",
         0
-      ]
+      ],
+      "auto": true
     },
     "_meta": {
       "title": "Optional Rife"

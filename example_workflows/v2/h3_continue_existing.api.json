@@ -481,7 +481,8 @@
       "pipe": [
         "23",
         0
-      ]
+      ],
+      "auto": true
     },
     "_meta": {
       "title": "Optional Rife"
