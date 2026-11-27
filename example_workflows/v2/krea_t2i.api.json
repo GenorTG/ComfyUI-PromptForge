@@ -209,7 +209,9 @@
       "pipe": [
         "8",
         0
-      ]
+      ],
+      "easycache": false,
+      "easycache_threshold": 0.2
     },
     "_meta": {
       "title": "Sampling First"

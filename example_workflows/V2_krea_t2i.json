@@ -715,7 +715,9 @@
           "use_nag": false,
           "nag_phi": 4.0,
           "nag_tau": 2.5,
-          "nag_alpha": 0.25
+          "nag_alpha": 0.25,
+          "easycache": false,
+          "easycache_threshold": 0.2
         }
       },
       "widgets_values": [
@@ -731,7 +733,9 @@
         false,
         4.0,
         2.5,
-        0.25
+        0.25,
+        false,
+        0.2
       ],
       "color": "#8a6d2f",
       "bgcolor": "#4a3b1b"
