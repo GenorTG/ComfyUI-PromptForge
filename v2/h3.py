@@ -756,8 +756,9 @@ class H3PreviewSave(io.ComfyNode):
             "film_grain": film_grain, "show_preview": show_preview, "loop_preview": loop_preview,
             "autoplay_preview": autoplay_preview, "filename_prefix": filename_prefix,
             "encoder_preset": encoder_preset}, artifacts={"video": video})
+        # sent even with the preview off: the node hides the player, so the switch works without another run
         preview = ui.PreviewVideo([ui.SavedResult(item["filename"], item["subfolder"],
-            io.FolderType.output if save else io.FolderType.temp)]) if show_preview else None
+            io.FolderType.output if save else io.FolderType.temp)])
         return io.NodeOutput(result, video, ui=preview)
 
 
