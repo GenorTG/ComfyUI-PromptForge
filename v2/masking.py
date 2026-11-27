@@ -1,5 +1,7 @@
 """Automatic reference masking using ComfyUI's native SAM3 implementation."""
+import hashlib
 import json
+from collections import OrderedDict
 from functools import lru_cache
 from pathlib import Path
 from threading import RLock
@@ -17,6 +19,9 @@ Pipe = io.Custom(PIPE)
 _SAM3_ATTENTION_LOCK = RLock()
 # SAM3 upsamples every candidate mask to the picture size: a 16 MP photo needs 6 GB for that step
 SAM3_MAX_SIDE = 1536
+# the last masks Subject Mask made: a new seed upstream reruns the node on the same picture, and SAM3 takes seconds to load and run
+_MASKS = OrderedDict()
+KEPT_MASKS = 8
 
 
 @lru_cache(maxsize=1024)
@@ -67,21 +72,40 @@ class SubjectMask(io.ComfyNode):
             raise ValueError("Select a SAM3 checkpoint first.")
         if image is None:
             raise ValueError("Connect an image to mask.")
-        mask = segment(*load_sam3(checkpoint), image, subject, threshold, refine_iterations)
+        mask = remembered_mask(checkpoint, image, subject, threshold, refine_iterations)
         out = evolve(pipe, "mask", {"checkpoint": checkpoint, "subject": subject, "threshold": threshold,
                                        "refine_iterations": refine_iterations}, {"source_mask": mask})
         return io.NodeOutput(out, mask)
 
 
+def sam3_path(checkpoint):
+    if not checkpoint.startswith("sam3::"):
+        return Path(folder_paths.get_full_path_or_raise("checkpoints", checkpoint))
+    root = (Path(folder_paths.models_dir) / "sam3").resolve()
+    path = (root / checkpoint.removeprefix("sam3::")).resolve()
+    if root not in path.parents or not path.is_file():
+        raise ValueError("Select an existing SAM3 checkpoint inside models/sam3.")
+    return path
+
+
+def remembered_mask(checkpoint, image, subject, threshold, refine_iterations):
+    """segment(), skipped together with loading SAM3 when the same file, picture and settings were just masked."""
+    path = sam3_path(checkpoint)
+    pixels = hashlib.sha1(image.detach().cpu().contiguous().float().numpy().tobytes()).hexdigest()
+    key = (str(path), path.stat().st_mtime_ns, tuple(image.shape), pixels, subject, threshold, refine_iterations)
+    mask = _MASKS.get(key)
+    if mask is None:
+        mask = segment(*load_sam3(checkpoint), image, subject, threshold, refine_iterations)
+        _MASKS[key] = mask
+        while len(_MASKS) > KEPT_MASKS:
+            _MASKS.popitem(last=False)
+    _MASKS.move_to_end(key)
+    return mask.clone()
+
+
 def load_sam3(checkpoint):
     """(model, clip) of a SAM3 checkpoint picked from the list."""
-    if checkpoint.startswith("sam3::"):
-        root = (Path(folder_paths.models_dir) / "sam3").resolve()
-        path = (root / checkpoint.removeprefix("sam3::")).resolve()
-        if root not in path.parents or not path.is_file():
-            raise ValueError("Select an existing SAM3 checkpoint inside models/sam3.")
-    else:
-        path = folder_paths.get_full_path_or_raise("checkpoints", checkpoint)
+    path = sam3_path(checkpoint)
     model, clip, *_ = comfy.sd.load_checkpoint_guess_config(str(path), output_vae=False, output_clip=True,
                                                            embedding_directory=folder_paths.get_folder_paths("embeddings"))
     if model.model.model_config.unet_config.get("image_model") not in ("SAM3", "SAM31") or clip is None:
