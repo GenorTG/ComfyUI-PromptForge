@@ -1,4 +1,6 @@
 """Automatic reference masking using ComfyUI's native SAM3 implementation."""
+import json
+from functools import lru_cache
 from pathlib import Path
 from threading import RLock
 
@@ -17,11 +19,33 @@ _SAM3_ATTENTION_LOCK = RLock()
 SAM3_MAX_SIDE = 1536
 
 
+@lru_cache(maxsize=1024)
+def _holds_sam3(path, modified, size):
+    header = comfy.utils.safetensors_header(path, max_size=64 * 1024 * 1024)
+    try:
+        keys = json.loads(header) if header else {}
+    except ValueError:
+        return False
+    # the two weights ComfyUI's model detection takes as SAM3, under any prefix
+    return all(any(key.endswith(wanted) for key in keys) for wanted in
+               ("detector.backbone.vision_backbone.trunk.blocks.0.attn.qkv.weight", "detector.transformer.decoder.query_embed.weight"))
+
+
+def _is_sam3(path):
+    """Whether a file can be offered as SAM3. Only safetensors can be looked into without loading them; others go by name."""
+    path = Path(path)
+    if path.suffix.lower() not in (".safetensors", ".sft"):
+        return "sam3" in path.name.lower()
+    stat = path.stat()
+    return _holds_sam3(str(path), stat.st_mtime_ns, stat.st_size)
+
+
 def sam3_checkpoints():
-    regular = folder_paths.get_filename_list("checkpoints")
+    regular = [name for name in folder_paths.get_filename_list("checkpoints")
+               if (path := folder_paths.get_full_path("checkpoints", name)) and _is_sam3(path)]
     root = Path(folder_paths.models_dir) / "sam3"
     local = [f"sam3::{path.relative_to(root).as_posix()}" for path in root.rglob("*")
-             if path.is_file() and path.suffix.lower() in (".safetensors", ".ckpt", ".pt", ".pth")]
+             if path.is_file() and path.suffix.lower() in (".safetensors", ".ckpt", ".pt", ".pth") and _is_sam3(path)]
     return ["(select SAM3 checkpoint)"] + regular + sorted(local)
 
 

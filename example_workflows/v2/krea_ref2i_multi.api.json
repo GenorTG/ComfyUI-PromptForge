@@ -91,35 +91,36 @@
     }
   },
   "5": {
-    "class_type": "PROMPTFORGE_V2_IMAGE_SAMPLING_SETTINGS",
-    "inputs": {
-      "seed": 0,
-      "steps": 10,
-      "cfg": 1.0,
-      "sampler_name": "euler",
-      "scheduler": "simple",
-      "denoise": 1.0,
-      "refine_denoise": 0.25,
-      "refine_steps": 4,
-      "use_nag": false,
-      "nag_phi": 4.0,
-      "nag_tau": 2.5,
-      "nag_alpha": 0.25,
-      "pipe": [
-        "4",
-        0
-      ]
-    },
-    "_meta": {
-      "title": "Sampling First"
-    }
-  },
-  "6": {
     "class_type": "PROMPTFORGE_V2_LOAD_IMAGE",
     "inputs": {
       "filename": "<INPUT_REFERENCE_1.png>",
       "role": "reference",
       "index": 1,
+      "enabled": true,
+      "description": "",
+      "pipe": [
+        "4",
+        0
+      ],
+      "focus": "",
+      "focus_crop": true,
+      "focus_background": "keep",
+      "focus_padding": 0.15,
+      "focus_threshold": 0.5,
+      "focus_grow": 0,
+      "focus_feather": 2,
+      "sam3_checkpoint": "auto"
+    },
+    "_meta": {
+      "title": "Reference 1"
+    }
+  },
+  "6": {
+    "class_type": "PROMPTFORGE_V2_LOAD_IMAGE",
+    "inputs": {
+      "filename": "<INPUT_REFERENCE_2.png>",
+      "role": "reference",
+      "index": 2,
       "enabled": true,
       "description": "",
       "pipe": [
@@ -136,39 +137,14 @@
       "sam3_checkpoint": "auto"
     },
     "_meta": {
-      "title": "Reference 1"
-    }
-  },
-  "7": {
-    "class_type": "PROMPTFORGE_V2_LOAD_IMAGE",
-    "inputs": {
-      "filename": "<INPUT_REFERENCE_2.png>",
-      "role": "reference",
-      "index": 2,
-      "enabled": true,
-      "description": "",
-      "pipe": [
-        "6",
-        0
-      ],
-      "focus": "",
-      "focus_crop": true,
-      "focus_background": "keep",
-      "focus_padding": 0.15,
-      "focus_threshold": 0.5,
-      "focus_grow": 0,
-      "focus_feather": 2,
-      "sam3_checkpoint": "auto"
-    },
-    "_meta": {
       "title": "Reference 2"
     }
   },
-  "8": {
+  "7": {
     "class_type": "PROMPTFORGE_V2_SUBJECT_MASK",
     "inputs": {
       "image": [
-        "6",
+        "5",
         1
       ],
       "checkpoint": "<SELECT_SAM3_CHECKPOINT>",
@@ -176,7 +152,7 @@
       "threshold": 0.5,
       "refine_iterations": 2,
       "pipe": [
-        "7",
+        "6",
         0
       ]
     },
@@ -184,11 +160,11 @@
       "title": "Subject Mask 1"
     }
   },
-  "9": {
+  "8": {
     "class_type": "PROMPTFORGE_V2_MASK_PREPARE",
     "inputs": {
       "mask": [
-        "8",
+        "7",
         1
       ],
       "invert": false,
@@ -199,11 +175,11 @@
       "title": "Edit Mask 1"
     }
   },
-  "10": {
+  "9": {
     "class_type": "PROMPTFORGE_V2_SUBJECT_MASK",
     "inputs": {
       "image": [
-        "7",
+        "6",
         1
       ],
       "checkpoint": "<SELECT_SAM3_CHECKPOINT>",
@@ -211,7 +187,7 @@
       "threshold": 0.5,
       "refine_iterations": 2,
       "pipe": [
-        "8",
+        "7",
         0
       ]
     },
@@ -219,11 +195,11 @@
       "title": "Subject Mask 2"
     }
   },
-  "11": {
+  "10": {
     "class_type": "PROMPTFORGE_V2_MASK_PREPARE",
     "inputs": {
       "mask": [
-        "10",
+        "9",
         1
       ],
       "invert": false,
@@ -234,11 +210,11 @@
       "title": "Edit Mask 2"
     }
   },
-  "12": {
+  "11": {
     "class_type": "PROMPTFORGE_V2_KREA_EDIT_PREPARE",
     "inputs": {
       "image": [
-        "6",
+        "5",
         1
       ],
       "grounding_px": 768,
@@ -249,19 +225,19 @@
       "ref_boost": 2.0,
       "ref_boost_a": 2.0,
       "pipe": [
-        "10",
-        0
-      ],
-      "image_b": [
-        "7",
-        1
-      ],
-      "mask": [
         "9",
         0
       ],
+      "image_b": [
+        "6",
+        1
+      ],
+      "mask": [
+        "8",
+        0
+      ],
       "mask_b": [
-        "11",
+        "10",
         0
       ]
     },
@@ -269,7 +245,7 @@
       "title": "Edit Prepare"
     }
   },
-  "13": {
+  "12": {
     "class_type": "PROMPTFORGE_V2_WRITER_MODEL",
     "inputs": {
       "model": "[gguf] [LOCAL Q4] [VISION] Qwen3.8-9B Heretic GGUF [9B, vision]",
@@ -282,7 +258,7 @@
       "title": "Writer Model"
     }
   },
-  "14": {
+  "13": {
     "class_type": "PROMPTFORGE_V2_IMAGE_PROMPT",
     "inputs": {
       "source": "raw",
@@ -300,7 +276,7 @@
       "music": "N/A",
       "generation": "image",
       "pipe": [
-        "12",
+        "11",
         0
       ],
       "idea_advanced": ""
@@ -309,7 +285,7 @@
       "title": "Prompt"
     }
   },
-  "15": {
+  "14": {
     "class_type": "PROMPTFORGE_V2_IMAGE_PROMPT_WRITER",
     "inputs": {
       "writer_preset": "auto",
@@ -325,15 +301,15 @@
       "checks": "strict",
       "retries": "1",
       "pipe": [
-        "14",
-        0
-      ],
-      "writer_model": [
         "13",
         0
       ],
+      "writer_model": [
+        "12",
+        0
+      ],
       "text": [
-        "14",
+        "13",
         1
       ],
       "length_words": 0
@@ -342,15 +318,15 @@
       "title": "Prompt Writer"
     }
   },
-  "16": {
+  "15": {
     "class_type": "PROMPTFORGE_V2_PROMPT_INSPECT",
     "inputs": {
       "pipe": [
-        "15",
+        "14",
         0
       ],
       "text": [
-        "15",
+        "14",
         1
       ]
     },
@@ -358,7 +334,7 @@
       "title": "Prompt Review"
     }
   },
-  "17": {
+  "16": {
     "class_type": "PROMPTFORGE_V2_IMAGE_ENCODE",
     "inputs": {
       "task": "edit",
@@ -368,7 +344,7 @@
       "height": 1024,
       "batch_size": 1,
       "pipe": [
-        "16",
+        "15",
         0
       ],
       "model": [
@@ -376,7 +352,7 @@
         1
       ],
       "text": [
-        "14",
+        "13",
         1
       ],
       "clip": [
@@ -396,6 +372,30 @@
       "title": "Encode"
     }
   },
+  "17": {
+    "class_type": "PROMPTFORGE_V2_IMAGE_SAMPLING_SETTINGS",
+    "inputs": {
+      "seed": 0,
+      "steps": 10,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1.0,
+      "refine_denoise": 0.25,
+      "refine_steps": 4,
+      "use_nag": false,
+      "nag_phi": 4.0,
+      "nag_tau": 2.5,
+      "nag_alpha": 0.25,
+      "pipe": [
+        "16",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Sampling First"
+    }
+  },
   "18": {
     "class_type": "PROMPTFORGE_V2_IMAGE_SAMPLE",
     "inputs": {
@@ -410,15 +410,15 @@
         0
       ],
       "positive": [
-        "17",
+        "16",
         1
       ],
       "negative": [
-        "17",
+        "16",
         2
       ],
       "latent": [
-        "17",
+        "16",
         3
       ],
       "model": [
