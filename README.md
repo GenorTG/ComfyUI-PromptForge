@@ -34,11 +34,40 @@ remain so that saved workflows keep running.
 4. **Write the prompt** in the Prompt node. `source` decides how it is used:
    - `raw` (default): your text is used exactly as written.
    - `idea`: a local writer model expands your idea into a full prompt for that model family.
+   - `advanced` (**Idea Advanced**): you add the parts of the scene one by one, and the writer gets them as one
+     structured request ([details](#idea-advanced)).
    - `action`: starts from an action preset.
 
-   `idea` and `action` use the **Writer Model** node; a catalog model that is not on disk is downloaded the first
+   `idea`, `advanced` and `action` use the **Writer Model** node; a catalog model that is not on disk is downloaded the first
    time you use it.
 5. **Queue.** Then check **Prompt Inspect** for the final prompt and its warnings. Save your copy under a new name.
+
+## Idea Advanced
+
+For finer control than one long description. The menu starts empty; press **+ Add** under a group and fill in
+what you added. Everything is optional.
+
+| Group | What each item offers |
+|---|---|
+| General instructions | Text the whole prompt should follow |
+| Background | Place, time and weather, detail or foreground |
+| Characters | Female, male or custom (an animal, robot, monster…), an optional name, a description |
+| Props | A name and a description |
+| Actions & interactions | Pick the characters and props taking part, in order; together or the first acting on the others; what happens. On MiniMax H3 also when it happens |
+| Camera | Shot, angle, focus on a character or prop, notes. On MiniMax H3 also movement |
+| Lighting & mood, Style | Free text |
+| Sound & dialogue (MiniMax H3) | Dialogue with a speaker, sound effect, ambience or music |
+
+The arrows reorder items; actions are told to the writer in that order. **Preview request** shows the text the
+writer receives, and the node's `text` output carries the same text. Spoken lines are checked: if the written
+prompt lacks one word for word, the writer retries, and a line still missing is listed in Prompt Inspect.
+A writer model can still miss or change other details, so read the final prompt.
+
+**Saved presets** are separate for each source: raw prompts, ideas, advanced ideas and action setups. Each holds
+only the fields that source uses. They are stored in `ComfyUI/user/promptforge/prompt_presets.json`; ideas saved
+with earlier versions are sorted into these lists the first time.
+
+Resize the Prompt node by its corner. Its text boxes share any spare height; a box you drag keeps its size.
 
 ## Sample workflows
 

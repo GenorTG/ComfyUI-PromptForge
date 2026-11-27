@@ -189,7 +189,8 @@
       "pipe": [
         "8",
         0
-      ]
+      ],
+      "idea_advanced": ""
     },
     "_meta": {
       "title": "Prompt"

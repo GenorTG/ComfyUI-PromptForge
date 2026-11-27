@@ -302,7 +302,8 @@
       "pipe": [
         "12",
         0
-      ]
+      ],
+      "idea_advanced": ""
     },
     "_meta": {
       "title": "Prompt"

@@ -821,7 +821,8 @@
           "notes": "",
           "soundscape": "",
           "music": "N/A",
-          "generation": "image"
+          "generation": "image",
+          "idea_advanced": ""
         }
       },
       "widgets_values": [
@@ -838,7 +839,8 @@
         "",
         "",
         "N/A",
-        "image"
+        "image",
+        ""
       ],
       "color": "#2a6b5f",
       "bgcolor": "#1b403a"
