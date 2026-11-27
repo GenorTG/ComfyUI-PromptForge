@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('../web/promptforge_v2_presets.js', import.meta.url), 'utf8');
 const { PIPE, upstreamNodes, ensureRole, capturePreset, applyPreset, parsePresets, parseLoras } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const advancedSource = await readFile(new URL('../web/promptforge_idea_advanced.js', import.meta.url), 'utf8');
+const advancedUrl = `data:text/javascript;base64,${Buffer.from(advancedSource).toString('base64')}`;
+const advanced = await import(advancedUrl);
 const make = (id, type = 'PROMPTFORGE_V2_SETTINGS') => ({ id, type, properties: {}, widgets: [], inputs: [], outputs: [{ type: PIPE }] });
 function graphFor(nodes, links = {}) {
   const calls = [];
@@ -119,7 +122,7 @@ test('frontend lifecycle preserves size, displays execution output and never app
     frontend = frontend.replace('import { app } from "../../scripts/app.js";', 'const app = globalThis.__pfApp;').replace('import { api } from "../../scripts/api.js";', 'const api = globalThis.__pfApi;').replace('"./promptforge_v2_presets.js"', JSON.stringify(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)).replace('import { createLibrary, thumb, nsfwShown, setNsfwShown, BLUR } from "./promptforge_library.js";', 'const createLibrary=()=>({destroy(){}}), thumb=()=>"", nsfwShown=()=>false, setNsfwShown=()=>{}, BLUR="";');
     await import(`data:text/javascript;base64,${Buffer.from(frontend).toString('base64')}`);
     let promptFrontend = await readFile(new URL('../web/promptforge_prompt_v2.js', import.meta.url), 'utf8');
-    promptFrontend = promptFrontend.replace('import { app } from "../../scripts/app.js";', 'const app = globalThis.__pfApp;').replace('import { api } from "../../scripts/api.js";', 'const api = globalThis.__pfApi;');
+    promptFrontend = promptFrontend.replace('import { app } from "../../scripts/app.js";', 'const app = globalThis.__pfApp;').replace('import { api } from "../../scripts/api.js";', 'const api = globalThis.__pfApi;').replace('"./promptforge_idea_advanced.js"', JSON.stringify(advancedUrl));
     await import(`data:text/javascript;base64,${Buffer.from(promptFrontend + '\n// ' + Math.random()).toString('base64')}`);
     let loraFrontend = await readFile(new URL('../web/promptforge_lora_v2.js', import.meta.url), 'utf8');
     loraFrontend = loraFrontend.replace('import { app } from "../../scripts/app.js";', 'const app = globalThis.__pfApp;').replace('import { api } from "../../scripts/api.js";', 'const api = globalThis.__pfApi;').replace('"./promptforge_v2_presets.js"', JSON.stringify(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`));
@@ -369,7 +372,7 @@ test('prompt node switches generation, gates audio and fills the action widget f
   globalThis.requestAnimationFrame = (callback) => callback();
   try {
     let frontend = await readFile(new URL('../web/promptforge_prompt_v2.js', import.meta.url), 'utf8');
-    frontend = frontend.replace('import { app } from "../../scripts/app.js";', 'const app = globalThis.__pfApp;').replace('import { api } from "../../scripts/api.js";', 'const api = globalThis.__pfApi;');
+    frontend = frontend.replace('import { app } from "../../scripts/app.js";', 'const app = globalThis.__pfApp;').replace('import { api } from "../../scripts/api.js";', 'const api = globalThis.__pfApi;').replace('"./promptforge_idea_advanced.js"', JSON.stringify(advancedUrl));
     await import(`data:text/javascript;base64,${Buffer.from(frontend + '\n// ' + Math.random()).toString('base64')}`);
     const fields = ['source', 'generation', 'action', 'text', 'text_in', 'negative', 'subject_1', 'camera', 'notes', 'soundscape', 'music'].map((name) => ({ name, value: name === 'generation' ? 'minimax' : name === 'source' ? 'raw' : '' }));
     const widget = (name) => fields.find((item) => item.name === name);
@@ -420,4 +423,17 @@ test('prompt node switches generation, gates audio and fills the action widget f
     globalThis.Option = previous.Option;
     globalThis.requestAnimationFrame = previous.raf;
   }
+});
+
+test('idea advanced names subjects like the request does and forgets removed ones', () => {
+  const data = advanced.parseAdvanced(JSON.stringify({
+    characters: [{ id: 'a', type: 'female', name: 'Mira' }, { id: 'b', type: 'custom', custom: 'wolf' }, { id: 'c', type: 'male' }, { id: 'd', type: 'male' }],
+    props: [{ id: 'p' }], actions: [{ id: 'x', who: ['a', 'b'] }], camera: [{ id: 'k', focus: 'b' }], sound: [{ id: 's', speaker: 'b' }],
+  }));
+  assert.deepEqual([...advanced.subjectLabels(data).values()], ['Mira', 'the wolf', 'man 1', 'man 2', 'prop 1']);
+  advanced.removeItem(data, 'characters', 'b');
+  assert.deepEqual(data.actions[0].who, ['a']);
+  assert.equal(data.camera[0].focus, '');
+  assert.equal(data.sound[0].speaker, '');
+  assert.deepEqual(advanced.parseAdvanced('not json').characters, []);
 });

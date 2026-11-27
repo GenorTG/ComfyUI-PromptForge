@@ -533,5 +533,64 @@ class PromptTests(unittest.TestCase):
         self.assertEqual((node.id, node.default, node.optional), ("length_words", 0, True))
 
 
+    def test_idea_advanced_writes_a_bound_request(self):
+        import json
+        from unittest import mock
+        data = {"characters": [{"id": "a", "type": "female", "name": "Mira", "text": "red coat"}, {"id": "b", "type": "custom", "custom": "a wolf", "text": "grey fur"},
+                               {"id": "c", "type": "male"}],
+                "props": [{"id": "p", "name": "lantern", "text": ""}, {"id": "q"}],
+                "background": [{"id": "g", "kind": "time", "text": "dusk, light snow"}],
+                "actions": [{"id": "x", "who": ["a", "b"], "relation": "directed", "timing": "first", "text": "strokes its neck"},
+                            {"id": "y", "who": ["b", "gone"], "text": ""}],
+                "camera": [{"id": "k", "shot": "wide shot", "angle": "auto", "movement": "orbit", "focus": "a"}],
+                "sound": [{"id": "s", "kind": "dialogue", "speaker": "a", "text": '"Good boy"'}, {"id": "t", "kind": "ambience", "text": "wind"}]}
+        node = self.prompts.H3Prompt.execute(self.contracts.new_pipe("minimax_h3"), source="advanced", idea_advanced=json.dumps(data), soundscape="soft wind")
+        pipe, request = node.args
+        for part in ("- Time and weather: dusk, light snow.", "- Mira, a woman: red coat.", "- The wolf: grey fur.", "- The man.", "- Lantern.",
+                     "1. Mira, acting on the wolf (first): strokes its neck.", "- Wide shot, orbit, focus on Mira.", 'Spoken lines:\n- Mira says: "Good boy"', "- Ambience: wind.", "Sound direction:\nsoft wind."):
+            self.assertIn(part, request)
+        self.assertNotIn("Prop 2", request)
+        prompt = pipe["settings"]["prompt"]
+        self.assertEqual((prompt["source"], prompt["origin"]), ("idea", "advanced"))
+        self.assertNotIn("Characters", prompt["facts"])
+        still = self.prompts.ImagePrompt.execute(self.contracts.new_pipe("krea2"), source="advanced", idea_advanced=json.dumps(data), generation="image", text="ignored", text_in="keep it calm").args[1]
+        self.assertIn("- keep it calm.", still)
+        for part in ("orbit", "(first)", "Sound", "ignored"):
+            self.assertNotIn(part, still)
+        self.assertEqual(prompt["speech"], ["Good boy"])
+        self.assertEqual(self.prompts._missing_speech(["Good boy"], "she says: <d>[English] Good, boy.</d>"), [])
+        self.assertEqual(self.prompts._missing_speech(["Good boy"], "a good dog and a boy"), ["Good boy"])
+        calls = []
+        def write(*args, **kwargs):
+            calls.append(args[4])
+            return "A woman in a red coat strokes the neck of a grey wolf at dusk.", ""
+        with mock.patch.object(self.prompts, "_write", side_effect=write):
+            self.prompts.ImagePromptWriter.execute(self.prompts.ImagePrompt.execute(self.contracts.new_pipe("krea2"), source="advanced", idea_advanced=json.dumps(data), generation="image").args[0], writer_model={}, retries="off")
+        self.assertTrue(calls[0].startswith("This is a structured request"))
+        self.assertNotIn("Numbered steps", calls[0])
+        for empty in ("", "{}", '{"actions": [{"id": "x"}]}', "[1]", "{broken"):
+            with self.assertRaises(ValueError):
+                self.prompts.ImagePrompt.execute(self.contracts.new_pipe("krea2"), source="advanced", idea_advanced=empty)
+
+    def test_prompt_presets_are_separate_per_source(self):
+        import importlib, json, tempfile
+        from unittest import mock
+        from pathlib import Path
+        presets = importlib.import_module(self.prompts.__name__.rsplit(".", 1)[0] + ".prompt_presets")
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(presets._library, "store_dir", lambda: Path(folder)):
+            old = {"a": {"source": "raw", "general_prompt": "r"}, "b": {"general_prompt": "legacy"}, "c": {"source": "action"}}
+            (Path(folder) / "ideas.json").write_text(json.dumps(old))
+            self.assertEqual({pool: sorted(found) for pool, found in presets.read().items()}, {"raw": ["a"], "idea": ["b"], "advanced": [], "action": ["c"]})
+            presets.change("idea", "a", {"general_prompt": "i"})
+            self.assertEqual(presets.read()["raw"]["a"]["general_prompt"], "r")
+            presets.change("raw", "a")
+            self.assertEqual((presets.read()["raw"], presets.read()["idea"]["a"]["general_prompt"]), ({}, "i"))
+            self.assertEqual(json.loads((Path(folder) / "ideas.json").read_text()), old)
+            (Path(folder) / "prompt_presets.json").write_text("{broken")
+            with self.assertRaises(ValueError):
+                presets.change("raw", "z", {})
+            with self.assertRaises(ValueError):
+                presets.change("other", "z", {})
+
 if __name__ == "__main__":
     unittest.main()
