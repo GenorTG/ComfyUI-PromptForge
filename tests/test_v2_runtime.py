@@ -422,6 +422,40 @@ class RuntimeTests(unittest.TestCase):
             if calls:
                 self.assertEqual(cache.call_args.args, (plain, 0.3, 0.15, 0.95, False))
 
+    def test_browser_deletes_selections_and_whole_views_only_inside_the_root(self):
+        import os, tempfile
+        browser = importlib.import_module(self.v2.__name__ + ".browser")
+        with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryDirectory() as store, tempfile.TemporaryDirectory() as outside:
+            root = Path(folder)
+            def put(rel, base=root):
+                (base / rel).parent.mkdir(parents=True, exist_ok=True)
+                (base / rel).write_bytes(b"x")
+                return base / rel
+            with patch.dict(browser.ROOT_NAMES, {"output": lambda: folder}), patch.object(browser, "_store", lambda: Path(store) / "meta.json"):
+                for rel in ("a.png", "b.png", "clip.mp4", "sub/c.png", "sub/deep/d.mp4", "sub/graph.json", "only/e.png", ".hidden/f.png"):
+                    put(rel)
+                secret = put("keep.png", Path(outside))
+                os.symlink(secret, root / "link.png")
+                deleted, failed = browser._delete_files("output", ["a.png", "../escape.png", "sub/graph.json", "missing.png", str(secret)])
+                self.assertEqual((deleted, len(failed)), (["a.png"], 4))
+                count = browser._delete_view("output", "sub", "", "video", None, True)
+                self.assertEqual((count["files"], count["kept"]), (1, 0))
+                self.assertEqual(browser._delete_view("output", "sub", "", "video", count["before"], False)["deleted"], 1)
+                self.assertTrue((root / "sub/c.png").exists())
+                count = browser._delete_view("output", "", "", "all", None, True)
+                self.assertEqual((count["files"], count["kept"]), (5, 1))
+                later = put("later.png")
+                os.utime(later, (count["before"] + 60, count["before"] + 60))
+                result = browser._delete_view("output", "", "", "all", count["before"], False)
+                self.assertEqual((result["deleted"], len(result["failed"])), (4, 1))
+                self.assertTrue(secret.exists() and later.exists() and (root / "sub/graph.json").exists() and (root / ".hidden/f.png").exists())
+                self.assertFalse((root / "only").exists() or (root / "sub/deep").exists())
+                self.assertTrue(root.exists())
+                with self.assertRaises(ValueError):
+                    browser._delete_view("output", "../", "", "all", None, True)
+                with self.assertRaises(ValueError):
+                    browser._delete_view("user", "", "", "all", None, True)
+
     def test_out_of_memory_unloads_and_retries_once(self):
         shared = self.v2.shared
         outcomes = [self.torch.cuda.OutOfMemoryError("CUDA out of memory"), "done"]
