@@ -716,7 +716,8 @@ class H3PreviewSave(io.ComfyNode):
     @classmethod
     def define_schema(cls):
         return schema("PREVIEW_SAVE", "Preview / Save", [Pipe.Input("pipe", optional=True), io.Image.Input("images", optional=True),
-            io.Audio.Input("audio", optional=True), io.Boolean.Input("save", default=False),
+            io.Audio.Input("audio", optional=True), io.Boolean.Input("save", default=False, label_on="save file", label_off="preview only",
+                                                                 tooltip="Off: preview only. The file goes to ComfyUI's temp folder, which is emptied when ComfyUI starts, and nothing is saved to output."),
             io.String.Input("filename_prefix", default="video/PromptForge_H3",
                             tooltip="Prefix for the saved file. Tokens expand per run: %date:yyyy-MM-dd%, %date:yyyy-MM-dd_HH-mm-ss%, %date:yyyy%, %date:MM%, %date:dd%, plus %family%, %model%, %mode%, %source%, %category%, %action% and %seed% from the run."),
             io.Combo.Input("encoder_preset", options=["high quality", "balanced", "small file", "lossless-ish", "fast (GPU)", "compatible"], default="high quality",
@@ -777,7 +778,7 @@ class H3FirstPassPreview(io.ComfyNode):
     @classmethod
     def define_schema(cls):
         return schema("FIRST_PASS_PREVIEW", "First Pass Preview", [Pipe.Input("pipe", optional=True),
-            io.Boolean.Input("enabled", default=True), io.Boolean.Input("save", default=True, tooltip="Write the first pass to the output folder instead of only previewing it."),
+            io.Boolean.Input("enabled", default=True), io.Boolean.Input("save", default=True, label_on="save file", label_off="preview only", tooltip="Off: preview only. The file goes to ComfyUI's temp folder, which is emptied when ComfyUI starts, and nothing is saved to output."),
             io.String.Input("filename_prefix", default="video/PromptForge_H3_first_pass"),
             io.Combo.Input("decode_with", options=DECODE_CHOICES, default=DECODE_VAE, optional=True, tooltip=DECODE_TOOLTIP)], output=True)
 

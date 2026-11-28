@@ -283,10 +283,12 @@ class PROMPTFORGE_SaveImage:
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"images": ("IMAGE",), "filename_prefix": ("STRING", {"default": "PromptForge/image"})}}
+        return {"required": {"images": ("IMAGE",), "filename_prefix": ("STRING", {"default": "PromptForge/image"})},
+                "optional": {"save": ("BOOLEAN", {"default": True, "label_on": "save file", "label_off": "preview only", "tooltip": "Off: preview only. The file goes to ComfyUI's temp folder, which is emptied when ComfyUI starts, and nothing is saved to output."})}}
 
-    def save(self, images, filename_prefix="PromptForge/image"):
-        return comfy_nodes.NODE_CLASS_MAPPINGS["SaveImage"]().save_images(images, filename_prefix=filename_prefix)
+    def save(self, images, filename_prefix="PromptForge/image", save=True):
+        saver = comfy_nodes.NODE_CLASS_MAPPINGS["SaveImage" if save else "PreviewImage"]()
+        return saver.save_images(images, filename_prefix=filename_prefix)
 
 
 NODE_CLASS_MAPPINGS = {
