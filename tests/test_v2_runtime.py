@@ -456,6 +456,16 @@ class RuntimeTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     browser._delete_view("user", "", "", "all", None, True)
 
+    def test_image_save_preview_only_writes_to_temp(self):
+        torch = self.torch
+        image = importlib.import_module(self.v2.__name__ + ".image")
+        for save, used, unused in ((True, "SaveImage", "PreviewImage"), (False, "PreviewImage", "SaveImage")):
+            with patch.object(image.nodes, used) as saver, patch.object(image.nodes, unused) as other:
+                saver.return_value.save_images.return_value = {"ui": {"images": []}}
+                image.ImageSave.execute(self.pipe(images=torch.zeros(1, 4, 4, 3)), save=save)
+            saver.return_value.save_images.assert_called_once()
+            other.assert_not_called()
+
     def test_out_of_memory_unloads_and_retries_once(self):
         shared = self.v2.shared
         outcomes = [self.torch.cuda.OutOfMemoryError("CUDA out of memory"), "done"]
