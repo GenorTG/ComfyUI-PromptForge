@@ -395,6 +395,11 @@ adds the source-reference path and can also apply NAG for the edit and transfer 
 ### PromptForge MOSS Edit Encode / Krea Edit Encode (`PROMPTFORGE_MossEditEncode`, `PROMPTFORGE_KreaEditEncode`)
 Edit conditioning for both CFG passes in one node. The MOSS node VAE-encodes the reference images into reference latents and attaches them to the positive and to the negative, each with its own image strength (the strength scales the text-encoder vision tokens, so it only applies to the ai-toolkit formats or when no VAE is connected). The Krea node grounds the positive and the negative on the source image through the `Krea2EditGroundedEncode` path. The prompt is the positive instruction, the negative is what to avoid. The negative is always encoded; the model patch's `use_nag` decides whether NAG uses it at cfg 1.
 
+#### Preview only
+Every image and video save node has a **save file / preview only** switch (`save`, or `save_output` on the older Save
+Video). Preview only writes to ComfyUI's temp folder, which is emptied when ComfyUI starts, so nothing reaches the
+output folder.
+
 #### Deleting several files (sidebar)
 In **Outputs** and **Inputs**, **Bulk mode** puts a tick box on every picture, video and audio file (shift-click
 ticks a range) and **Delete selected** removes the ticked ones. **DELETE EVERYTHING** removes all such files in the

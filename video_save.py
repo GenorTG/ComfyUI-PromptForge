@@ -108,7 +108,7 @@ class PROMPTFORGE_SaveVideo:
                 "quality": ("INT", {"default": 19, "min": 0, "max": 63, "tooltip": "crf / cq: lower is better quality and a bigger file. Used when rate_control is quality."}),
                 "bitrate_mbit": ("INT", {"default": 15, "min": 1, "max": 999, "tooltip": "Used when rate_control is bitrate."}),
                 "bit_depth": (["8", "10"], {"default": "8", "tooltip": "10-bit is not offered for h264 nvenc and is not supported by every player."}),
-                "save_output": ("BOOLEAN", {"default": True, "tooltip": "Off writes to the temp folder (preview only)."}),
+                "save_output": ("BOOLEAN", {"default": True, "label_on": "save file", "label_off": "preview only", "tooltip": "Off: preview only. The file goes to ComfyUI's temp folder, which is emptied when ComfyUI starts, and nothing is saved to output."}),
                 "pingpong": ("BOOLEAN", {"default": False}),
                 "save_metadata": ("BOOLEAN", {"default": True, "tooltip": "Embed the workflow in the file."}),
             },

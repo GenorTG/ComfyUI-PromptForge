@@ -347,16 +347,18 @@ class ImageSave(io.ComfyNode):
     def define_schema(cls):
         return schema("SAVE", "Save", [Pipe.Input("pipe", optional=True), io.Image.Input("images", optional=True),
                       io.String.Input("filename_prefix", default="PromptForgeV2",
-                                      tooltip="Prefix for the saved file. Tokens expand per run: %date:yyyy-MM-dd%, %date:yyyy-MM-dd_HH-mm-ss%, %date:yyyy%, %date:MM%, %date:dd%, plus %family%, %model%, %mode%, %source%, %category%, %action% and %seed% from the run.")],
+                                      tooltip="Prefix for the saved file. Tokens expand per run: %date:yyyy-MM-dd%, %date:yyyy-MM-dd_HH-mm-ss%, %date:yyyy%, %date:MM%, %date:dd%, plus %family%, %model%, %mode%, %source%, %category%, %action% and %seed% from the run."),
+                      io.Boolean.Input("save", default=True, optional=True, label_on="save file", label_off="preview only", tooltip="Off: preview only. The file goes to ComfyUI's temp folder, which is emptied when ComfyUI starts, and nothing is saved to output.")],
                       outputs=[Pipe.Output("pipe"), io.Image.Output("images")],
                       output=True, hidden=[io.Hidden.prompt, io.Hidden.extra_pnginfo])
 
     @classmethod
-    def execute(cls, pipe=None, images=None, filename_prefix="PromptForgeV2"):
+    def execute(cls, pipe=None, images=None, filename_prefix="PromptForgeV2", save=True):
         pipe = take(image_pipe(ensure_pipe(pipe)), images=images)
         require(pipe, "images")
         hidden = getattr(cls, "hidden", None)
-        saved = nodes.SaveImage().save_images(pipe["artifacts"]["images"], expand_tokens(filename_prefix, pipe),
+        saver = nodes.SaveImage() if save else nodes.PreviewImage()
+        saved = saver.save_images(pipe["artifacts"]["images"], expand_tokens(filename_prefix, pipe),
                                              prompt=getattr(hidden, "prompt", None),
                                              extra_pnginfo=getattr(hidden, "extra_pnginfo", None))
         return io.NodeOutput(pipe, pipe["artifacts"]["images"], ui=saved["ui"])
