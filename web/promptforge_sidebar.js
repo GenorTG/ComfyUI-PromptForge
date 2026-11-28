@@ -268,6 +268,13 @@ export function createPanel() {
     if (data.crumbs.length) crumbs.append(button("⬆", () => { statePart.path = data.crumbs.slice(0, -1).map((part) => part.name).join("/"); load(name); }));
     view.append(crumbs);
 
+    // a selection belongs to what is listed: another folder, search or kind starts an empty one
+    const shownAs = `${statePart.path}|${statePart.search}|${statePart.kind}`;
+    if (statePart.shownAs !== shownAs) { statePart.shownAs = shownAs; statePart.selected = new Set(); statePart.anchor = null; }
+    statePart.selected = new Set(data.files.filter((file) => statePart.selected.has(file.path)).map((file) => file.path));
+    const bulk = bulkBar(name, statePart, data);
+    view.append(bulk.element);
+
     if (data.dirs.length) {
       const folders = el("div", { display: "flex", gap: "4px", flexWrap: "wrap" });
       for (const folder of data.dirs) folders.append(button(`📁 ${folder.name}${folder.count ? ` (${folder.count})` : ""}`, () => { statePart.path = folder.path; load(name); }));
@@ -282,11 +289,74 @@ export function createPanel() {
       return;
     }
     const grid = el("div", { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(128px, 1fr))", gap: "6px" });
-    data.files.forEach((file, index) => grid.append(tile(name, statePart.root, file, index, data.files, view, load)));
+    data.files.forEach((file, index) => grid.append(tile(name, statePart.root, file, index, data.files, view, load, bulk)));
     view.append(grid);
   }
 
-  function tile(name, root, file, index, files, view, refresh) {
+  function bulkBar(name, statePart, data) {
+    const bar = el("div", { display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" });
+    const marks = new Map();
+    const toggle = button(statePart.bulk ? "Bulk mode ✓" : "Bulk mode", () => { statePart.bulk = !statePart.bulk; statePart.selected.clear(); load(name); });
+    toggle.title = "Tick several files and delete them together";
+    bar.append(toggle);
+    const chosen = button("", async () => {
+      const paths = [...statePart.selected];
+      if (!paths.length || !confirm(`Delete the ${paths.length} selected files from the ${statePart.root} folder? This cannot be undone.`)) return;
+      await finish(() => post("/promptforge/browser/delete-many", { root: statePart.root, paths }));
+    });
+    const paint = () => {
+      chosen.textContent = `Delete selected (${statePart.selected.size})`;
+      chosen.disabled = !statePart.selected.size;
+      chosen.style.opacity = statePart.selected.size ? "1" : ".5";
+      for (const [path, mark] of marks) mark(statePart.selected.has(path));
+    };
+    // deletes, reloads the list and then says what could not be removed
+    const finish = async (work) => {
+      try {
+        const result = await work();
+        statePart.selected.clear();
+        await load(name);
+        if (result.failed?.length) alert(`Deleted ${result.deleted}. ${result.failed.length} could not be deleted: ${result.failed[0].path}: ${result.failed[0].error}`);
+      } catch (error) { alert(error.message); }
+    };
+    const everything = button("DELETE EVERYTHING", async () => {
+      const view = { root: statePart.root, path: statePart.path, q: statePart.search, kind: statePart.kind };
+      try {
+        const count = await post("/promptforge/browser/delete-view", { ...view, dry_run: true });
+        if (!count.files) return alert("There is nothing here that can be deleted.");
+        const where = `${view.root}/${view.path}${view.q ? ` matching "${view.q}"` : ""}${view.kind === "all" ? "" : ` (${KIND_LABEL[view.kind]} only)`}`;
+        const typed = prompt(`This deletes ALL ${count.files} files (${size(count.bytes)}) in ${where}, subfolders included. It cannot be undone.${count.kept ? `\n${count.kept} files that are not pictures, video or audio are kept.` : ""}\n\nType DELETE to do it.`);
+        if (typed?.trim() !== "DELETE") return;
+        await finish(() => post("/promptforge/browser/delete-view", { ...view, dry_run: false, before: count.before }));
+      } catch (error) { alert(error.message); }
+    });
+    everything.style.background = "#a32020";
+    everything.style.fontWeight = "700";
+    if (statePart.bulk) {
+      chosen.style.background = "#7a2a2a";
+      bar.append(chosen,
+        button("Select all shown", () => { for (const file of data.files) if (file.kind !== "other") statePart.selected.add(file.path); paint(); }),
+        button("Clear", () => { statePart.selected.clear(); paint(); }),
+        everything);
+      paint();
+    }
+    // a click ticks one file; with shift, every file from the last clicked one to this one
+    const pick = (index, range) => {
+      const on = !statePart.selected.has(data.files[index].path);
+      const from = range && statePart.anchor != null ? Math.min(statePart.anchor, data.files.length - 1) : index;
+      for (let at = Math.min(from, index); at <= Math.max(from, index); at++) {
+        const file = data.files[at];
+        if (file.kind === "other") continue;
+        if (on) statePart.selected.add(file.path);
+        else statePart.selected.delete(file.path);
+      }
+      statePart.anchor = index;
+      paint();
+    };
+    return { element: bar, active: !!statePart.bulk, pick, mark: (path, painter) => { marks.set(path, painter); painter(statePart.selected.has(path)); } };
+  }
+
+  function tile(name, root, file, index, files, view, refresh, bulk) {
     const inputs = name === "inputs";
     const card = el("div", { display: "flex", flexDirection: "column", gap: "3px", minWidth: "0", border: "1px solid var(--border-color, #444)", borderRadius: "5px", padding: "4px", background: "var(--comfy-input-bg, #2a2a2a)" });
     const thumbBox = el("div", { position: "relative", height: "96px", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderRadius: "3px", background: "#111", cursor: "pointer" });
@@ -302,7 +372,15 @@ export function createPanel() {
     if (file.meta?.nsfw) thumb.dataset.nsfw = "1";
     blur(thumb, file.meta, state[name]);
     thumbBox.append(thumb);
-    thumbBox.addEventListener("click", () => preview(root, files, index, () => refresh(name)));
+    thumbBox.addEventListener("click", (event) => {
+      if (!bulk.active) return preview(root, files, index, () => refresh(name));
+      bulk.pick(index, event.shiftKey);
+    });
+    if (bulk.active && file.kind !== "other") {
+      const check = el("input", { position: "absolute", right: "4px", top: "4px", width: "18px", height: "18px", margin: "0", zIndex: 1, pointerEvents: "none" }, { type: "checkbox", tabIndex: -1, ariaLabel: `Select ${file.name}` });
+      thumbBox.append(check);
+      bulk.mark(file.path, (on) => { check.checked = on; card.style.outline = on ? "2px solid #e06060" : "none"; });
+    }
     if (file.kind === "video") thumbBox.append(el("span", { position: "absolute", inset: "0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "26px", pointerEvents: "none", textShadow: "0 1px 4px #000" }, { textContent: "▶" }));
     if (file.meta?.nsfw) thumbBox.append(el("span", { position: "absolute", left: "3px", top: "3px", padding: "1px 4px", borderRadius: "3px", background: "#a33", color: "#fff", fontSize: "10px" }, { textContent: "NSFW" }));
     card.append(thumbBox, el("div", { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: "600" }, { textContent: file.name, title: file.path }));

@@ -8,7 +8,8 @@
       "audio_vae_name": "<SELECT_H3_AUDIO_VAE>",
       "decode_vae_name": "same",
       "weight_dtype": "default",
-      "optimize_for": "balanced"
+      "optimize_for": "balanced",
+      "family": "minimax_h3"
     },
     "_meta": {
       "title": "Model"
@@ -106,7 +107,7 @@
       "seconds": 5.0,
       "aspect": "16:9",
       "megapixels": 0.5,
-      "orientation": "as selected",
+      "orientation": "landscape",
       "pipe": [
         "5",
         0

@@ -153,10 +153,11 @@ function h3Size(node) {
   const aspect = value(node, "aspect"), orientation = value(node, "orientation");
   if (aspect !== "custom") {
     const [a, b] = aspect.split(":").map(Number);
-    height = Math.sqrt(value(node, "megapixels") * 1024 * 1024 / (a / b));
-    width = height * (a / b);
+    const ratio = Math.max(a, b) / Math.min(a, b);
+    height = Math.sqrt(value(node, "megapixels") * 1024 * 1024 / ratio);
+    width = height * ratio;
+    if (orientation === "portrait") [width, height] = [height, width];
   }
-  if ((orientation === "landscape" && width < height) || (orientation === "portrait" && width > height)) [width, height] = [height, width];
   width = snap(width, 32, 32);
   height = snap(height, 32, 32);
   let frames = Math.max(5, Math.ceil(value(node, "seconds") * 24));
@@ -192,6 +193,22 @@ function sizeLine(node, text) {
   return { line, update };
 }
 
+// workflows saved with upright ratios (9:16) or "as selected" get the widescreen ratio and a plain orientation
+export function upgradeH3Format(node) {
+  const [aspect, orientation, width, height] = ["aspect", "orientation", "width", "height"].map((name) => widget(node, name));
+  if (!aspect || !orientation) return;
+  const known = ["landscape", "portrait"].includes(orientation.value);
+  if (aspect.value === "custom") {
+    if (!width || !height) return;
+    if (known && (orientation.value === "portrait" ? width.value > height.value : width.value < height.value)) [width.value, height.value] = [height.value, width.value];
+    orientation.value = height.value > width.value ? "portrait" : "landscape";
+    return;
+  }
+  const [a, b] = String(aspect.value).split(":").map(Number);
+  if (!known) orientation.value = a < b ? "portrait" : "landscape";
+  if (a < b) aspect.value = `${b}:${a}`;
+}
+
 function h3FormatUI(node) {
   const aspect = widget(node, "aspect");
   let lastAspect = "16:9";
@@ -210,6 +227,7 @@ function h3FormatUI(node) {
     if (!custom) lastAspect = aspect.value;
     hide(aspect, custom);
     hide(widget(node, "megapixels"), custom);
+    hide(widget(node, "orientation"), custom);
     hide(widget(node, "width"), !custom);
     hide(widget(node, "height"), !custom);
     modes.paint();
@@ -347,6 +365,7 @@ app.registerExtension({
       const configure = nodeType.prototype.onConfigure;
       nodeType.prototype.onConfigure = function () {
         const result = configure?.apply(this, arguments);
+        upgradeH3Format(this);
         requestAnimationFrame(() => this.promptforgeH3Format?.());
         return result;
       };

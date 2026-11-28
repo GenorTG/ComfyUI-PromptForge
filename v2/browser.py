@@ -118,7 +118,7 @@ async def _list(request):
     return web.json_response(payload)
 
 
-def _listing(name, rel, query, kind):
+def _listing(name, rel, query, kind, limit=LIMIT):
     root, base = _resolve(name, rel)
     if not base.is_dir():
         return None
@@ -157,7 +157,7 @@ def _listing(name, rel, query, kind):
         crumbs.append({"name": part, "path": walk})
     dirs.sort(key=lambda item: item["name"].lower())
     return {"root": name, "path": base.relative_to(root).as_posix() if base != root else "", "crumbs": crumbs,
-            "dirs": dirs, "files": files[:LIMIT], "total": total, "truncated": total > LIMIT}
+            "dirs": dirs, "files": files[:limit], "total": total, "truncated": limit is not None and total > limit}
 
 
 @routes.get("/promptforge/browser/file")
@@ -285,28 +285,86 @@ async def _rename(request):
     return web.json_response({"path": new_rel, "name": new_name})
 
 
+def _delete_files(name, paths):
+    """Deletes picture, video and audio files below the root together with their notes: (deleted, failed)."""
+    deleted, failed = [], []
+    for rel in paths:
+        try:
+            root, path = _resolve(name, str(rel))
+            if not path.is_file() or _kind(path) == "other":
+                raise ValueError("Only picture, video and audio files can be deleted.")
+            path.unlink()
+            deleted.append(path.relative_to(root).as_posix())
+        except (OSError, ValueError) as error:
+            failed.append({"path": str(rel), "error": str(error)})
+    with _store_lock:
+        store = _read()
+        dropped = [store.pop(f"{name}:{rel}", None) for rel in deleted]
+        if any(note is not None for note in dropped):
+            _write(store)
+    if name == "input" and deleted:
+        for load, save in ((image_library.tags, image_library.save_tags), (image_library.descriptions, image_library.save_descriptions)):
+            data = load()
+            dropped = [data.pop(rel, None) for rel in deleted]
+            if any(note is not None for note in dropped):
+                save(data)
+    return deleted, failed
+
+
+def _delete_view(name, rel, query, kind, before, dry_run):
+    """Everything one listing shows, past its display limit too. `before` spares files written after the user was asked."""
+    listing = _listing(name, rel, query, kind, limit=None)
+    if listing is None:
+        raise ValueError("Folder not found.")
+    files = [entry for entry in listing["files"] if before is None or entry["mtime"] <= before]
+    media = [entry for entry in files if entry["kind"] != "other"]
+    counts = {"files": len(media), "bytes": sum(entry["size"] for entry in media), "kept": len(files) - len(media)}
+    if dry_run:
+        return {**counts, "before": time.time()}
+    deleted, failed = _delete_files(name, [entry["path"] for entry in media])
+    if not query and kind == "all":
+        _, base = _resolve(name, rel)
+        # folders the deletion emptied go too; the one being viewed stays
+        for folder, _, _ in os.walk(base, topdown=False, followlinks=False):
+            current = Path(folder)
+            if current != base and not current.name.startswith(".") and not any(current.iterdir()):
+                current.rmdir()
+    return {**counts, "deleted": len(deleted), "failed": failed}
+
+
 @routes.post("/promptforge/browser/delete")
 async def _delete(request):
     body = await request.json()
-    name = str(body.get("root", ""))
+    deleted, failed = _delete_files(str(body.get("root", "")), [body.get("path", "")])
+    if failed:
+        return web.json_response({"error": failed[0]["error"]}, status=404)
+    return web.json_response({"deleted": deleted[0]})
+
+
+@routes.post("/promptforge/browser/delete-many")
+async def _delete_many(request):
+    body = await request.json()
+    paths = body.get("paths")
+    if str(body.get("root", "")) not in ROOT_NAMES or not isinstance(paths, list):
+        return web.json_response({"error": "Send root=output|input and a list of paths."}, status=400)
+    deleted, failed = await asyncio.get_running_loop().run_in_executor(None, _delete_files, body["root"], paths)
+    return web.json_response({"deleted": len(deleted), "failed": failed})
+
+
+@routes.post("/promptforge/browser/delete-view")
+async def _delete_all(request):
+    body = await request.json()
+    dry_run, before = body.get("dry_run") is not False, body.get("before")
+    # deleting needs the time of the count the user agreed to
+    if not dry_run and not isinstance(before, (int, float)):
+        return web.json_response({"error": "Count the files first."}, status=400)
     try:
-        root, path = _resolve(name, str(body.get("path", "")))
+        result = await asyncio.get_running_loop().run_in_executor(
+            None, _delete_view, str(body.get("root", "")), str(body.get("path", "")), str(body.get("q", "")).strip().lower(),
+            str(body.get("kind", "all")), None if dry_run else before, dry_run)
     except ValueError as error:
         return web.json_response({"error": str(error)}, status=400)
-    if not path.is_file() or _kind(path) == "other":
-        return web.json_response({"error": "Only picture, video and audio files can be deleted."}, status=404)
-    rel = path.relative_to(root).as_posix()
-    path.unlink()
-    with _store_lock:
-        store = _read()
-        if store.pop(f"{name}:{rel}", None) is not None:
-            _write(store)
-    if name == "input":
-        for load, save in ((image_library.tags, image_library.save_tags), (image_library.descriptions, image_library.save_descriptions)):
-            data = load()
-            if data.pop(rel, None) is not None:
-                save(data)
-    return web.json_response({"deleted": rel})
+    return web.json_response(result)
 
 
 @routes.post("/promptforge/browser/meta")
