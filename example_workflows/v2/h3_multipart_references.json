@@ -79,7 +79,8 @@
           "audio_vae_name": "<SELECT_H3_AUDIO_VAE>",
           "decode_vae_name": "same",
           "weight_dtype": "default",
-          "optimize_for": "balanced"
+          "optimize_for": "balanced",
+          "family": "minimax_h3"
         }
       },
       "widgets_values": [
@@ -89,7 +90,8 @@
         "<SELECT_H3_AUDIO_VAE>",
         "same",
         "default",
-        "balanced"
+        "balanced",
+        "minimax_h3"
       ],
       "color": "#2b5278",
       "bgcolor": "#1d3347"
@@ -441,7 +443,7 @@
           "seconds": 5.0,
           "aspect": "16:9",
           "megapixels": 0.5,
-          "orientation": "as selected"
+          "orientation": "landscape"
         }
       },
       "widgets_values": [
@@ -450,7 +452,7 @@
         5.0,
         "16:9",
         0.5,
-        "as selected"
+        "landscape"
       ],
       "color": "#8a6d2f",
       "bgcolor": "#4a3b1b"

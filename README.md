@@ -395,6 +395,12 @@ adds the source-reference path and can also apply NAG for the edit and transfer 
 ### PromptForge MOSS Edit Encode / Krea Edit Encode (`PROMPTFORGE_MossEditEncode`, `PROMPTFORGE_KreaEditEncode`)
 Edit conditioning for both CFG passes in one node. The MOSS node VAE-encodes the reference images into reference latents and attaches them to the positive and to the negative, each with its own image strength (the strength scales the text-encoder vision tokens, so it only applies to the ai-toolkit formats or when no VAE is connected). The Krea node grounds the positive and the negative on the source image through the `Krea2EditGroundedEncode` path. The prompt is the positive instruction, the negative is what to avoid. The negative is always encoded; the model patch's `use_nag` decides whether NAG uses it at cfg 1.
 
+#### Deleting several files (sidebar)
+In **Outputs** and **Inputs**, **Bulk mode** puts a tick box on every picture, video and audio file (shift-click
+ticks a range) and **Delete selected** removes the ticked ones. **DELETE EVERYTHING** removes all such files in the
+current view, subfolders and files beyond the shown ones included, narrowed by the search and type filter. It shows
+the count and asks you to type `DELETE`. Other file types are kept. Deletion is permanent.
+
 #### Image library (picker and sidebar)
 The Choose image picker, and an **Images** tab in the left sidebar, share one library of the input folder. **Tools** runs a local vision model (a GGUF with its mmproj, found in your text_encoders / LLM folders) that gives every image keywords, a caption, a people count and an NSFW flag; results are stored in `user/promptforge/image_tags.json`.
 - **Search** looks through names, keywords, captions and descriptions; filters for folder and theme (female, male, group, people, nsfw, animals, scenery, objects, other).

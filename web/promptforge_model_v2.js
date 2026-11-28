@@ -397,3 +397,65 @@ app.registerExtension({
     };
   },
 });
+
+/* ---------------------------------------------------------------- video model */
+
+const VIDEO_NODE = "PROMPTFORGE_V2_H3_MODEL";
+let videoCatalog;
+// which files the pack detects as each family; asked once, and again after a failure
+const videoFamilies = () => videoCatalog ||= api.fetchApi("/promptforge/catalog")
+  .then((response) => { if (!response.ok) throw new Error(); return response.json(); })
+  .then((data) => new Map(data.models.map((entry) => [entry.value, entry.family])))
+  .catch(() => { videoCatalog = undefined; return null; });
+
+export function videoModelChoices(files, families, family, current) {
+  if (family === "all" || !families) return files;
+  const matching = files.filter((file) => families.get(file) === family);
+  if (!matching.length) return files;
+  // the saved pick stays listed even when it was not recognised
+  return !current || matching.includes(current) || !files.includes(current) ? matching : [current, ...matching];
+}
+
+app.registerExtension({
+  name: "PromptForge.V2VideoModel",
+  beforeRegisterNodeDef(nodeType, nodeData) {
+    if (nodeData.name !== VIDEO_NODE) return;
+    const created = nodeType.prototype.onNodeCreated;
+    nodeType.prototype.onNodeCreated = function () {
+      const result = created?.apply(this, arguments);
+      const node = this;
+      const family = widget(node, "family"), model = widget(node, "model_name");
+      if (!family || !model) return result;
+      let files = [...(model.options.values || [])];
+      const refresh = async () => {
+        const families = await videoFamilies();
+        // a workflow saved before family existed leaves an empty value in its place
+        if (!family.options.values.includes(family.value)) family.value = "minimax_h3";
+        model.options.values = videoModelChoices(files, families, family.value, model.value);
+        node.setDirtyCanvas?.(true, true);
+      };
+      const callback = family.callback;
+      family.callback = function () { const answer = callback?.apply(this, arguments); refresh(); return answer; };
+      const combos = node.refreshComboInNode;
+      node.refreshComboInNode = function (defs) {
+        const answer = combos?.apply(this, arguments);
+        const spec = defs?.[VIDEO_NODE]?.input?.required?.model_name;
+        files = (Array.isArray(spec?.[0]) ? spec[0] : spec?.[1]?.options) || files;
+        videoCatalog = undefined;
+        refresh();
+        return answer;
+      };
+      node.promptforgeVideoModels = refresh;
+      refresh();
+      return result;
+    };
+    const configure = nodeType.prototype.onConfigure;
+    nodeType.prototype.onConfigure = function () {
+      const result = configure?.apply(this, arguments);
+      const family = widget(this, "family");
+      if (family && !family.options.values.includes(family.value)) family.value = "minimax_h3";
+      this.promptforgeVideoModels?.();
+      return result;
+    };
+  },
+});

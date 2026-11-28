@@ -20,6 +20,7 @@ from comfy_extras import nodes_minimax_h3 as core
 from comfy_extras import nodes_hunyuan, nodes_custom_sampler, nodes_audio
 from .. import frame_buffer, minimax_decode, video_save, unified_loader as loader
 from .contracts import schema as nodes_schema, PIPE, new_pipe, ensure_pipe, evolve, require, take
+from .image import ASPECT_NAMES
 from .shared import expand_tokens, free_vram, retry_unloaded
 # the sequence nodes use these same encode/sample/upscale/refine/decode/join services
 from .h3_sequence import H3Parts, H3Continuity, H3Sequence
@@ -30,7 +31,7 @@ OUTPUTS = ("images", "audio", "video")
 MODES = ["t2v", "i2v", "l2v", "fl2v", "ref2v", "continue"]
 DECODE_VAE = "decode vae"
 DECODE_CHOICES = [DECODE_VAE, "video vae"]
-DECODE_TOOLTIP = ("decode vae: the H3 Model's decode_vae_name (the video VAE when it says same); a wired vae input is not used then. "
+DECODE_TOOLTIP = ("decode vae: the Video Model's decode_vae_name (the video VAE when it says same); a wired vae input is not used then. "
                   "video vae: the main video VAE, or the one wired into vae.")
 
 
@@ -52,7 +53,7 @@ def grown(kind, name):
 class H3Model(io.ComfyNode):
     @classmethod
     def define_schema(cls):
-        return schema("MODEL", "Model", [
+        return schema("MODEL", "Video Model", [
             io.Combo.Input("model_name", options=loader._tagged(loader.MODEL_SOURCES) or ["(no models found)"]),
             io.Combo.Input("clip_name", options=loader._tagged(loader.CLIP_SOURCES) or ["(no models found)"]),
             io.Combo.Input("vae_name", options=loader._vae_names() or ["(no models found)"]),
@@ -60,12 +61,16 @@ class H3Model(io.ComfyNode):
             io.Combo.Input("decode_vae_name", options=["same"] + loader._vae_names(), default="same"),
             io.Combo.Input("weight_dtype", options=list(loader.WEIGHT_DTYPES), default="default"),
             io.Combo.Input("optimize_for", options=["balanced", "quality", "speed"], default="balanced"),
-            Pipe.Input("pipe", optional=True)],
+            Pipe.Input("pipe", optional=True),
+            # last, after the widgets older workflows saved; the node's own menu filters model_name with it
+            io.Combo.Input("family", options=["minimax_h3", "all"], default="minimax_h3", optional=True,
+                           tooltip="Which files model_name lists: MiniMax H3 models only, or every model file.")],
             [Pipe.Output("pipe"), io.Model.Output("model"), io.Clip.Output("clip"), io.Vae.Output("vae"),
              io.Vae.Output("audio_vae"), io.Vae.Output("decode_vae", tooltip="The decode VAE, or the video VAE when decode_vae_name is same.")])
 
     @classmethod
-    def execute(cls, model_name, clip_name, vae_name, audio_vae_name, decode_vae_name="same", weight_dtype="default", optimize_for="balanced", pipe=None):
+    def execute(cls, model_name, clip_name, vae_name, audio_vae_name, decode_vae_name="same", weight_dtype="default", optimize_for="balanced", pipe=None,
+                family="minimax_h3"):
         pipe = checked(pipe) if pipe is not None else new_pipe("minimax_h3")
         model, clip, vae, audio_vae, decoder, _, _ = loader.PROMPTFORGE_Loader().load(
             model_name, "auto", weight_dtype, optimize_for, clip_name, loader.NONE, loader.NONE, loader.NONE,
@@ -84,22 +89,28 @@ class H3Format(io.ComfyNode):
         return schema("FORMAT", "Format", [Pipe.Input("pipe", optional=True), io.Int.Input("width", default=1344, min=32, max=16384, step=32),
             io.Int.Input("height", default=768, min=32, max=16384, step=32),
             io.Float.Input("seconds", default=5.0, min=0.01, max=3600),
-            io.Combo.Input("aspect", options=["custom", "16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "9:21", "5:4", "4:5", "6:5", "5:6", "7:5", "5:7", "3:2", "2:3",
-                                               "16:10", "10:16", "5:3", "3:5", "2:1", "1:2", "12:5", "5:12", "5:2", "2:5", "3:1", "1:3", "32:9", "9:32"], default="custom"),
+            io.Combo.Input("aspect", options=[*ASPECT_NAMES, "custom"], default="custom", tooltip="Width to height; orientation turns it upright. custom uses width and height."),
             io.Float.Input("megapixels", default=1.0, min=0.01, max=64),
-            io.Combo.Input("orientation", options=["as selected", "landscape", "portrait"], default="as selected")],
+            io.Combo.Input("orientation", options=["landscape", "portrait"], default="landscape")],
             [Pipe.Output("pipe"), io.Latent.Output("latent")])
 
     @classmethod
-    def execute(cls, pipe=None, width=1344, height=768, seconds=5.0, aspect="custom", megapixels=1.0, orientation="as selected"):
+    def validate_inputs(cls, aspect="custom", orientation="landscape"):
+        # saved API graphs may still hold an upright ratio such as 9:16, or the old "as selected"
+        return True
+
+    @classmethod
+    def execute(cls, pipe=None, width=1344, height=768, seconds=5.0, aspect="custom", megapixels=1.0, orientation="landscape"):
         pipe = checked(ensure_pipe(pipe, family="minimax_h3"))
         if aspect != "custom":
             aw, ah = (float(value) for value in aspect.split(":"))
-            ratio = aw / ah
+            upright = orientation == "portrait" or orientation != "landscape" and aw < ah
+            ratio = max(aw, ah) / min(aw, ah)
             height = math.sqrt(megapixels * 1024 * 1024 / ratio)
             width = height * ratio
-        if orientation == "landscape" and width < height or orientation == "portrait" and width > height:
-            width, height = height, width
+            if upright:
+                width, height = height, width
+        orientation = "portrait" if height > width else "landscape" if width > height else "square"
         frames = core.align_frame_count(max(5, math.ceil(seconds * 24)))
         fmt = {"width": max(32, round(width / 32) * 32), "height": max(32, round(height / 32) * 32),
                    "fps": 24, "seconds": frames / 24, "frames": frames, "requested_seconds": seconds, "aspect": aspect, "megapixels": megapixels, "orientation": orientation}
